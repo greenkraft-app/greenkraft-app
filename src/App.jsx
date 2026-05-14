@@ -199,13 +199,14 @@ export default function App() {
   const debounce = useRef({});
 
   // Debounced save to Supabase
-  const dbSave = (table, id, changes) => {
-    if (!id) return;
-    const key = `${table}-${id}`;
-    clearTimeout(debounce.current[key] = setTimeout(async () => {
-  await sb.from(table).update(changes).eq("id", id);
-}, 700);
-  };
+const dbSave = (table, id, changes) => {
+  if (!id) return;
+  const key = `${table}-${id}`;
+  clearTimeout(debounce.current[key]);
+  debounce.current[key] = setTimeout(async () => {
+    await sb.from(table).update(changes).eq("id", id);
+  }, 700);
+};
 
   // ── UI state ─────────────────────────────────────────────
   const [tab, setTab] = useState("borderou");
