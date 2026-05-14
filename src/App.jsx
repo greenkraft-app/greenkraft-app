@@ -202,10 +202,9 @@ export default function App() {
   const dbSave = (table, id, changes) => {
     if (!id) return;
     const key = `${table}-${id}`;
-    clearTimeout(debounce.current[key]);
-    debounce.current[key] = setTimeout(() => {
-      sb.from(table).update(changes).eq("id", id);
-    }, 700);
+    clearTimeout(debounce.current[key] = setTimeout(async () => {
+  await sb.from(table).update(changes).eq("id", id);
+}, 700);
   };
 
   // ── UI state ─────────────────────────────────────────────
