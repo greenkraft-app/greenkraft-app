@@ -542,7 +542,7 @@ const scanBuletin = async (file) => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "model: "claude-sonnet-4-6"",
+        model: "claude-sonnet-4-6",
         max_tokens: 1000,
         messages: [{ role: "user", content: [
           { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
@@ -570,7 +570,7 @@ const scanBuletin = async (file) => {
     if (!cui || cui.length < 4) { setCuiErr("CUI invalid."); return; }
     setCuiLoading(true); setCuiResult(null); setCuiErr("");
     try {
-      const resp = await fetch("/api/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "model: "claude-sonnet-4-6"", max_tokens: 800, tools: [{ type: "web_search_20250305", name: "web_search" }], messages: [{ role: "user", content: `Cauta pe termene.ro firma cu CUI ${cui} Romania. Returneaza DOAR JSON: {"denumire":"","cod_fiscal":"RO${cui}","adresa":"","reg_com":"","judet":"","tel":""}` }] }) });
+      const resp = await fetch("/api/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 800, tools: [{ type: "web_search_20250305", name: "web_search" }], messages: [{ role: "user", content: `Cauta pe termene.ro firma cu CUI ${cui} Romania. Returneaza DOAR JSON: {"denumire":"","cod_fiscal":"RO${cui}","adresa":"","reg_com":"","judet":"","tel":""}` }] }) });
       const respText = await resp.text();
 if (!respText || respText.trim() === "") throw new Error("Raspuns gol - verifica ANTHROPIC_API_KEY in Vercel");
 let data;
