@@ -571,7 +571,10 @@ const scanBuletin = async (file) => {
     setCuiLoading(true); setCuiResult(null); setCuiErr("");
     try {
       const resp = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 800, tools: [{ type: "web_search_20250305", name: "web_search" }], messages: [{ role: "user", content: `Cauta pe termene.ro firma cu CUI ${cui} Romania. Returneaza DOAR JSON: {"denumire":"","cod_fiscal":"RO${cui}","adresa":"","reg_com":"","judet":"","tel":""}` }] }) });
-      const data = await resp.json();
+      const respText = await resp.text();
+if (!respText || respText.trim() === "") throw new Error("Raspuns gol - verifica ANTHROPIC_API_KEY in Vercel");
+let data;
+try { data = JSON.parse(respText); } catch { throw new Error("Raspuns invalid: " + respText.slice(0, 150)); }
       const text = data.content?.filter((c) => c.type === "text").map((c) => c.text).join("") || "";
       try { const cl = text.replace(/```json|```/g, "").trim(); const idx = cl.indexOf("{"); setCuiResult(JSON.parse(idx >= 0 ? cl.slice(idx) : cl)); }
       catch { setCuiErr("Nu am găsit date pentru CUI-ul " + cui + "."); }
