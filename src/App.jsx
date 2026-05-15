@@ -576,8 +576,8 @@ if (!respText || respText.trim() === "") throw new Error("Raspuns gol - verifica
 let data;
 try { data = JSON.parse(respText); } catch { throw new Error("Raspuns invalid: " + respText.slice(0, 150)); }
       const text = data.content?.filter((c) => c.type === "text").map((c) => c.text).join("") || "";
-      try { const cl = text.replace(/```json|```/g, "").trim(); const idx = cl.indexOf("{"); setCuiResult(JSON.parse(idx >= 0 ? cl.slice(idx) : cl)); }
-      catch { setCuiErr("Nu am găsit date pentru CUI-ul " + cui + "."); }
+      try { const m = text.match(/\{[\s\S]*\}/); if (m) setCuiResult(JSON.parse(m[0])); else setCuiErr("Nu am găsit date pentru CUI-ul " + cui + "."); }
+      catch (er) { setCuiErr("Eroare parsare: " + er.message); }
     } catch (e) { setCuiErr("Eroare: " + e.message); }
     setCuiLoading(false);
   };
