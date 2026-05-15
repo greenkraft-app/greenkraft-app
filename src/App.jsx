@@ -493,40 +493,76 @@ export default function App() {
   };
 
   // ── Scanare Buletin ───────────────────────────────────────
-  const scanBuletin = async (file) => {
-    if (!file) return;
-    setScanLoading(true);
-    try {
-      const base64 = await new Promise((res, rej) => {
-        const r = new FileReader();
-        r.onload = () => res(r.result.split(",")[1]);
-        r.onerror = () => rej(new Error("Eroare citire fișier"));
-        r.readAsDataURL(file);
+const scanBuletin = async (file) => {
+  if (!file) return;
+  setScanLoading(true);
+  try {
+    let base64, mediaType = "image/jpeg";
+
+    if (file.type === "application/pdf") {
+      if (!window.pdfjsLib) {
+        await new Promise((res) => {
+          const s = document.createElement("script");
+          s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+          s.onload = res;
+          document.head.appendChild(s);
+        });
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+          "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+      }
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const page = await pdf.getPage(1);
+      const viewport = page.getViewport({ scale: 2 });
+      const canvas = document.createElement("canvas");
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+      base64 = canvas.toDataURL("image/jpeg", 0.85).split(",")[1];
+    } else {
+      base64 = await new Promise((res, rej) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+          const maxW = 1024;
+          const scale = Math.min(1, maxW / img.width);
+          const canvas = document.createElement("canvas");
+          canvas.width = img.width * scale;
+          canvas.height = img.height * scale;
+          canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+          URL.revokeObjectURL(url);
+          res(canvas.toDataURL("image/jpeg", 0.85).split(",")[1]);
+        };
+        img.onerror = () => rej(new Error("Eroare citire imagine"));
+        img.src = url;
       });
-      const resp = await fetch("/api/scan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          messages: [{ role: "user", content: [
-            { type: "image", source: { type: "base64", media_type: file.type || "image/jpeg", data: base64 } },
-            { type: "text", text: `Acesta este un buletin/carte de identitate românesc. Extrage datele și returnează DOAR JSON valid fără alt text:\n{"denumire":"Nume Prenume","cod_fiscal":"CNP 13 cifre","judet":"cod judet 2 litere","adresa":"adresa completa","reg_com":"seria+nr CI ex IF123456","inf_supl":"Eliberat de SPCLEP... - valabil DD.MM.YYYY"}` }
-          ]}]
-        })
-      });
-      const data = await resp.json();
-      const text = data.content?.filter(c => c.type === "text").map(c => c.text).join("") || "";
-      const clean = text.replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(clean.slice(clean.indexOf("{")));
-      const codes = pfList.map(f => parseInt(f.cod) || 0);
-      const cod = String((codes.length ? Math.max(...codes) : 0) + 1).padStart(5, "0");
-      const row = { cod, denumire: parsed.denumire || "", cod_fiscal: parsed.cod_fiscal || "", analitic: `401.${cod}`, tara: "RO", judet: parsed.judet || "", adresa: parsed.adresa || "", reg_com: parsed.reg_com || "", inf_supl: parsed.inf_supl || "" };
-      const { data: ins } = await sb.from("furnizori_pf").insert(row).select();
-      if (ins) { setPfList(p => [...p, ins[0]]); alert(`✅ ${parsed.denumire} adăugat cu succes!`); }
-    } catch (e) { alert("Eroare la scanare: " + e.message); }
-    setScanLoading(false);
-  };
+    }
+
+    const resp = await fetch("/api/scan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        messages: [{ role: "user", content: [
+          { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+          { type: "text", text: `Acesta este un buletin/carte de identitate românesc. Extrage datele și returnează DOAR JSON valid fără alt text:\n{"denumire":"Nume Prenume","cod_fiscal":"CNP 13 cifre","judet":"cod judet 2 litere","adresa":"adresa completa","reg_com":"seria+nr CI ex IF123456","inf_supl":"Eliberat de SPCLEP... - valabil DD.MM.YYYY"}` }
+        ]}]
+      })
+    });
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    const text = data.content?.filter(c => c.type === "text").map(c => c.text).join("") || "";
+    const clean = text.replace(/```json|```/g, "").trim();
+    const parsed = JSON.parse(clean.slice(clean.indexOf("{")));
+    const codes = pfList.map(f => parseInt(f.cod) || 0);
+    const cod = String((codes.length ? Math.max(...codes) : 0) + 1).padStart(5, "0");
+    const row = { cod, denumire: parsed.denumire || "", cod_fiscal: parsed.cod_fiscal || "", analitic: `401.${cod}`, tara: "RO", judet: parsed.judet || "", adresa: parsed.adresa || "", reg_com: parsed.reg_com || "", inf_supl: parsed.inf_supl || "" };
+    const { data: ins } = await sb.from("furnizori_pf").insert(row).select();
+    if (ins) { setPfList(p => [...p, ins[0]]); alert(`✅ ${parsed.denumire} adăugat cu succes!`); }
+  } catch (e) { alert("Eroare la scanare: " + e.message); }
+  setScanLoading(false);
+};
 
   // CUI search
   const searchCUI = async () => {
@@ -776,7 +812,7 @@ export default function App() {
                     <input value={pfFilter} onChange={(e) => setPfFilter(e.target.value)} placeholder="🔍 Caută..." style={{ border: "1px solid #ccc", borderRadius: 6, padding: "5px 10px", fontSize: 12, width: 180 }} />
                     <button onClick={addPF} style={{ padding: "6px 12px", background: G, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Adaugă</button>
                     <button onClick={() => scanInputRef.current.click()} disabled={scanLoading} style={{ padding: "6px 12px", background: scanLoading ? "#ccc" : "#1565c0", color: "#fff", border: "none", borderRadius: 6, cursor: scanLoading ? "wait" : "pointer", fontSize: 12, fontWeight: 600 }}>{scanLoading ? "⏳ Scanez..." : "📷 Scanează Buletin"}</button>
-                    <input ref={scanInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) scanBuletin(e.target.files[0]); e.target.value = ""; }} />
+                    <input ref={scanInputRef} type="file" accept="image/*,.pdf" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) scanBuletin(e.target.files[0]); e.target.value = ""; }} />
                   </div>
                 </div>
                 <div style={{ overflowX: "auto" }}>
