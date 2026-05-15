@@ -551,7 +551,7 @@ const scanBuletin = async (file) => {
       })
     });
     const data = await resp.json();
-    if (data.error) throw new Error(data.error);
+    if (data.error) throw new Error(JSON.stringify(data.error));
     const text = data.content?.filter(c => c.type === "text").map(c => c.text).join("") || "";
     const clean = text.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(clean.slice(clean.indexOf("{")));
