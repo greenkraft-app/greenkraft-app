@@ -390,6 +390,10 @@ export default function App() {
   const [parolaEdit, setParolaEdit] = useState(null);
   const [pfFilter, setPfFilter] = useState("");
   const [pjFilter, setPjFilter] = useState("");
+  // ── Rapoarte state ────────────────────────────────────────
+  const [rapDateStart, setRapDateStart] = useState("");
+  const [rapDateEnd, setRapDateEnd] = useState("");
+  const [rapLoading, setRapLoading] = useState(false);
   const [cuiSearch, setCuiSearch] = useState("");
   const [cuiLoading, setCuiLoading] = useState(false);
   const [cuiResult, setCuiResult] = useState(null);
@@ -719,6 +723,76 @@ export default function App() {
     await sb.from("procese_verbale").delete().eq("id", id);
   };
 
+  // ── Excel Export (Rapoarte) ───────────────────────────────
+  const parseDateRO = (s) => {
+    if (!s) return null;
+    const m = String(s).match(/^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2,4})/);
+    if (!m) return null;
+    const d = parseInt(m[1]), mo = parseInt(m[2]), y = parseInt(m[3]) < 100 ? 2000 + parseInt(m[3]) : parseInt(m[3]);
+    return new Date(y, mo - 1, d);
+  };
+  const inRange = (dateStr) => {
+    if (!rapDateStart && !rapDateEnd) return true;
+    const d = parseDateRO(dateStr);
+    if (!d) return true;
+    if (rapDateStart) { const s = parseDateRO(rapDateStart); if (s && d < s) return false; }
+    if (rapDateEnd) { const e = parseDateRO(rapDateEnd); if (e && d > e) return false; }
+    return true;
+  };
+
+  const RAP_HEADERS = ["Serie borderou/PV", "NrBorderou/PV", "Data", "Furnizor", "Adresa", "CNP/CUI", "Denumire", "CodSAGA", "Cantitate", "PU", "CodFSaga", "Trasabilitate", "Nr NIR", "Denumire Deseu", "Impozit 10%", "Taxa Mediu 2%", "Valoare"];
+
+  const buildPFRows = () => registru.filter(r => inRange(r.data)).map(r => {
+    const cant = parseFloat(r.cantitate) || 0;
+    const pu = parseFloat(r.pu) || 0;
+    const v = cant * pu;
+    const imp = Math.round(v * 0.1);
+    const tax = Math.round(v * 0.02);
+    return [r.serie || "", r.nr || "", r.data || "", r.furnizor || "", r.adresa || "", r.cnp || "", r.furnizor || "", "", cant, pu, "", "", "", r.denumire || "", imp, tax, parseFloat(r.valoare) || 0];
+  });
+
+  const buildPJRows = () => pvList.filter(p => inRange(p.data)).flatMap(p => {
+    const mats = (p.materiale || []).filter(m => m.den);
+    return mats.map(m => [p.serie || "", p.nr_pv || "", p.data || "", p.client_denumire || "", p.client_adresa || "", p.client_cui || "", p.client_denumire || "", "", parseFloat(m.cant) || 0, "", "", "", "", m.den || "", "", "", ""]);
+  });
+
+  const loadXLSX = async () => {
+    if (window.XLSX) return window.XLSX;
+    await new Promise((res) => {
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+      s.onload = res;
+      document.head.appendChild(s);
+    });
+    return window.XLSX;
+  };
+
+  const exportExcel = async (type) => {
+    setRapLoading(true);
+    try {
+      const XLSX = await loadXLSX();
+      const wb = XLSX.utils.book_new();
+      let fileName = "raport.xlsx";
+      if (type === "pf" || type === "all") {
+        const rows = buildPFRows();
+        const ws = XLSX.utils.aoa_to_sheet([RAP_HEADERS, ...rows]);
+        ws["!cols"] = RAP_HEADERS.map(h => ({ wch: Math.max(12, h.length + 2) }));
+        XLSX.utils.book_append_sheet(wb, ws, "Registru PF");
+        if (type === "pf") fileName = `raport_PF_${today().replace(/\./g, "-")}.xlsx`;
+      }
+      if (type === "pj" || type === "all") {
+        const rows = buildPJRows();
+        const ws = XLSX.utils.aoa_to_sheet([RAP_HEADERS, ...rows]);
+        ws["!cols"] = RAP_HEADERS.map(h => ({ wch: Math.max(12, h.length + 2) }));
+        XLSX.utils.book_append_sheet(wb, ws, "Registru PJ");
+        if (type === "pj") fileName = `raport_PJ_${today().replace(/\./g, "-")}.xlsx`;
+      }
+      if (type === "all") fileName = `raport_complet_${today().replace(/\./g, "-")}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+    } catch (e) { alert("Eroare export: " + e.message); }
+    setRapLoading(false);
+  };
+
   // ── Print borderou din Registru ───────────────────────────
   const printRegistruBord = (serie, nr) => {
     const rows = registru.filter((r) => r.serie === serie && String(r.nr) === String(nr));
@@ -949,7 +1023,7 @@ export default function App() {
 
       {/* Tabs */}
       <div style={{ display: "flex", background: "#e8f0eb", borderLeft: "1px solid #ccc", borderRight: "1px solid #ccc", overflowX: "auto" }}>
-        {[["borderou","📄 Borderouri"],["pv","📋 PV & Anexa 3"],["cheltuieli","💸 Cheltuieli"],["colectari","🚛 Colectări"],["livrari","📤 Livrări"],["stoc","📦 Stocuri"],["salariati","👷 Salariați"],["calculator","🧮 Calculator"],["datorii","💳 Datorii"],["avansuri","💵 Avansuri & Dividende"],["contracte","📃 Contracte"],["parole","🔐 Parole"]].map(([k, l]) => (
+        {[["borderou","📄 Borderouri"],["pv","📋 PV & Anexa 3"],["cheltuieli","💸 Cheltuieli"],["colectari","🚛 Colectări"],["livrari","📤 Livrări"],["stoc","📦 Stocuri"],["salariati","👷 Salariați"],["calculator","🧮 Calculator"],["datorii","💳 Datorii"],["avansuri","💵 Avansuri & Dividende"],["contracte","📃 Contracte"],["parole","🔐 Parole"],["rapoarte","📊 Rapoarte"]].map(([k, l]) => (
           <button key={k} style={tabSt(k)} onClick={() => setTab(k)}>{l}</button>
         ))}
       </div>
@@ -1600,6 +1674,70 @@ export default function App() {
                 <div style={{ marginTop: 10, fontSize: 11, color: "#888", textAlign: "center" }}>👁️ Click pe ochi pentru a vedea parola &nbsp;|&nbsp; 📋 Click pentru a copia &nbsp;|&nbsp; ✏️ Click pentru a edita</div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ══ RAPOARTE ══ */}
+        {tab === "rapoarte" && (
+          <div>
+            <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+              <SC label="Registru PF (linii)" value={registru.length + " buc."} c="#1565c0" bg="#e3f2fd" />
+              <SC label="Registru PJ (PV-uri)" value={pvList.length + " buc."} c="#e65100" bg="#fff3e0" />
+              <SC label="Total Cant. PF" value={fmt(registru.reduce((s, r) => s + (parseFloat(r.cantitate) || 0), 0)) + " kg"} c={G} bg="#e8f5e9" />
+              <SC label="Total Cant. PJ" value={fmt(pvList.reduce((s, p) => s + (p.materiale || []).reduce((ss, m) => ss + (parseFloat(m.cant) || 0), 0), 0)) + " kg"} c="#6a1b9a" bg="#f3e5f5" />
+            </div>
+
+            <div style={{ background: "linear-gradient(135deg,#e8f5e9,#f0faf4)", border: "2px solid #a5d6a7", borderRadius: 10, padding: 16, marginBottom: 16 }}>
+              <div style={{ fontWeight: 700, color: G, fontSize: 13, marginBottom: 12 }}>📅 Filtru perioadă (opțional)</div>
+              <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+                <div style={{ flex: "0 0 140px" }}>
+                  <label style={LSt}>Data început</label>
+                  <input style={IFS} value={rapDateStart} onChange={(e) => setRapDateStart(e.target.value)} placeholder="DD.MM.YYYY" />
+                </div>
+                <div style={{ flex: "0 0 140px" }}>
+                  <label style={LSt}>Data sfârșit</label>
+                  <input style={IFS} value={rapDateEnd} onChange={(e) => setRapDateEnd(e.target.value)} placeholder="DD.MM.YYYY" />
+                </div>
+                {(rapDateStart || rapDateEnd) && (
+                  <button onClick={() => { setRapDateStart(""); setRapDateEnd(""); }} style={{ padding: "5px 12px", background: "#f5f5f5", border: "1px solid #ccc", borderRadius: 6, cursor: "pointer", fontSize: 12 }}>✕ Resetează</button>
+                )}
+                <div style={{ fontSize: 11, color: "#666", marginLeft: 10 }}>Lasă gol pentru export complet</div>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 16 }}>
+              <div style={{ background: "#fff", border: "2px solid #1565c0", borderRadius: 10, padding: 16, textAlign: "center" }}>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>👤</div>
+                <div style={{ fontWeight: 700, color: "#1565c0", fontSize: 14, marginBottom: 4 }}>Registru PF</div>
+                <div style={{ fontSize: 11, color: "#666", marginBottom: 12 }}>Borderouri de la persoane fizice<br/>{registru.length} linii disponibile</div>
+                <button onClick={() => exportExcel("pf")} disabled={rapLoading || registru.length === 0} style={{ width: "100%", padding: "10px", background: rapLoading ? "#ccc" : "#1565c0", color: "#fff", border: "none", borderRadius: 6, cursor: rapLoading ? "wait" : "pointer", fontSize: 13, fontWeight: 700 }}>
+                  {rapLoading ? "⏳ Generez..." : "📥 Descarcă Excel PF"}
+                </button>
+              </div>
+
+              <div style={{ background: "#fff", border: "2px solid #e65100", borderRadius: 10, padding: 16, textAlign: "center" }}>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>🏢</div>
+                <div style={{ fontWeight: 700, color: "#e65100", fontSize: 14, marginBottom: 4 }}>Registru PJ</div>
+                <div style={{ fontSize: 11, color: "#666", marginBottom: 12 }}>Procese verbale firme<br/>{pvList.length} PV-uri disponibile</div>
+                <button onClick={() => exportExcel("pj")} disabled={rapLoading || pvList.length === 0} style={{ width: "100%", padding: "10px", background: rapLoading ? "#ccc" : "#e65100", color: "#fff", border: "none", borderRadius: 6, cursor: rapLoading ? "wait" : "pointer", fontSize: 13, fontWeight: 700 }}>
+                  {rapLoading ? "⏳ Generez..." : "📥 Descarcă Excel PJ"}
+                </button>
+              </div>
+
+              <div style={{ background: "#fff", border: "2px solid #6a1b9a", borderRadius: 10, padding: 16, textAlign: "center" }}>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>📊</div>
+                <div style={{ fontWeight: 700, color: "#6a1b9a", fontSize: 14, marginBottom: 4 }}>Raport Complet</div>
+                <div style={{ fontSize: 11, color: "#666", marginBottom: 12 }}>PF + PJ în 2 sheet-uri<br/>{registru.length + pvList.length} înregistrări</div>
+                <button onClick={() => exportExcel("all")} disabled={rapLoading || (registru.length === 0 && pvList.length === 0)} style={{ width: "100%", padding: "10px", background: rapLoading ? "#ccc" : "#6a1b9a", color: "#fff", border: "none", borderRadius: 6, cursor: rapLoading ? "wait" : "pointer", fontSize: 13, fontWeight: 700 }}>
+                  {rapLoading ? "⏳ Generez..." : "📥 Descarcă Excel Complet"}
+                </button>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 16, background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#666" }}>
+              <strong style={{ color: "#e65100" }}>ℹ️ Structură Excel:</strong> Serie • Nr • Data • Furnizor • Adresa • CNP/CUI • Denumire • CodSAGA • Cantitate • PU • CodFSaga • Trasabilitate • Nr NIR • Denumire Deseu • Impozit 10% • Taxa Mediu 2% • Valoare
+              <br/><span style={{ fontSize: 11 }}>Câmpurile lipsă (CodSAGA, CodFSaga, Trasabilitate, NIR) rămân goale pentru completare manuală.</span>
+            </div>
           </div>
         )}
 
