@@ -282,9 +282,9 @@ function PVPrint({ pv }) {
                 <div style={{ marginTop: 50 }}><u>Descărcare:</u></div>
                 <div><strong>{pv.data}</strong></div>
               </td>
-              <td style={{ border: "1px solid #000", padding: 8, verticalAlign: "top", lineHeight: 1.8 }}>
+              <td style={{ border: "1px solid #000", padding: 8, verticalAlign: "top", lineHeight: 1.4 }}>
                 {pv.materiale?.filter(m => m.den && m.cant).map((m, i) => (
-                  <div key={i}>
+                  <div key={i} style={{ minHeight: 36, marginBottom: 6 }}>
                     <div>{m.den}</div>
                     <div>Cod {m.cod.replace(/\s/g, "")}</div>
                   </div>
@@ -296,9 +296,9 @@ function PVPrint({ pv }) {
                   </div>
                 ))}
               </td>
-              <td style={{ border: "1px solid #000", padding: 8, verticalAlign: "top", lineHeight: 1.8, fontWeight: "bold" }}>
+              <td style={{ border: "1px solid #000", padding: 8, verticalAlign: "top", lineHeight: 1.4, fontWeight: "bold" }}>
                 {pv.materiale?.filter(m => m.den && m.cant).map((m, i) => (
-                  <div key={i}>{m.cant} Kg</div>
+                  <div key={i} style={{ minHeight: 36, marginBottom: 6 }}>{m.cant} Kg</div>
                 ))}
               </td>
               <td style={{ border: "1px solid #000", padding: 8, verticalAlign: "top", lineHeight: 1.6 }}>
@@ -623,12 +623,11 @@ export default function App() {
 
   // ── PV (Proces Verbal) helpers ────────────────────────────
   const newPV = (lst = []) => {
-    const pvMaxNr = lst.length ? Math.max(...lst.map(p => parseInt(p.nr_pv) || 0)) : 809;
-    const anexaMaxNr = lst.length ? Math.max(...lst.map(p => parseInt(p.nr_anexa) || 0)) : 6584;
+    const maxNr = lst.length ? Math.max(...lst.map(p => parseInt(p.nr_pv) || 0)) : 809;
     return {
       serie: "A",
-      nr_pv: String(pvMaxNr + 1),
-      nr_anexa: String(anexaMaxNr + 1),
+      nr_pv: String(maxNr + 1),
+      nr_anexa: String(maxNr + 1),
       data: today(),
       client_id: "",
       client_denumire: "",
@@ -650,7 +649,7 @@ export default function App() {
   const [pvBorderouri, setPvBorderouri] = useState([newPV()]);
   const pv = pvBorderouri[activePV] || newPV();
   const setPV = (fn) => setPvBorderouri((p) => { const n = [...p]; n[activePV] = fn(n[activePV]); return n; });
-  const updPV = (f, v) => setPV((p) => ({ ...p, [f]: v }));
+  const updPV = (f, v) => setPV((p) => f === "nr_pv" ? { ...p, nr_pv: v, nr_anexa: v } : { ...p, [f]: v });
   const updPVMat = (i, f, v) => setPV((p) => {
     const ms = [...p.materiale];
     ms[i] = { ...ms[i], [f]: v };
@@ -690,10 +689,15 @@ export default function App() {
   };
 
   const handlePrintPV = () => {
-    const c = pvPrintRef.current.innerHTML;
-    const w = window.open("", "_blank");
-    w.document.write(`<html><head><title>PV ${pv.serie} ${pv.nr_pv}</title><style>body{margin:0;font-family:'Times New Roman',serif;} @media print { .page-break { page-break-after: always; } }</style></head><body>${c}</body></html>`);
-    w.document.close(); w.focus(); w.print();
+    setPrintPV(pv);
+    setTimeout(() => {
+      if (pvPrintRef.current) {
+        const c = pvPrintRef.current.innerHTML;
+        const w = window.open("", "_blank");
+        w.document.write(`<html><head><title>PV ${pv.serie} ${pv.nr_pv}</title><style>body{margin:0;font-family:'Times New Roman',serif;}</style></head><body>${c}</body></html>`);
+        w.document.close(); w.focus(); w.print();
+      }
+    }, 150);
   };
 
   const printRegistruPV = (id) => {
@@ -1185,7 +1189,7 @@ export default function App() {
                 )}
 
                 {pvPreview && (
-                  <div ref={pvPrintRef} style={{ border: "1px solid #ccc", borderRadius: 4, padding: 8, background: "#fff" }}>
+                  <div style={{ border: "1px solid #ccc", borderRadius: 4, padding: 8, background: "#fff" }}>
                     <PVPrint pv={pv} />
                   </div>
                 )}
