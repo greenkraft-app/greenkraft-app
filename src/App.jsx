@@ -42,6 +42,25 @@ const SERII = ["GK","GKR"];
 const CAT_PAROLE = ["Email","Bancă","Card","Platformă","WiFi","Altele"];
 const PIN_CORRECT = "336699";
 
+// ── PV constants ──────────────────────────────────────────────
+const PV_MATERIALE = [
+  { den: "Deseuri de ambalaje din carton", cod: "15 01 01" },
+  { den: "Deseuri de ambalaje din lemn", cod: "15 01 03" },
+  { den: "Deseuri de ambalaje din PET", cod: "15 01 02" },
+  { den: "Deseuri de ambalaje din Aluminiu", cod: "15 01 04" },
+  { den: "Deseuri de ambalaje folie color", cod: "15 01 02" },
+  { den: "Deseuri de ambalaje din sticla", cod: "15 01 07" },
+  { den: "Deseu Fier", cod: "17 04 05" },
+  { den: "Deseu DEEE", cod: "16 02 14" },
+  { den: "Deseu Aluminiu", cod: "17 04 02" },
+  { den: "Deseu Cupru", cod: "17 04 01" },
+  { den: "Deseu Inox", cod: "17 04 05" },
+  { den: "Deseu Baterii DBA Mixt", cod: "16 06 05" },
+];
+const PV_DEN_OPTIONS = PV_MATERIALE.map(m => m.den);
+const DELEGATI = ["Baltac Constantin", "Alex", "Sandel", "Ion", "Andrei", "Catalin Zica"];
+const DESTINATII = ["Colectare", "Stocare temporară", "Tratare", "Valorificare", "Eliminare"];
+
 // ── Helpers ───────────────────────────────────────────────────
 const fmt = (v, dec = 2) => {
   if (v === "" || v === null || v === undefined || isNaN(v)) return "";
@@ -179,6 +198,136 @@ function BordPrint({ b }) {
   );
 }
 
+// ── PV Print (2 pages) ────────────────────────────────────────
+function PVPrint({ pv }) {
+  const tS = { width: "100%", borderCollapse: "collapse", fontSize: 11 };
+  const pageBreak = { pageBreakAfter: "always", breakAfter: "page" };
+  return (
+    <div style={{ fontFamily: "Times New Roman,serif", fontSize: 11, color: "#000", background: "#fff" }}>
+      {/* PAGE 1 — Proces Verbal */}
+      <div style={{ padding: "30px 40px", maxWidth: 800, margin: "0 auto", ...pageBreak }}>
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
+          <div style={{ fontSize: 16, fontWeight: "bold" }}>PROCES VERBAL DE PREDARE –PRIMIRE</div>
+          <div style={{ fontSize: 13, fontWeight: "bold", marginTop: 5 }}>Serie {pv.serie} nr. {pv.nr_pv} din data: {pv.data}</div>
+        </div>
+        <div style={{ marginBottom: 12, lineHeight: 1.6 }}>Incheiat intre:</div>
+        <div style={{ marginBottom: 12, lineHeight: 1.6 }}>
+          <strong>Societatea GREENKRAFT S.R.L.</strong> cu sediul in Soseaua de centura dreapta 18A, Afumați, inregistrata la Registrul Comertului sub nr. J23/2426/2016, CUI 36191378, reprezentata legal prin Catalin Zica, in calitate de <strong>COLECTOR/PRESTATOR</strong>,
+        </div>
+        <div style={{ textAlign: "center", margin: "8px 0" }}>și</div>
+        <div style={{ marginBottom: 12, lineHeight: 1.6 }}>
+          <strong>Societatea {pv.client_denumire?.toUpperCase()}</strong>, cu sediul social în {pv.client_adresa}, Judetul {pv.client_judet}, având Cod fiscal {pv.client_cui}, înregistrată la Oficiul National al Registrului Comertului sub nr. {pv.client_reg_com}, reprezentată de {pv.client_reprezentant || "_____"}, în calitate de <strong>BENEFICIAR</strong>,
+        </div>
+        <div style={{ marginBottom: 6 }}>Am procedat la predarea, respectiv la primirea urmatoarelor categorii de deseuri de ambalaje:</div>
+        <div style={{ fontWeight: "bold", marginBottom: 4, paddingLeft: 10 }}>Denumire</div>
+        <table style={tS}>
+          <tbody>
+            {pv.materiale?.filter(m => m.den).map((m, i) => (
+              <tr key={i}>
+                <td style={{ padding: "3px 8px", borderBottom: "1px dotted #999" }}>{m.den} cod {m.cod}</td>
+                <td style={{ padding: "3px 8px", borderBottom: "1px dotted #999", textAlign: "right", whiteSpace: "nowrap" }}>{m.cant || 0} kg</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div style={{ margin: "16px 0", fontSize: 11 }}>Deseurile de ambalaje din prezentul proces verbal au fost predate cu titlu gratuit (nu se factureaza), in vederea colectarii si reciclarii /valorificarii.</div>
+        <div style={{ display: "flex", justifyContent: "space-around", marginTop: 40, fontSize: 11 }}>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontWeight: "bold" }}>Am predat,</div>
+            <div style={{ fontWeight: "bold" }}>{pv.client_denumire?.toUpperCase()}</div>
+            <div style={{ fontSize: 10, marginTop: 30 }}>(stampila si semnatura)</div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontWeight: "bold" }}>Am primit,</div>
+            <div style={{ fontWeight: "bold" }}>GREENKRAFT SRL</div>
+            <div style={{ fontSize: 10, marginTop: 30 }}>(stampila si semnatura)</div>
+          </div>
+        </div>
+      </div>
+
+      {/* PAGE 2 — Anexa 3 */}
+      <div style={{ padding: "30px 40px", maxWidth: 800, margin: "0 auto" }}>
+        <div style={{ textAlign: "center", marginBottom: 6 }}>Anexa 3 - Nr. {pv.nr_anexa} din data de {pv.data}</div>
+        <div style={{ textAlign: "center", marginBottom: 14 }}>Formular de încărcare – descărcare deşeuri nepericuloase</div>
+        <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #000", fontSize: 10 }}>
+          <thead>
+            <tr style={{ background: "#fff" }}>
+              <th style={{ border: "1px solid #000", padding: 5, width: "22%" }}>Date de identificare transportator</th>
+              <th style={{ border: "1px solid #000", padding: 5, width: "12%" }}>Data</th>
+              <th style={{ border: "1px solid #000", padding: 5, width: "22%" }}>Caracteristici deşeuri</th>
+              <th style={{ border: "1px solid #000", padding: 5, width: "12%" }}>Cantitate</th>
+              <th style={{ border: "1px solid #000", padding: 5, width: "32%" }}>Date privind punctul de lucru*) unde se efectuează:</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style={{ border: "1px solid #000", padding: 8, verticalAlign: "top", lineHeight: 1.6 }}>
+                <div><u>Date identificare:</u></div>
+                <div><strong>GREEN KRAFT S.R.L.</strong></div>
+                <div style={{ marginTop: 8 }}><u>Delegat:</u></div>
+                <div><strong>{pv.delegat}</strong></div>
+                <div style={{ marginTop: 12 }}>Nr. de inmatriculare</div>
+                <div><u>mijloc de transport:</u></div>
+                <div><strong>{pv.nr_masina}</strong></div>
+                <div style={{ marginTop: 12 }}>Număr licenţa de transport</div>
+                <div><u>mărfuri nepericuloase:</u></div>
+                <div>{pv.licenta || "nu e cazul"}</div>
+                <div style={{ marginTop: 8, fontSize: 9 }}>Data expirare licenţă transport <u>mărfuri nepericuloase:</u></div>
+                <div>{pv.licenta_exp || ""}</div>
+                <div style={{ marginTop: 24 }}>Semnatura și stampila</div>
+              </td>
+              <td style={{ border: "1px solid #000", padding: 8, verticalAlign: "top" }}>
+                <div><u>Încărcare:</u></div>
+                <div><strong>{pv.data}</strong></div>
+                <div style={{ marginTop: 50 }}><u>Descărcare:</u></div>
+                <div><strong>{pv.data}</strong></div>
+              </td>
+              <td style={{ border: "1px solid #000", padding: 8, verticalAlign: "top", lineHeight: 1.8 }}>
+                {pv.materiale?.filter(m => m.den && m.cant).map((m, i) => (
+                  <div key={i}>
+                    <div>{m.den}</div>
+                    <div>Cod {m.cod.replace(/\s/g, "")}</div>
+                  </div>
+                ))}
+                <div style={{ marginTop: 30, textAlign: "center", fontWeight: "bold" }}><u>Descriere destinație:</u></div>
+                {DESTINATII.map(d => (
+                  <div key={d} style={{ fontSize: 10 }}>
+                    {d} {pv.destinatie === d ? "●" : "○"}
+                  </div>
+                ))}
+              </td>
+              <td style={{ border: "1px solid #000", padding: 8, verticalAlign: "top", lineHeight: 1.8, fontWeight: "bold" }}>
+                {pv.materiale?.filter(m => m.den && m.cant).map((m, i) => (
+                  <div key={i}>{m.cant} Kg</div>
+                ))}
+              </td>
+              <td style={{ border: "1px solid #000", padding: 8, verticalAlign: "top", lineHeight: 1.6 }}>
+                <div style={{ textAlign: "center", fontWeight: "bold" }}><u>ÎNCĂRCAREA</u></div>
+                <div style={{ marginTop: 4 }}><u>Date de identificare expeditor:</u></div>
+                <div style={{ fontWeight: "bold", fontStyle: "italic" }}>{pv.client_denumire?.toUpperCase()}</div>
+                <div>{pv.client_adresa}</div>
+                <div style={{ marginTop: 8 }}><u>Autorizație de mediu nr:</u></div>
+                <div>{pv.client_autorizatie || ""}</div>
+                <div><u>Dată expirare Autorizație Mediu:</u></div>
+                <div>{pv.client_autorizatie_exp || ""}</div>
+                <div style={{ textAlign: "center", marginTop: 8 }}>Semnatura și stampila</div>
+                <div style={{ textAlign: "center", marginTop: 30, fontWeight: "bold" }}><u>DESCĂRCAREA</u></div>
+                <div><u>Date identificare destinatar:</u></div>
+                <div style={{ fontWeight: "bold", fontStyle: "italic" }}>GREEN KRAFT S.R.L.</div>
+                <div><u>Autorizație de mediu număr:</u></div>
+                <div style={{ marginTop: 8, fontWeight: "bold", textAlign: "center" }}>233 din 22.12.2021</div>
+                <div style={{ marginTop: 8, fontSize: 9 }}>Data expirare Autorizație de Mediu:</div>
+                <div style={{ fontWeight: "bold", textAlign: "center" }}>22.12.2026</div>
+                <div style={{ textAlign: "center", marginTop: 18 }}>Semnatura și stampila</div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ── Supabase realtime helper ──────────────────────────────────
 function useSupaTable(tableName, setFn) {
   useEffect(() => {
@@ -198,6 +347,7 @@ export default function App() {
   const printRef = useRef();
   const regPrintRef = useRef();
   const scanInputRef = useRef();
+  const pvPrintRef = useRef();
   const debounce = useRef({});
 
   // Debounced save to Supabase
@@ -247,6 +397,13 @@ export default function App() {
   // ── Print from Registru ───────────────────────────────────
   const [printBord, setPrintBord] = useState(null);
   const [scanLoading, setScanLoading] = useState(false);
+  // ── PV state ──────────────────────────────────────────────
+  const [pvSubTab, setPvSubTab] = useState("editor");
+  const [activePV, setActivePV] = useState(0);
+  const [pvPreview, setPvPreview] = useState(false);
+  const [pjSearchPV, setPjSearchPV] = useState("");
+  const [pjOpenPV, setPjOpenPV] = useState(false);
+  const [printPV, setPrintPV] = useState(null);
 
   // Borderouri (local only — saved to registru on submit)
   const newBord = (serie = "GK", reg = []) => ({
@@ -275,6 +432,7 @@ export default function App() {
   const [parole, setParole] = useState([]);
   const [salRows, setSalRows] = useState([]);
   const [manMisc, setManMisc] = useState([]);
+  const [pvList, setPvList] = useState([]);
 
   useSupaTable("registru", setRegistru);
   useSupaTable("cheltuieli", setChRows);
@@ -287,6 +445,7 @@ export default function App() {
   useSupaTable("furnizori_pj", setPjList);
   useSupaTable("salariati", setSalRows);
   useSupaTable("stoc_manual", setManMisc);
+  useSupaTable("procese_verbale", setPvList);
 
   // Parole — map utilizator → user
   useEffect(() => {
@@ -462,6 +621,100 @@ export default function App() {
     w.document.close(); w.focus(); w.print();
   };
 
+  // ── PV (Proces Verbal) helpers ────────────────────────────
+  const newPV = (lst = []) => {
+    const pvMaxNr = lst.length ? Math.max(...lst.map(p => parseInt(p.nr_pv) || 0)) : 809;
+    const anexaMaxNr = lst.length ? Math.max(...lst.map(p => parseInt(p.nr_anexa) || 0)) : 6584;
+    return {
+      serie: "A",
+      nr_pv: String(pvMaxNr + 1),
+      nr_anexa: String(anexaMaxNr + 1),
+      data: today(),
+      client_id: "",
+      client_denumire: "",
+      client_adresa: "",
+      client_cui: "",
+      client_reg_com: "",
+      client_judet: "",
+      client_reprezentant: "",
+      client_autorizatie: "",
+      client_autorizatie_exp: "",
+      delegat: "Baltac Constantin",
+      nr_masina: "",
+      licenta: "nu e cazul",
+      licenta_exp: "",
+      destinatie: "Valorificare",
+      materiale: [{ den: "", cod: "", cant: "" }],
+    };
+  };
+  const [pvBorderouri, setPvBorderouri] = useState([newPV()]);
+  const pv = pvBorderouri[activePV] || newPV();
+  const setPV = (fn) => setPvBorderouri((p) => { const n = [...p]; n[activePV] = fn(n[activePV]); return n; });
+  const updPV = (f, v) => setPV((p) => ({ ...p, [f]: v }));
+  const updPVMat = (i, f, v) => setPV((p) => {
+    const ms = [...p.materiale];
+    ms[i] = { ...ms[i], [f]: v };
+    if (f === "den") { const fd = PV_MATERIALE.find((x) => x.den === v); if (fd) ms[i].cod = fd.cod; }
+    return { ...p, materiale: ms };
+  });
+
+  const pjFiltPV = pjList.filter((f) => pjSearchPV.length > 1 && (f.denumire?.toLowerCase().includes(pjSearchPV.toLowerCase()) || f.cod_fiscal?.includes(pjSearchPV) || f.cod?.includes(pjSearchPV)));
+  const fillPjPV = (f) => {
+    setPV((p) => ({
+      ...p,
+      client_id: f.cod || "",
+      client_denumire: f.denumire || "",
+      client_adresa: f.adresa || "",
+      client_cui: f.cod_fiscal || "",
+      client_reg_com: f.reg_com || "",
+      client_judet: f.judet || "",
+    }));
+    setPjSearchPV(f.denumire);
+    setPjOpenPV(false);
+  };
+
+  const salveazaPV = async () => {
+    const mats = pv.materiale.filter((m) => m.den && m.cant);
+    if (!mats.length) { alert("Completați cel puțin un material cu cantitate!"); return; }
+    if (!pv.client_denumire) { alert("Selectați o firmă (Pers. Juridică)!"); return; }
+    if (pvList.some(x => x.serie === pv.serie && String(x.nr_pv) === String(pv.nr_pv))) {
+      alert(`⚠️ PV ${pv.serie} ${pv.nr_pv} există deja!`); return;
+    }
+    const row = { ...pv, materiale: mats };
+    const { data: ins } = await sb.from("procese_verbale").insert(row).select();
+    if (ins) setPvList(p => [...p, ins[0]]);
+    alert(`✅ PV ${pv.serie} ${pv.nr_pv} salvat!`);
+    setPvBorderouri(p => { const n = [...p]; n[activePV] = newPV([...pvList, ...(ins || [row])]); return n; });
+    setPjSearchPV("");
+    setPvSubTab("registru");
+  };
+
+  const handlePrintPV = () => {
+    const c = pvPrintRef.current.innerHTML;
+    const w = window.open("", "_blank");
+    w.document.write(`<html><head><title>PV ${pv.serie} ${pv.nr_pv}</title><style>body{margin:0;font-family:'Times New Roman',serif;} @media print { .page-break { page-break-after: always; } }</style></head><body>${c}</body></html>`);
+    w.document.close(); w.focus(); w.print();
+  };
+
+  const printRegistruPV = (id) => {
+    const found = pvList.find((p) => p.id === id);
+    if (!found) return;
+    setPrintPV(found);
+    setTimeout(() => {
+      if (pvPrintRef.current) {
+        const c = pvPrintRef.current.innerHTML;
+        const w = window.open("", "_blank");
+        w.document.write(`<html><head><title>PV ${found.serie} ${found.nr_pv}</title><style>body{margin:0;font-family:'Times New Roman',serif;}</style></head><body>${c}</body></html>`);
+        w.document.close(); w.focus(); w.print();
+      }
+    }, 150);
+  };
+
+  const delPV = async (id) => {
+    setPvList(p => p.filter(x => x.id !== id));
+    await sb.from("procese_verbale").delete().eq("id", id);
+  };
+
   // ── Print borderou din Registru ───────────────────────────
   const printRegistruBord = (serie, nr) => {
     const rows = registru.filter((r) => r.serie === serie && String(r.nr) === String(nr));
@@ -498,76 +751,79 @@ export default function App() {
   };
 
   // ── Scanare Buletin ───────────────────────────────────────
-const scanBuletin = async (file) => {
-  if (!file) return;
-  setScanLoading(true);
-  try {
-    let base64, mediaType = "image/jpeg";
+  const scanBuletin = async (file) => {
+    if (!file) return;
+    setScanLoading(true);
+    try {
+      let base64, mediaType = "image/jpeg";
 
-    if (file.type === "application/pdf") {
-      if (!window.pdfjsLib) {
-        await new Promise((res) => {
-          const s = document.createElement("script");
-          s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
-          s.onload = res;
-          document.head.appendChild(s);
+      if (file.type === "application/pdf") {
+        if (!window.pdfjsLib) {
+          await new Promise((res) => {
+            const s = document.createElement("script");
+            s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+            s.onload = res;
+            document.head.appendChild(s);
+          });
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+            "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+        }
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const page = await pdf.getPage(1);
+        const viewport = page.getViewport({ scale: 2 });
+        const canvas = document.createElement("canvas");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+        base64 = canvas.toDataURL("image/jpeg", 0.85).split(",")[1];
+      } else {
+        base64 = await new Promise((res, rej) => {
+          const img = new Image();
+          const url = URL.createObjectURL(file);
+          img.onload = () => {
+            const maxW = 1024;
+            const scale = Math.min(1, maxW / img.width);
+            const canvas = document.createElement("canvas");
+            canvas.width = img.width * scale;
+            canvas.height = img.height * scale;
+            canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+            URL.revokeObjectURL(url);
+            res(canvas.toDataURL("image/jpeg", 0.85).split(",")[1]);
+          };
+          img.onerror = () => rej(new Error("Eroare citire imagine"));
+          img.src = url;
         });
-        window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-          "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
       }
-      const arrayBuffer = await file.arrayBuffer();
-      const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      const page = await pdf.getPage(1);
-      const viewport = page.getViewport({ scale: 2 });
-      const canvas = document.createElement("canvas");
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
-      base64 = canvas.toDataURL("image/jpeg", 0.85).split(",")[1];
-    } else {
-      base64 = await new Promise((res, rej) => {
-        const img = new Image();
-        const url = URL.createObjectURL(file);
-        img.onload = () => {
-          const maxW = 1024;
-          const scale = Math.min(1, maxW / img.width);
-          const canvas = document.createElement("canvas");
-          canvas.width = img.width * scale;
-          canvas.height = img.height * scale;
-          canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-          URL.revokeObjectURL(url);
-          res(canvas.toDataURL("image/jpeg", 0.85).split(",")[1]);
-        };
-        img.onerror = () => rej(new Error("Eroare citire imagine"));
-        img.src = url;
-      });
-    }
 
-    const resp = await fetch("/api/scan", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 1000,
-        messages: [{ role: "user", content: [
-          { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-          { type: "text", text: `Acesta este un buletin/carte de identitate românesc. Extrage datele și returnează DOAR JSON valid fără alt text:\n{"denumire":"Nume Prenume","cod_fiscal":"CNP 13 cifre","judet":"cod judet 2 litere","adresa":"adresa completa","reg_com":"seria+nr CI ex IF123456","inf_supl":"Eliberat de SPCLEP... - valabil DD.MM.YYYY"}` }
-        ]}]
-      })
-    });
-    const data = await resp.json();
-    if (data.error) throw new Error(JSON.stringify(data.error));
-    const text = data.content?.filter(c => c.type === "text").map(c => c.text).join("") || "";
-    const clean = text.replace(/```json|```/g, "").trim();
-    const parsed = JSON.parse(clean.slice(clean.indexOf("{")));
-    const codes = pfList.map(f => parseInt(f.cod) || 0);
-    const cod = String((codes.length ? Math.max(...codes) : 0) + 1).padStart(5, "0");
-    const row = { cod, denumire: parsed.denumire || "", cod_fiscal: parsed.cod_fiscal || "", analitic: `401.${cod}`, tara: "RO", judet: parsed.judet || "", adresa: parsed.adresa || "", reg_com: parsed.reg_com || "", inf_supl: parsed.inf_supl || "" };
-    const { data: ins } = await sb.from("furnizori_pf").insert(row).select();
-    if (ins) { setPfList(p => [...p, ins[0]]); alert(`✅ ${parsed.denumire} adăugat cu succes!`); }
-  } catch (e) { alert("Eroare la scanare: " + e.message); }
-  setScanLoading(false);
-};
+      const resp = await fetch("/api/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 1000,
+          messages: [{ role: "user", content: [
+            { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+            { type: "text", text: `Acesta este un buletin/carte de identitate românesc. Extrage datele și returnează DOAR JSON valid fără alt text:\n{"denumire":"Nume Prenume","cod_fiscal":"CNP 13 cifre","judet":"cod judet 2 litere","adresa":"adresa completa","reg_com":"seria+nr CI ex IF123456","inf_supl":"Eliberat de SPCLEP... - valabil DD.MM.YYYY"}` }
+          ]}]
+        })
+      });
+      const respText = await resp.text();
+      if (!respText || respText.trim() === "") throw new Error("Raspuns gol - verifica ANTHROPIC_API_KEY in Vercel");
+      let data;
+      try { data = JSON.parse(respText); } catch { throw new Error("Raspuns invalid: " + respText.slice(0, 150)); }
+      if (data.error) throw new Error(JSON.stringify(data.error));
+      const text = data.content?.filter(c => c.type === "text").map(c => c.text).join("") || "";
+      const clean = text.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(clean.slice(clean.indexOf("{")));
+      const codes = pfList.map(f => parseInt(f.cod) || 0);
+      const cod = String((codes.length ? Math.max(...codes) : 0) + 1).padStart(5, "0");
+      const row = { cod, denumire: parsed.denumire || "", cod_fiscal: parsed.cod_fiscal || "", analitic: `401.${cod}`, tara: "RO", judet: parsed.judet || "", adresa: parsed.adresa || "", reg_com: parsed.reg_com || "", inf_supl: parsed.inf_supl || "" };
+      const { data: ins } = await sb.from("furnizori_pf").insert(row).select();
+      if (ins) { setPfList(p => [...p, ins[0]]); alert(`✅ ${parsed.denumire} adăugat cu succes!`); }
+    } catch (e) { alert("Eroare la scanare: " + e.message); }
+    setScanLoading(false);
+  };
 
   // CUI search
   const searchCUI = async () => {
@@ -576,10 +832,8 @@ const scanBuletin = async (file) => {
     setCuiLoading(true); setCuiResult(null); setCuiErr("");
     try {
       const resp = await fetch("/api/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 800, tools: [{ type: "web_search_20250305", name: "web_search" }], messages: [{ role: "user", content: `Cauta pe termene.ro firma cu CUI ${cui} Romania. Returneaza DOAR JSON: {"denumire":"","cod_fiscal":"RO${cui}","adresa":"","reg_com":"","judet":"","tel":""}` }] }) });
-      const respText = await resp.text();
-if (!respText || respText.trim() === "") throw new Error("Raspuns gol - verifica ANTHROPIC_API_KEY in Vercel");
-let data;
-try { data = JSON.parse(respText); } catch { throw new Error("Raspuns invalid: " + respText.slice(0, 150)); }
+      const data = await resp.json();
+      if (data.error) throw new Error(JSON.stringify(data.error));
       const text = data.content?.filter((c) => c.type === "text").map((c) => c.text).join("") || "";
       try { const m = text.match(/\{[\s\S]*\}/); if (m) setCuiResult(JSON.parse(m[0])); else setCuiErr("Nu am găsit date pentru CUI-ul " + cui + "."); }
       catch (er) { setCuiErr("Eroare parsare: " + er.message); }
@@ -669,6 +923,11 @@ try { data = JSON.parse(respText); } catch { throw new Error("Raspuns invalid: "
         {printBord && <BordPrint b={printBord} />}
       </div>
 
+      {/* Hidden div for PV print */}
+      <div ref={pvPrintRef} style={{ display: "none" }}>
+        {(printPV || pv) && <PVPrint pv={printPV || pv} />}
+      </div>
+
       {/* Header */}
       <div style={{ background: `linear-gradient(135deg,#1b5e20,${G},#2e7d32)`, color: "#fff", borderRadius: "10px 10px 0 0", padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -686,7 +945,7 @@ try { data = JSON.parse(respText); } catch { throw new Error("Raspuns invalid: "
 
       {/* Tabs */}
       <div style={{ display: "flex", background: "#e8f0eb", borderLeft: "1px solid #ccc", borderRight: "1px solid #ccc", overflowX: "auto" }}>
-        {[["borderou","📄 Borderouri"],["cheltuieli","💸 Cheltuieli"],["colectari","🚛 Colectări"],["livrari","📤 Livrări"],["stoc","📦 Stocuri"],["salariati","👷 Salariați"],["calculator","🧮 Calculator"],["datorii","💳 Datorii"],["avansuri","💵 Avansuri & Dividende"],["contracte","📃 Contracte"],["parole","🔐 Parole"]].map(([k, l]) => (
+        {[["borderou","📄 Borderouri"],["pv","📋 PV & Anexa 3"],["cheltuieli","💸 Cheltuieli"],["colectari","🚛 Colectări"],["livrari","📤 Livrări"],["stoc","📦 Stocuri"],["salariati","👷 Salariați"],["calculator","🧮 Calculator"],["datorii","💳 Datorii"],["avansuri","💵 Avansuri & Dividende"],["contracte","📃 Contracte"],["parole","🔐 Parole"]].map(([k, l]) => (
           <button key={k} style={tabSt(k)} onClick={() => setTab(k)}>{l}</button>
         ))}
       </div>
@@ -698,7 +957,7 @@ try { data = JSON.parse(respText); } catch { throw new Error("Raspuns invalid: "
           <div>
             <div style={{ display: "flex", borderBottom: "2px solid #e0e0e0", marginBottom: 12, flexWrap: "wrap", gap: 2 }}>
               <button style={subTabSt("editor")} onClick={() => setBordSubTab("editor")}>✏️ Editor</button>
-              <button style={subTabSt("registru")} onClick={() => setBordSubTab("registru")}>📋 Registru <span style={{ marginLeft: 4, background: "#e53935", color: "#fff", borderRadius: 10, padding: "1px 5px", fontSize: 10, fontWeight: 700 }}>{registru.length}</span></button>
+              <button style={subTabSt("registru")} onClick={() => setBordSubTab("registru")}>📋 Registru PF <span style={{ marginLeft: 4, background: "#e53935", color: "#fff", borderRadius: 10, padding: "1px 5px", fontSize: 10, fontWeight: 700 }}>{registru.length}</span></button>
               <button style={subTabSt("pf")} onClick={() => setBordSubTab("pf")}>👤 Pers. Fizice <span style={{ marginLeft: 4, background: "#1565c0", color: "#fff", borderRadius: 10, padding: "1px 5px", fontSize: 10, fontWeight: 700 }}>{pfList.length}</span></button>
               <button style={subTabSt("pj")} onClick={() => setBordSubTab("pj")}>🏢 Pers. Juridice <span style={{ marginLeft: 4, background: "#e65100", color: "#fff", borderRadius: 10, padding: "1px 5px", fontSize: 10, fontWeight: 700 }}>{pjList.length}</span></button>
             </div>
@@ -858,6 +1117,149 @@ try { data = JSON.parse(respText); } catch { throw new Error("Raspuns invalid: "
                   <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 900 }}>
                     <thead><tr><th style={th({ background: "#b71c1c", width: 28 })}></th>{[{ l: "Cod", w: 55 }, { l: "Denumire", w: 185 }, { l: "CUI", w: 105 }, { l: "Analitic", w: 82 }, { l: "Jud.", w: 45 }, { l: "Adresa", w: 180 }, { l: "Cont Bancă", w: 165 }, { l: "Bancă", w: 130 }, { l: "Reg.Com.", w: 100 }, { l: "Tel.", w: 90 }].map((c) => <th key={c.l} style={{ ...th({ background: "#e65100" }), width: c.w, textAlign: "left" }}>{c.l}</th>)}<th style={th({ background: "#e65100", width: 30 })}></th></tr></thead>
                     <tbody>{pjList.filter((r) => !pjFilter || r.denumire?.toLowerCase().includes(pjFilter.toLowerCase()) || r.cod?.includes(pjFilter) || r.cod_fiscal?.toLowerCase().includes(pjFilter.toLowerCase())).map((r, i) => { const rowBg = i % 2 === 0 ? "#fff" : "#fff8f5"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 2}</td><td style={td({ background: "#fff3e0", fontWeight: 700, color: "#e65100", textAlign: "center" })}><input style={inp({ textAlign: "center", fontWeight: 700, color: "#e65100" })} value={r.cod || ""} onChange={(e) => updPJ(i, "cod", e.target.value)} /></td><td style={td({ fontWeight: 600 })}><input style={inp({ fontWeight: 600, fontSize: 11 })} value={r.denumire || ""} onChange={(e) => updPJ(i, "denumire", e.target.value)} /></td><td style={td({ background: "#fff8e1" })}><input style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.cod_fiscal || ""} onChange={(e) => updPJ(i, "cod_fiscal", e.target.value)} /></td><td style={td()}><input style={inp({ fontSize: 11 })} value={r.analitic || ""} onChange={(e) => updPJ(i, "analitic", e.target.value)} /></td><td style={td({ background: "#e8f5e9", textAlign: "center", fontWeight: 600, color: G })}><input style={inp({ textAlign: "center", fontWeight: 600, color: G })} value={r.judet || ""} onChange={(e) => updPJ(i, "judet", e.target.value)} /></td><td style={td({ fontSize: 11 })}><input style={inp({ fontSize: 11 })} value={r.adresa || ""} onChange={(e) => updPJ(i, "adresa", e.target.value)} /></td><td style={td({ background: r.cont_banca ? "#e8f5e9" : "#fff", fontFamily: "monospace", fontSize: 10 })}><input style={inp({ fontFamily: "monospace", fontSize: 10 })} value={r.cont_banca || ""} onChange={(e) => updPJ(i, "cont_banca", e.target.value)} /></td><td style={td({ fontSize: 11 })}><input style={inp({ fontSize: 11 })} value={r.banca || ""} onChange={(e) => updPJ(i, "banca", e.target.value)} /></td><td style={td({ fontFamily: "monospace", fontSize: 11 })}><input style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.reg_com || ""} onChange={(e) => updPJ(i, "reg_com", e.target.value)} /></td><td style={td({ fontSize: 11 })}><input style={inp({ fontSize: 11 })} value={r.tel || ""} onChange={(e) => updPJ(i, "tel", e.target.value)} /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delPJ(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══ PV & ANEXA 3 ══ */}
+        {tab === "pv" && (
+          <div>
+            <div style={{ display: "flex", borderBottom: "2px solid #e0e0e0", marginBottom: 12, flexWrap: "wrap", gap: 2 }}>
+              <button style={{ padding: "5px 13px", cursor: "pointer", border: "none", fontWeight: 600, fontSize: 12, borderBottom: pvSubTab === "editor" ? `2px solid ${G}` : "2px solid transparent", background: pvSubTab === "editor" ? "#f0faf4" : "transparent", color: pvSubTab === "editor" ? G : "#666", marginRight: 3 }} onClick={() => setPvSubTab("editor")}>✏️ Editor PV</button>
+              <button style={{ padding: "5px 13px", cursor: "pointer", border: "none", fontWeight: 600, fontSize: 12, borderBottom: pvSubTab === "registru" ? `2px solid ${G}` : "2px solid transparent", background: pvSubTab === "registru" ? "#f0faf4" : "transparent", color: pvSubTab === "registru" ? G : "#666", marginRight: 3 }} onClick={() => setPvSubTab("registru")}>📋 Registru PJ <span style={{ marginLeft: 4, background: "#e65100", color: "#fff", borderRadius: 10, padding: "1px 5px", fontSize: 10, fontWeight: 700 }}>{pvList.length}</span></button>
+            </div>
+
+            {pvSubTab === "editor" && (
+              <div>
+                <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center", flexWrap: "wrap" }}>
+                  {pvBorderouri.map((_, i) => (<button key={i} onClick={() => { setActivePV(i); setPvPreview(false); setPjSearchPV(pvBorderouri[i].client_denumire || ""); }} style={{ padding: "4px 12px", border: `2px solid ${activePV === i ? "#e65100" : "#ccc"}`, borderRadius: 20, background: activePV === i ? "#e65100" : "#fff", color: activePV === i ? "#fff" : "#555", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>{pvBorderouri[i].serie} #{pvBorderouri[i].nr_pv || "nou"}</button>))}
+                  <button onClick={() => { setPvBorderouri((p) => [...p, newPV(pvList)]); setActivePV(pvBorderouri.length); setPvPreview(false); setPjSearchPV(""); }} style={{ padding: "4px 12px", border: "2px dashed #aaa", borderRadius: 20, background: "#f9f9f9", color: "#666", cursor: "pointer", fontSize: 12 }}>+ PV nou</button>
+                  <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                    <button onClick={salveazaPV} style={{ padding: "6px 14px", background: "#e65100", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>💾 Salvează</button>
+                    <button onClick={() => setPvPreview((p) => !p)} style={{ padding: "6px 14px", background: pvPreview ? "#1565c0" : G, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>{pvPreview ? "✏️ Editare" : "👁️ Preview"}</button>
+                    {pvPreview && <button onClick={handlePrintPV} style={{ padding: "6px 14px", background: "#333", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>🖨️ Print</button>}
+                  </div>
+                </div>
+
+                {!pvPreview && (
+                  <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+                    <div style={{ flex: "0 0 320px", minWidth: 280 }}>
+                      <div style={{ background: "#fff3e0", border: "1px solid #ffcc80", borderRadius: 8, padding: 12, marginBottom: 10 }}>
+                        <div style={{ fontWeight: 700, color: "#e65100", marginBottom: 8, fontSize: 12 }}>📋 Date PV</div>
+                        <div style={{ display: "flex", gap: 8, marginBottom: 7 }}>
+                          <div style={{ flex: "0 0 60px" }}><label style={LSt}>Serie</label><input style={{ ...IFS, fontWeight: 700, color: "#e65100", textAlign: "center" }} value={pv.serie} onChange={(e) => updPV("serie", e.target.value)} /></div>
+                          <div style={{ flex: 1 }}><label style={LSt}>Nr. PV</label><input style={{ ...IFS, fontWeight: 700, color: "#1565c0" }} value={pv.nr_pv} onChange={(e) => updPV("nr_pv", e.target.value)} /></div>
+                          <div style={{ flex: 1 }}><label style={LSt}>Nr. Anexa 3</label><input style={{ ...IFS, fontWeight: 700, color: "#1565c0" }} value={pv.nr_anexa} onChange={(e) => updPV("nr_anexa", e.target.value)} /></div>
+                        </div>
+                        <div style={{ marginBottom: 7 }}><label style={LSt}>Data</label><input style={IFS} value={pv.data} onChange={(e) => updPV("data", e.target.value)} /></div>
+                      </div>
+
+                      <div style={{ background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 8, padding: 12, marginBottom: 10 }}>
+                        <div style={{ fontWeight: 700, color: "#1565c0", marginBottom: 8, fontSize: 12 }}>🏢 Beneficiar (din Pers. Juridice)</div>
+                        <div style={{ marginBottom: 8, position: "relative" }}>
+                          <label style={LSt}>Caută firmă</label>
+                          <input style={{ ...IFS, borderColor: "#1565c0" }} value={pjSearchPV} onChange={(e) => { setPjSearchPV(e.target.value); setPjOpenPV(true); }} onFocus={() => setPjOpenPV(true)} onBlur={() => setTimeout(() => setPjOpenPV(false), 200)} placeholder="Tastează nume, CUI sau cod..." />
+                          {pjOpenPV && pjFiltPV.length > 0 && (
+                            <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 999, background: "#fff", border: "1px solid #1565c0", borderRadius: 6, boxShadow: "0 4px 16px rgba(0,0,0,.15)", maxHeight: 180, overflowY: "auto" }}>
+                              {pjFiltPV.map((f, fi) => (<div key={fi} onMouseDown={() => fillPjPV(f)} style={{ padding: "6px 10px", fontSize: 12, cursor: "pointer", borderBottom: "1px solid #e3f2fd", display: "flex", gap: 8, alignItems: "center" }} onMouseEnter={(e) => (e.currentTarget.style.background = "#e3f2fd")} onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}><span style={{ background: "#1565c0", color: "#fff", borderRadius: 4, padding: "1px 5px", fontSize: 10, fontWeight: 700 }}>{f.cod}</span><span style={{ fontWeight: 600, flex: 1 }}>{f.denumire}</span><span style={{ color: "#888", fontSize: 10 }}>{f.cod_fiscal}</span></div>))}
+                            </div>
+                          )}
+                          {pv.client_denumire && <div style={{ marginTop: 4, background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 4, padding: "4px 10px", fontSize: 11, color: "#1565c0", display: "flex", gap: 6, alignItems: "center", justifyContent: "space-between" }}><span>✅ <strong>{pv.client_denumire}</strong> — {pv.client_cui}</span><button onMouseDown={() => { setPjSearchPV(""); setPV((p) => ({ ...p, client_id: "", client_denumire: "", client_adresa: "", client_cui: "", client_reg_com: "", client_judet: "" })); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 12, padding: 0 }}>✕</button></div>}
+                        </div>
+                        <div style={{ marginBottom: 7 }}><label style={LSt}>Reprezentant</label><input style={IFS} value={pv.client_reprezentant || ""} onChange={(e) => updPV("client_reprezentant", e.target.value)} placeholder="Nume reprezentant..." /></div>
+                        <div style={{ marginBottom: 7 }}><label style={LSt}>Autorizație Mediu nr.</label><input style={IFS} value={pv.client_autorizatie || ""} onChange={(e) => updPV("client_autorizatie", e.target.value)} /></div>
+                        <div><label style={LSt}>Autorizație Mediu — valabilă până</label><input style={IFS} value={pv.client_autorizatie_exp || ""} onChange={(e) => updPV("client_autorizatie_exp", e.target.value)} placeholder="DD.MM.YYYY" /></div>
+                      </div>
+
+                      <div style={{ background: "#f3e5f5", border: "1px solid #ce93d8", borderRadius: 8, padding: 12 }}>
+                        <div style={{ fontWeight: 700, color: "#6a1b9a", marginBottom: 8, fontSize: 12 }}>🚚 Transport</div>
+                        <div style={{ marginBottom: 7 }}><label style={LSt}>Delegat (Șofer)</label>
+                          <select style={IFS} value={pv.delegat || ""} onChange={(e) => updPV("delegat", e.target.value)}>
+                            <option value="">— alege —</option>
+                            {DELEGATI.map((d) => <option key={d}>{d}</option>)}
+                          </select>
+                        </div>
+                        <div style={{ marginBottom: 7 }}><label style={LSt}>Nr. înmatriculare mijloc transport</label><input style={IFS} value={pv.nr_masina || ""} onChange={(e) => updPV("nr_masina", e.target.value)} placeholder="ex: IF55KFT" /></div>
+                        <div style={{ marginBottom: 7 }}><label style={LSt}>Licență transport</label><input style={IFS} value={pv.licenta || ""} onChange={(e) => updPV("licenta", e.target.value)} /></div>
+                        <div style={{ marginBottom: 7 }}><label style={LSt}>Expirare licență</label><input style={IFS} value={pv.licenta_exp || ""} onChange={(e) => updPV("licenta_exp", e.target.value)} placeholder="DD.MM.YYYY" /></div>
+                        <div><label style={LSt}>Descriere destinație</label>
+                          <select style={{ ...IFS, fontWeight: 700, color: "#6a1b9a" }} value={pv.destinatie || ""} onChange={(e) => updPV("destinatie", e.target.value)}>
+                            <option value="">— alege —</option>
+                            {DESTINATII.map((d) => <option key={d}>{d}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ flex: 1, minWidth: 320 }}>
+                      <div style={{ background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 8, padding: 12 }}>
+                        <div style={{ fontWeight: 700, color: "#e65100", marginBottom: 8, fontSize: 12 }}>📦 Materiale / Deșeuri</div>
+                        <table style={{ borderCollapse: "collapse", width: "100%" }}>
+                          <thead><tr><th style={th({ textAlign: "left", background: "#e65100", minWidth: 200 })}>Denumire</th><th style={th({ width: 85, background: "#e65100" })}>Cod</th><th style={th({ width: 85, background: "#e65100" })}>Cant.(kg)</th><th style={th({ width: 26, background: "#e65100" })}></th></tr></thead>
+                          <tbody>{pv.materiale.map((m, i) => (
+                            <tr key={i} style={{ background: i % 2 === 0 ? "#fff" : "#fffde7" }}>
+                              <td style={td()}><AC value={m.den} options={PV_DEN_OPTIONS} placeholder="Selectează..." onChange={(v) => updPVMat(i, "den", v)} /></td>
+                              <td style={td()}><input style={inp({ textAlign: "center" })} value={m.cod} onChange={(e) => updPVMat(i, "cod", e.target.value)} /></td>
+                              <td style={td()}><input style={inp({ textAlign: "right" })} type="number" value={m.cant} onChange={(e) => updPVMat(i, "cant", e.target.value)} /></td>
+                              <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => setPV((p) => ({ ...p, materiale: p.materiale.filter((_, j) => j !== i) }))} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
+                            </tr>
+                          ))}</tbody>
+                        </table>
+                        <button onClick={() => setPV((p) => ({ ...p, materiale: [...p.materiale, { den: "", cod: "", cant: "" }] }))} style={{ marginTop: 6, background: "#e65100", color: "#fff", border: "none", borderRadius: 4, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Adaugă material</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {pvPreview && (
+                  <div ref={pvPrintRef} style={{ border: "1px solid #ccc", borderRadius: 4, padding: 8, background: "#fff" }}>
+                    <PVPrint pv={pv} />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {pvSubTab === "registru" && (
+              <div>
+                <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
+                  <SC label="Total PV-uri" value={pvList.length + " buc."} c="#e65100" bg="#fff3e0" />
+                  <SC label="Total Cant." value={fmt(pvList.reduce((s, p) => s + (p.materiale || []).reduce((ss, m) => ss + (parseFloat(m.cant) || 0), 0), 0)) + " kg"} c="#1565c0" bg="#e3f2fd" />
+                  <button onClick={() => setPvSubTab("editor")} style={{ marginLeft: "auto", padding: "6px 14px", background: "#e65100", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ PV nou</button>
+                </div>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 700 }}>
+                    <thead><tr><th style={th({ background: "#e65100", width: 28 })}></th><th style={th({ background: "#e65100", width: 55 })}>Serie</th><th style={th({ background: "#e65100", width: 65 })}>Nr. PV</th><th style={th({ background: "#e65100", width: 80 })}>Anexa 3</th><th style={th({ background: "#e65100", width: 85 })}>Data</th><th style={th({ background: "#e65100", textAlign: "left" })}>Beneficiar</th><th style={th({ background: "#e65100", width: 95 })}>CUI</th><th style={th({ background: "#e65100", width: 90 })}>Materiale</th><th style={th({ background: "#e65100", width: 75 })}>Cant. total</th><th style={th({ background: "#e65100", width: 70 })}>🖨️ Print</th><th style={th({ background: "#e65100", width: 30 })}></th></tr></thead>
+                    <tbody>
+                      {pvList.length === 0 && <tr><td colSpan={11} style={{ textAlign: "center", padding: 20, color: "#aaa" }}>Niciun PV salvat. Creează unul în Editor.</td></tr>}
+                      {pvList.map((r, i) => {
+                        const rowBg = i % 2 === 0 ? "#fff" : "#fff8f5";
+                        const totCant = (r.materiale || []).reduce((s, m) => s + (parseFloat(m.cant) || 0), 0);
+                        const matCount = (r.materiale || []).filter(m => m.den).length;
+                        return (
+                          <tr key={r.id || i} style={{ background: rowBg }}>
+                            <td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td>
+                            <td style={td({ background: "#fff3e0", fontWeight: 700, color: "#e65100", textAlign: "center" })}>{r.serie}</td>
+                            <td style={td({ textAlign: "center", fontWeight: 700, color: "#1565c0" })}>{r.nr_pv}</td>
+                            <td style={td({ textAlign: "center", fontFamily: "monospace" })}>{r.nr_anexa}</td>
+                            <td style={td({ textAlign: "center" })}>{r.data}</td>
+                            <td style={td({ fontWeight: 600 })}>{r.client_denumire}</td>
+                            <td style={td({ fontFamily: "monospace", fontSize: 11 })}>{r.client_cui}</td>
+                            <td style={td({ textAlign: "center" })}>{matCount}</td>
+                            <td style={td({ textAlign: "right", background: "#e8f5e9", fontWeight: 700, color: G })}>{fmt(totCant)} kg</td>
+                            <td style={td({ textAlign: "center", padding: 3 })}>
+                              <button onClick={() => printRegistruPV(r.id)} title="Printează PV + Anexa 3" style={{ background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 4, cursor: "pointer", color: "#1565c0", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}
+                                onMouseEnter={(e) => { e.currentTarget.style.background = "#1565c0"; e.currentTarget.style.color = "#fff"; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.background = "#e3f2fd"; e.currentTarget.style.color = "#1565c0"; }}
+                              >🖨️</button>
+                            </td>
+                            <td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delPV(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
                   </table>
                 </div>
               </div>
