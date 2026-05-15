@@ -440,13 +440,18 @@ export default function App() {
   const salveaza = async () => {
     const pr = b.produse.filter((p) => p.den && p.cant);
     if (!pr.length) { alert("Completați cel puțin un produs!"); return; }
+    if (registru.some(x => x.serie === b.serie && String(x.nr) === String(b.nr))) { alert(`⚠️ Borderou ${b.serie} ${b.nr} există deja în Registru!`); return; }
     const newEntries = pr.map((p) => {
       const v = (parseFloat(p.cant) || 0) * (parseFloat(p.pret) || 0);
       const imp = Math.round(v * 0.1), tx = Math.round(v * 0.02);
       return { serie: b.serie, nr: b.nr, data: b.data, furnizor: b.det, adresa: b.dom, cnp: b.cnp, denumire: p.den.toUpperCase(), cantitate: parseFloat(p.cant) || 0, pu: parseFloat(p.pret) || 0, valoare: Math.round(v - imp - tx) };
     });
-    await sb.from("registru").insert(newEntries);
+    const { data: ins } = await sb.from("registru").insert(newEntries).select();
+    if (ins) setRegistru(p => [...p, ...ins]);
     alert(`✅ Borderou ${b.serie} ${b.nr} salvat!`);
+    const updatedReg = [...registru, ...(ins || newEntries)];
+    setBorderouri(p => { const n = [...p]; n[activeBord] = newBord(b.serie, updatedReg); return n; });
+    setDetSearch("");
     setBordSubTab("registru");
   };
 
@@ -797,7 +802,7 @@ try { data = JSON.parse(respText); } catch { throw new Error("Raspuns invalid: "
                               >🖨️ {groupSize > 1 ? `(${groupSize})` : ""}</button>
                             )}
                           </td>
-                          <td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => sb.from("registru").delete().eq("id", r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
+                          <td style={td({ textAlign: "center", padding: 3 })}><button onClick={async () => { await sb.from("registru").delete().eq("id", r.id); setRegistru(p => p.filter(x => x.id !== r.id)); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
                         </tr>
                       );
                     })}</tbody>
