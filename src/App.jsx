@@ -196,17 +196,19 @@ function useSupaTable(tableName, setFn) {
 // ── Main App ──────────────────────────────────────────────────
 export default function App() {
   const printRef = useRef();
+  const regPrintRef = useRef();
+  const scanInputRef = useRef();
   const debounce = useRef({});
 
   // Debounced save to Supabase
-const dbSave = (table, id, changes) => {
-  if (!id) return;
-  const key = `${table}-${id}`;
-  clearTimeout(debounce.current[key]);
-  debounce.current[key] = setTimeout(async () => {
-    await sb.from(table).update(changes).eq("id", id);
-  }, 700);
-};
+  const dbSave = (table, id, changes) => {
+    if (!id) return;
+    const key = `${table}-${id}`;
+    clearTimeout(debounce.current[key]);
+    debounce.current[key] = setTimeout(async () => {
+      await sb.from(table).update(changes).eq("id", id);
+    }, 700);
+  };
 
   // ── UI state ─────────────────────────────────────────────
   const [tab, setTab] = useState("borderou");
@@ -242,6 +244,9 @@ const dbSave = (table, id, changes) => {
   const [cuiLoading, setCuiLoading] = useState(false);
   const [cuiResult, setCuiResult] = useState(null);
   const [cuiErr, setCuiErr] = useState("");
+  // ── Print from Registru ───────────────────────────────────
+  const [printBord, setPrintBord] = useState(null);
+  const [scanLoading, setScanLoading] = useState(false);
 
   // Borderouri (local only — saved to registru on submit)
   const newBord = (serie = "GK", reg = []) => ({
@@ -296,7 +301,6 @@ const dbSave = (table, id, changes) => {
   }, []);
 
   // ── CRUD helpers ─────────────────────────────────────────
-  // Generic update with optimistic UI + debounced Supabase save
   const mkUpd = (rows, setRows, table) => (i, f, v) => {
     setRows((p) => { const n = [...p]; n[i] = { ...n[i], [f]: v }; return n; });
     dbSave(table, rows[i]?.id, { [f]: v });
@@ -453,6 +457,77 @@ const dbSave = (table, id, changes) => {
     w.document.close(); w.focus(); w.print();
   };
 
+  // ── Print borderou din Registru ───────────────────────────
+  const printRegistruBord = (serie, nr) => {
+    const rows = registru.filter((r) => r.serie === serie && String(r.nr) === String(nr));
+    if (!rows.length) return;
+    const first = rows[0];
+    const bord = {
+      serie, nr,
+      data: first.data || "",
+      det: first.furnizor || "",
+      dom: first.adresa || "",
+      ci_s: "", ci_n: "", ci_e: "", ci_v: "",
+      cnp: first.cnp || "",
+      trans: "Auto",
+      sursa: "alte",
+      produse: rows.map((r) => {
+        const fd = PRODUSE_LIST.find((p) => p.den === r.denumire || p.den.toUpperCase() === r.denumire);
+        return {
+          den: r.denumire || "",
+          cod: fd?.cod || "",
+          cant: r.cantitate || "",
+          pret: r.pu || "",
+        };
+      }),
+    };
+    setPrintBord(bord);
+    setTimeout(() => {
+      if (regPrintRef.current) {
+        const c = regPrintRef.current.innerHTML;
+        const w = window.open("", "_blank");
+        w.document.write(`<html><head><title>Borderou ${serie} ${nr}</title><style>body{margin:0;padding:16px;font-family:'Times New Roman',serif;}</style></head><body>${c}</body></html>`);
+        w.document.close(); w.focus(); w.print();
+      }
+    }, 150);
+  };
+
+  // ── Scanare Buletin ───────────────────────────────────────
+  const scanBuletin = async (file) => {
+    if (!file) return;
+    setScanLoading(true);
+    try {
+      const base64 = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result.split(",")[1]);
+        r.onerror = () => rej(new Error("Eroare citire fișier"));
+        r.readAsDataURL(file);
+      });
+      const resp = await fetch("/api/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 1000,
+          messages: [{ role: "user", content: [
+            { type: "image", source: { type: "base64", media_type: file.type || "image/jpeg", data: base64 } },
+            { type: "text", text: `Acesta este un buletin/carte de identitate românesc. Extrage datele și returnează DOAR JSON valid fără alt text:\n{"denumire":"Nume Prenume","cod_fiscal":"CNP 13 cifre","judet":"cod judet 2 litere","adresa":"adresa completa","reg_com":"seria+nr CI ex IF123456","inf_supl":"Eliberat de SPCLEP... - valabil DD.MM.YYYY"}` }
+          ]}]
+        })
+      });
+      const data = await resp.json();
+      const text = data.content?.filter(c => c.type === "text").map(c => c.text).join("") || "";
+      const clean = text.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(clean.slice(clean.indexOf("{")));
+      const codes = pfList.map(f => parseInt(f.cod) || 0);
+      const cod = String((codes.length ? Math.max(...codes) : 0) + 1).padStart(5, "0");
+      const row = { cod, denumire: parsed.denumire || "", cod_fiscal: parsed.cod_fiscal || "", analitic: `401.${cod}`, tara: "RO", judet: parsed.judet || "", adresa: parsed.adresa || "", reg_com: parsed.reg_com || "", inf_supl: parsed.inf_supl || "" };
+      const { data: ins } = await sb.from("furnizori_pf").insert(row).select();
+      if (ins) { setPfList(p => [...p, ins[0]]); alert(`✅ ${parsed.denumire} adăugat cu succes!`); }
+    } catch (e) { alert("Eroare la scanare: " + e.message); }
+    setScanLoading(false);
+  };
+
   // CUI search
   const searchCUI = async () => {
     const cui = cuiSearch.replace(/\D/g, "");
@@ -539,8 +614,17 @@ const dbSave = (table, id, changes) => {
   const IBox = (label, f, ph = "") => (<div style={{ marginBottom: 7 }}><label style={LSt}>{label}</label><input style={IFS} value={b[f] || ""} onChange={(e) => updB(f, e.target.value)} placeholder={ph} /></div>);
   const regCols = [{ k: "serie", l: "Serie", w: 45 }, { k: "nr", l: "Nr", w: 65 }, { k: "data", l: "Data", w: 85 }, { k: "furnizor", l: "Furnizor", w: 150 }, { k: "cnp", l: "CNP", w: 110 }, { k: "denumire", l: "Denumire Deseu", w: 180 }, { k: "cantitate", l: "Cant.(kg)", w: 75 }, { k: "pu", l: "PU", w: 50 }, { k: "valoare", l: "Valoare", w: 65 }];
 
+  // Group registru rows by serie+nr for print button display
+  const bordGroupKeys = [...new Set(registru.map((r) => `${r.serie}__${r.nr}`))];
+
   return (
     <div style={{ fontFamily: "Segoe UI,sans-serif", background: "#f0f4f0", minHeight: "100vh", padding: 12 }}>
+
+      {/* Hidden div for registru print */}
+      <div ref={regPrintRef} style={{ display: "none" }}>
+        {printBord && <BordPrint b={printBord} />}
+      </div>
+
       {/* Header */}
       <div style={{ background: `linear-gradient(135deg,#1b5e20,${G},#2e7d32)`, color: "#fff", borderRadius: "10px 10px 0 0", padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -652,9 +736,33 @@ const dbSave = (table, id, changes) => {
                 </div>
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 800 }}>
-                    <thead><tr>{[{ l: "", w: 28 }, ...regCols, { l: "", w: 30 }].map((c, i) => <th key={i} style={{ ...th({ background: G }), width: c.w }}>{c.l}</th>)}</tr></thead>
-                    <tbody>{registru.map((r, i) => { const rowBg = i % 2 === 0 ? "#fff" : "#f7faf8"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 133}</td>{regCols.map((c) => (<td key={c.k} style={td({ background: c.k === "valoare" ? "#e8f5e9" : rowBg, textAlign: ["cantitate", "pu", "valoare"].includes(c.k) ? "right" : "left", fontWeight: c.k === "valoare" || c.k === "nr" ? 600 : 400, color: c.k === "valoare" ? G : "#333", whiteSpace: "nowrap", maxWidth: c.w + 20, overflow: "hidden", textOverflow: "ellipsis" })}>{["cantitate", "pu", "valoare"].includes(c.k) ? fmt(r[c.k]) : r[c.k]}</td>))}<td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => sb.from("registru").delete().eq("id", r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
-                    <tfoot><tr style={{ background: G, color: "#fff" }}><td></td><td colSpan={6} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(registru.reduce((s, r) => s + (parseFloat(r.cantitate) || 0), 0))}</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(registru.reduce((s, r) => s + (parseFloat(r.valoare) || 0), 0))}</td><td></td></tr></tfoot>
+                    <thead><tr>{[{ l: "", w: 28 }, ...regCols, { l: "🖨️ Print", w: 70 }, { l: "", w: 30 }].map((c, i) => <th key={i} style={{ ...th({ background: G }), width: c.w }}>{c.l}</th>)}</tr></thead>
+                    <tbody>{registru.map((r, i) => {
+                      const rowBg = i % 2 === 0 ? "#fff" : "#f7faf8";
+                      // Show print button only on first row of each serie+nr group
+                      const key = `${r.serie}__${r.nr}`;
+                      const isFirstInGroup = registru.findIndex((x) => x.serie === r.serie && String(x.nr) === String(r.nr)) === i;
+                      const groupSize = registru.filter((x) => x.serie === r.serie && String(x.nr) === String(r.nr)).length;
+                      return (
+                        <tr key={r.id || i} style={{ background: rowBg }}>
+                          <td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 133}</td>
+                          {regCols.map((c) => (<td key={c.k} style={td({ background: c.k === "valoare" ? "#e8f5e9" : rowBg, textAlign: ["cantitate", "pu", "valoare"].includes(c.k) ? "right" : "left", fontWeight: c.k === "valoare" || c.k === "nr" ? 600 : 400, color: c.k === "valoare" ? G : "#333", whiteSpace: "nowrap", maxWidth: c.w + 20, overflow: "hidden", textOverflow: "ellipsis" })}>{["cantitate", "pu", "valoare"].includes(c.k) ? fmt(r[c.k]) : r[c.k]}</td>))}
+                          <td style={td({ textAlign: "center", padding: 3 })}>
+                            {isFirstInGroup && (
+                              <button
+                                onClick={() => printRegistruBord(r.serie, r.nr)}
+                                title={`Printează borderou ${r.serie} ${r.nr}`}
+                                style={{ background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 4, cursor: "pointer", color: "#1565c0", fontSize: 11, fontWeight: 700, padding: "2px 8px", whiteSpace: "nowrap" }}
+                                onMouseEnter={(e) => { e.currentTarget.style.background = "#1565c0"; e.currentTarget.style.color = "#fff"; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.background = "#e3f2fd"; e.currentTarget.style.color = "#1565c0"; }}
+                              >🖨️ {groupSize > 1 ? `(${groupSize})` : ""}</button>
+                            )}
+                          </td>
+                          <td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => sb.from("registru").delete().eq("id", r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
+                        </tr>
+                      );
+                    })}</tbody>
+                    <tfoot><tr style={{ background: G, color: "#fff" }}><td></td><td colSpan={6} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(registru.reduce((s, r) => s + (parseFloat(r.cantitate) || 0), 0))}</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(registru.reduce((s, r) => s + (parseFloat(r.valoare) || 0), 0))}</td><td></td><td></td></tr></tfoot>
                   </table>
                 </div>
               </div>
@@ -667,6 +775,8 @@ const dbSave = (table, id, changes) => {
                   <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
                     <input value={pfFilter} onChange={(e) => setPfFilter(e.target.value)} placeholder="🔍 Caută..." style={{ border: "1px solid #ccc", borderRadius: 6, padding: "5px 10px", fontSize: 12, width: 180 }} />
                     <button onClick={addPF} style={{ padding: "6px 12px", background: G, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Adaugă</button>
+                    <button onClick={() => scanInputRef.current.click()} disabled={scanLoading} style={{ padding: "6px 12px", background: scanLoading ? "#ccc" : "#1565c0", color: "#fff", border: "none", borderRadius: 6, cursor: scanLoading ? "wait" : "pointer", fontSize: 12, fontWeight: 600 }}>{scanLoading ? "⏳ Scanez..." : "📷 Scanează Buletin"}</button>
+                    <input ref={scanInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) scanBuletin(e.target.files[0]); e.target.value = ""; }} />
                   </div>
                 </div>
                 <div style={{ overflowX: "auto" }}>
