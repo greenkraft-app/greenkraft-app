@@ -282,9 +282,9 @@ function PVPrint({ pv }) {
                 <div style={{ marginTop: 50 }}><u>Descărcare:</u></div>
                 <div><strong>{pv.data}</strong></div>
               </td>
-              <td style={{ border: "1px solid #000", padding: 8, verticalAlign: "top", lineHeight: 1.4 }}>
+              <td style={{ border: "1px solid #000", padding: 8, verticalAlign: "top", lineHeight: 1.8 }}>
                 {pv.materiale?.filter(m => m.den && m.cant).map((m, i) => (
-                  <div key={i} style={{ minHeight: 36, marginBottom: 6 }}>
+                  <div key={i}>
                     <div>{m.den}</div>
                     <div>Cod {m.cod.replace(/\s/g, "")}</div>
                   </div>
@@ -296,9 +296,9 @@ function PVPrint({ pv }) {
                   </div>
                 ))}
               </td>
-              <td style={{ border: "1px solid #000", padding: 8, verticalAlign: "top", lineHeight: 1.4, fontWeight: "bold" }}>
+              <td style={{ border: "1px solid #000", padding: 8, verticalAlign: "top", lineHeight: 1.8, fontWeight: "bold" }}>
                 {pv.materiale?.filter(m => m.den && m.cant).map((m, i) => (
-                  <div key={i} style={{ minHeight: 36, marginBottom: 6 }}>{m.cant} Kg</div>
+                  <div key={i}>{m.cant} Kg</div>
                 ))}
               </td>
               <td style={{ border: "1px solid #000", padding: 8, verticalAlign: "top", lineHeight: 1.6 }}>
@@ -623,11 +623,12 @@ export default function App() {
 
   // ── PV (Proces Verbal) helpers ────────────────────────────
   const newPV = (lst = []) => {
-    const maxNr = lst.length ? Math.max(...lst.map(p => parseInt(p.nr_pv) || 0)) : 809;
+    const pvMaxNr = lst.length ? Math.max(...lst.map(p => parseInt(p.nr_pv) || 0)) : 809;
+    const anexaMaxNr = lst.length ? Math.max(...lst.map(p => parseInt(p.nr_anexa) || 0)) : 6584;
     return {
       serie: "A",
-      nr_pv: String(maxNr + 1),
-      nr_anexa: String(maxNr + 1),
+      nr_pv: String(pvMaxNr + 1),
+      nr_anexa: String(anexaMaxNr + 1),
       data: today(),
       client_id: "",
       client_denumire: "",
@@ -649,7 +650,7 @@ export default function App() {
   const [pvBorderouri, setPvBorderouri] = useState([newPV()]);
   const pv = pvBorderouri[activePV] || newPV();
   const setPV = (fn) => setPvBorderouri((p) => { const n = [...p]; n[activePV] = fn(n[activePV]); return n; });
-  const updPV = (f, v) => setPV((p) => f === "nr_pv" ? { ...p, nr_pv: v, nr_anexa: v } : { ...p, [f]: v });
+  const updPV = (f, v) => setPV((p) => ({ ...p, [f]: v }));
   const updPVMat = (i, f, v) => setPV((p) => {
     const ms = [...p.materiale];
     ms[i] = { ...ms[i], [f]: v };
@@ -689,15 +690,10 @@ export default function App() {
   };
 
   const handlePrintPV = () => {
-    setPrintPV(pv);
-    setTimeout(() => {
-      if (pvPrintRef.current) {
-        const c = pvPrintRef.current.innerHTML;
-        const w = window.open("", "_blank");
-        w.document.write(`<html><head><title>PV ${pv.serie} ${pv.nr_pv}</title><style>body{margin:0;font-family:'Times New Roman',serif;}</style></head><body>${c}</body></html>`);
-        w.document.close(); w.focus(); w.print();
-      }
-    }, 150);
+    const c = pvPrintRef.current.innerHTML;
+    const w = window.open("", "_blank");
+    w.document.write(`<html><head><title>PV ${pv.serie} ${pv.nr_pv}</title><style>body{margin:0;font-family:'Times New Roman',serif;} @media print { .page-break { page-break-after: always; } }</style></head><body>${c}</body></html>`);
+    w.document.close(); w.focus(); w.print();
   };
 
   const printRegistruPV = (id) => {
@@ -960,10 +956,9 @@ export default function App() {
         {tab === "borderou" && (
           <div>
             <div style={{ display: "flex", borderBottom: "2px solid #e0e0e0", marginBottom: 12, flexWrap: "wrap", gap: 2 }}>
-              <button style={subTabSt("editor")} onClick={() => setBordSubTab("editor")}>✏️ Editor</button>
+              <button style={subTabSt("editor")} onClick={() => setBordSubTab("editor")}>✏️ Editor PF</button>
               <button style={subTabSt("registru")} onClick={() => setBordSubTab("registru")}>📋 Registru PF <span style={{ marginLeft: 4, background: "#e53935", color: "#fff", borderRadius: 10, padding: "1px 5px", fontSize: 10, fontWeight: 700 }}>{registru.length}</span></button>
               <button style={subTabSt("pf")} onClick={() => setBordSubTab("pf")}>👤 Pers. Fizice <span style={{ marginLeft: 4, background: "#1565c0", color: "#fff", borderRadius: 10, padding: "1px 5px", fontSize: 10, fontWeight: 700 }}>{pfList.length}</span></button>
-              <button style={subTabSt("pj")} onClick={() => setBordSubTab("pj")}>🏢 Pers. Juridice <span style={{ marginLeft: 4, background: "#e65100", color: "#fff", borderRadius: 10, padding: "1px 5px", fontSize: 10, fontWeight: 700 }}>{pjList.length}</span></button>
             </div>
 
             {bordSubTab === "editor" && (
@@ -1095,36 +1090,6 @@ export default function App() {
               </div>
             )}
 
-            {bordSubTab === "pj" && (
-              <div>
-                <div style={{ background: "linear-gradient(135deg,#fff3e0,#fff8f5)", border: "2px solid #ffcc80", borderRadius: 10, padding: 12, marginBottom: 12 }}>
-                  <div style={{ fontWeight: 700, color: "#e65100", fontSize: 13, marginBottom: 10 }}>🔍 Caută firmă după CUI</div>
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
-                    <div style={{ flex: "0 0 210px" }}>
-                      <div style={{ display: "flex", gap: 6 }}>
-                        <input value={cuiSearch} onChange={(e) => { setCuiSearch(e.target.value); setCuiResult(null); setCuiErr(""); }} onKeyDown={(e) => e.key === "Enter" && searchCUI()} placeholder="ex: 36191378" style={{ ...IFS, borderColor: "#ffcc80", fontFamily: "monospace" }} />
-                        <button onClick={searchCUI} disabled={cuiLoading} style={{ padding: "5px 12px", background: cuiLoading ? "#ccc" : "#e65100", color: "#fff", border: "none", borderRadius: 6, cursor: cuiLoading ? "wait" : "pointer", fontSize: 12, fontWeight: 700 }}>{cuiLoading ? "⏳" : "🔎"}</button>
-                      </div>
-                      {cuiErr && <div style={{ marginTop: 5, background: "#ffebee", border: "1px solid #ef9a9a", borderRadius: 5, padding: "5px 8px", fontSize: 11, color: "#c62828" }}>{cuiErr}</div>}
-                    </div>
-                    {cuiResult && !cuiLoading && (<div style={{ flex: 1, minWidth: 260, background: "#fff", border: "2px solid #a5d6a7", borderRadius: 8, padding: 10 }}><div style={{ fontWeight: 700, color: G, fontSize: 12, marginBottom: 6 }}>✅ Date găsite</div><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "3px 10px", fontSize: 12 }}>{[["Denumire", cuiResult.denumire], ["CUI", cuiResult.cod_fiscal], ["Adresă", cuiResult.adresa], ["Reg.Com.", cuiResult.reg_com], ["Județ", cuiResult.judet], ["Tel.", cuiResult.tel]].map(([l, v]) => v ? (<div key={l}><span style={{ color: "#888", fontSize: 10 }}>{l}: </span><strong>{v}</strong></div>) : null)}</div><div style={{ display: "flex", gap: 8, marginTop: 8 }}><button onClick={importCUI} style={{ padding: "6px 14px", background: G, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>⬇️ Importă</button><button onClick={() => setCuiResult(null)} style={{ padding: "6px 10px", background: "#f5f5f5", border: "1px solid #ccc", borderRadius: 6, cursor: "pointer", fontSize: 12 }}>✕</button></div></div>)}
-                  </div>
-                </div>
-                <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
-                  <SC label="Total Firme" value={pjList.length + " firme"} c="#e65100" bg="#fff3e0" />
-                  <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-                    <input value={pjFilter} onChange={(e) => setPjFilter(e.target.value)} placeholder="🔍 Caută..." style={{ border: "1px solid #ccc", borderRadius: 6, padding: "5px 10px", fontSize: 12, width: 180 }} />
-                    <button onClick={addPJ} style={{ padding: "6px 12px", background: "#e65100", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Adaugă</button>
-                  </div>
-                </div>
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 900 }}>
-                    <thead><tr><th style={th({ background: "#b71c1c", width: 28 })}></th>{[{ l: "Cod", w: 55 }, { l: "Denumire", w: 185 }, { l: "CUI", w: 105 }, { l: "Analitic", w: 82 }, { l: "Jud.", w: 45 }, { l: "Adresa", w: 180 }, { l: "Cont Bancă", w: 165 }, { l: "Bancă", w: 130 }, { l: "Reg.Com.", w: 100 }, { l: "Tel.", w: 90 }].map((c) => <th key={c.l} style={{ ...th({ background: "#e65100" }), width: c.w, textAlign: "left" }}>{c.l}</th>)}<th style={th({ background: "#e65100", width: 30 })}></th></tr></thead>
-                    <tbody>{pjList.filter((r) => !pjFilter || r.denumire?.toLowerCase().includes(pjFilter.toLowerCase()) || r.cod?.includes(pjFilter) || r.cod_fiscal?.toLowerCase().includes(pjFilter.toLowerCase())).map((r, i) => { const rowBg = i % 2 === 0 ? "#fff" : "#fff8f5"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 2}</td><td style={td({ background: "#fff3e0", fontWeight: 700, color: "#e65100", textAlign: "center" })}><input style={inp({ textAlign: "center", fontWeight: 700, color: "#e65100" })} value={r.cod || ""} onChange={(e) => updPJ(i, "cod", e.target.value)} /></td><td style={td({ fontWeight: 600 })}><input style={inp({ fontWeight: 600, fontSize: 11 })} value={r.denumire || ""} onChange={(e) => updPJ(i, "denumire", e.target.value)} /></td><td style={td({ background: "#fff8e1" })}><input style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.cod_fiscal || ""} onChange={(e) => updPJ(i, "cod_fiscal", e.target.value)} /></td><td style={td()}><input style={inp({ fontSize: 11 })} value={r.analitic || ""} onChange={(e) => updPJ(i, "analitic", e.target.value)} /></td><td style={td({ background: "#e8f5e9", textAlign: "center", fontWeight: 600, color: G })}><input style={inp({ textAlign: "center", fontWeight: 600, color: G })} value={r.judet || ""} onChange={(e) => updPJ(i, "judet", e.target.value)} /></td><td style={td({ fontSize: 11 })}><input style={inp({ fontSize: 11 })} value={r.adresa || ""} onChange={(e) => updPJ(i, "adresa", e.target.value)} /></td><td style={td({ background: r.cont_banca ? "#e8f5e9" : "#fff", fontFamily: "monospace", fontSize: 10 })}><input style={inp({ fontFamily: "monospace", fontSize: 10 })} value={r.cont_banca || ""} onChange={(e) => updPJ(i, "cont_banca", e.target.value)} /></td><td style={td({ fontSize: 11 })}><input style={inp({ fontSize: 11 })} value={r.banca || ""} onChange={(e) => updPJ(i, "banca", e.target.value)} /></td><td style={td({ fontFamily: "monospace", fontSize: 11 })}><input style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.reg_com || ""} onChange={(e) => updPJ(i, "reg_com", e.target.value)} /></td><td style={td({ fontSize: 11 })}><input style={inp({ fontSize: 11 })} value={r.tel || ""} onChange={(e) => updPJ(i, "tel", e.target.value)} /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delPJ(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
-                  </table>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
@@ -1134,6 +1099,7 @@ export default function App() {
             <div style={{ display: "flex", borderBottom: "2px solid #e0e0e0", marginBottom: 12, flexWrap: "wrap", gap: 2 }}>
               <button style={{ padding: "5px 13px", cursor: "pointer", border: "none", fontWeight: 600, fontSize: 12, borderBottom: pvSubTab === "editor" ? `2px solid ${G}` : "2px solid transparent", background: pvSubTab === "editor" ? "#f0faf4" : "transparent", color: pvSubTab === "editor" ? G : "#666", marginRight: 3 }} onClick={() => setPvSubTab("editor")}>✏️ Editor PV</button>
               <button style={{ padding: "5px 13px", cursor: "pointer", border: "none", fontWeight: 600, fontSize: 12, borderBottom: pvSubTab === "registru" ? `2px solid ${G}` : "2px solid transparent", background: pvSubTab === "registru" ? "#f0faf4" : "transparent", color: pvSubTab === "registru" ? G : "#666", marginRight: 3 }} onClick={() => setPvSubTab("registru")}>📋 Registru PJ <span style={{ marginLeft: 4, background: "#e65100", color: "#fff", borderRadius: 10, padding: "1px 5px", fontSize: 10, fontWeight: 700 }}>{pvList.length}</span></button>
+              <button style={{ padding: "5px 13px", cursor: "pointer", border: "none", fontWeight: 600, fontSize: 12, borderBottom: pvSubTab === "pj" ? `2px solid ${G}` : "2px solid transparent", background: pvSubTab === "pj" ? "#f0faf4" : "transparent", color: pvSubTab === "pj" ? G : "#666", marginRight: 3 }} onClick={() => setPvSubTab("pj")}>🏢 Pers. Juridice <span style={{ marginLeft: 4, background: "#e65100", color: "#fff", borderRadius: 10, padding: "1px 5px", fontSize: 10, fontWeight: 700 }}>{pjList.length}</span></button>
             </div>
 
             {pvSubTab === "editor" && (
@@ -1219,7 +1185,7 @@ export default function App() {
                 )}
 
                 {pvPreview && (
-                  <div style={{ border: "1px solid #ccc", borderRadius: 4, padding: 8, background: "#fff" }}>
+                  <div ref={pvPrintRef} style={{ border: "1px solid #ccc", borderRadius: 4, padding: 8, background: "#fff" }}>
                     <PVPrint pv={pv} />
                   </div>
                 )}
@@ -1234,36 +1200,83 @@ export default function App() {
                   <button onClick={() => setPvSubTab("editor")} style={{ marginLeft: "auto", padding: "6px 14px", background: "#e65100", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ PV nou</button>
                 </div>
                 <div style={{ overflowX: "auto" }}>
-                  <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 700 }}>
-                    <thead><tr><th style={th({ background: "#e65100", width: 28 })}></th><th style={th({ background: "#e65100", width: 55 })}>Serie</th><th style={th({ background: "#e65100", width: 65 })}>Nr. PV</th><th style={th({ background: "#e65100", width: 80 })}>Anexa 3</th><th style={th({ background: "#e65100", width: 85 })}>Data</th><th style={th({ background: "#e65100", textAlign: "left" })}>Beneficiar</th><th style={th({ background: "#e65100", width: 95 })}>CUI</th><th style={th({ background: "#e65100", width: 90 })}>Materiale</th><th style={th({ background: "#e65100", width: 75 })}>Cant. total</th><th style={th({ background: "#e65100", width: 70 })}>🖨️ Print</th><th style={th({ background: "#e65100", width: 30 })}></th></tr></thead>
+                  <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 800 }}>
+                    <thead><tr>
+                      <th style={th({ background: "#e65100", width: 28 })}></th>
+                      <th style={th({ background: "#e65100", width: 50 })}>Serie</th>
+                      <th style={th({ background: "#e65100", width: 65 })}>Nr</th>
+                      <th style={th({ background: "#e65100", width: 85 })}>Data</th>
+                      <th style={th({ background: "#e65100", width: 165, textAlign: "left" })}>Furnizor</th>
+                      <th style={th({ background: "#e65100", width: 110 })}>CUI</th>
+                      <th style={th({ background: "#e65100", width: 200, textAlign: "left" })}>Denumire Deseu</th>
+                      <th style={th({ background: "#e65100", width: 80 })}>Cant.(kg)</th>
+                      <th style={th({ background: "#e65100", width: 70 })}>🖨️ Print</th>
+                      <th style={th({ background: "#e65100", width: 30 })}></th>
+                    </tr></thead>
                     <tbody>
-                      {pvList.length === 0 && <tr><td colSpan={11} style={{ textAlign: "center", padding: 20, color: "#aaa" }}>Niciun PV salvat. Creează unul în Editor.</td></tr>}
-                      {pvList.map((r, i) => {
-                        const rowBg = i % 2 === 0 ? "#fff" : "#fff8f5";
-                        const totCant = (r.materiale || []).reduce((s, m) => s + (parseFloat(m.cant) || 0), 0);
-                        const matCount = (r.materiale || []).filter(m => m.den).length;
-                        return (
-                          <tr key={r.id || i} style={{ background: rowBg }}>
-                            <td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td>
-                            <td style={td({ background: "#fff3e0", fontWeight: 700, color: "#e65100", textAlign: "center" })}>{r.serie}</td>
-                            <td style={td({ textAlign: "center", fontWeight: 700, color: "#1565c0" })}>{r.nr_pv}</td>
-                            <td style={td({ textAlign: "center", fontFamily: "monospace" })}>{r.nr_anexa}</td>
-                            <td style={td({ textAlign: "center" })}>{r.data}</td>
-                            <td style={td({ fontWeight: 600 })}>{r.client_denumire}</td>
-                            <td style={td({ fontFamily: "monospace", fontSize: 11 })}>{r.client_cui}</td>
-                            <td style={td({ textAlign: "center" })}>{matCount}</td>
-                            <td style={td({ textAlign: "right", background: "#e8f5e9", fontWeight: 700, color: G })}>{fmt(totCant)} kg</td>
-                            <td style={td({ textAlign: "center", padding: 3 })}>
-                              <button onClick={() => printRegistruPV(r.id)} title="Printează PV + Anexa 3" style={{ background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 4, cursor: "pointer", color: "#1565c0", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}
-                                onMouseEnter={(e) => { e.currentTarget.style.background = "#1565c0"; e.currentTarget.style.color = "#fff"; }}
-                                onMouseLeave={(e) => { e.currentTarget.style.background = "#e3f2fd"; e.currentTarget.style.color = "#1565c0"; }}
-                              >🖨️</button>
-                            </td>
-                            <td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delPV(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
-                          </tr>
-                        );
+                      {pvList.length === 0 && <tr><td colSpan={10} style={{ textAlign: "center", padding: 20, color: "#aaa" }}>Niciun PV salvat. Creează unul în Editor.</td></tr>}
+                      {pvList.flatMap((r, pi) => {
+                        const mats = (r.materiale || []).filter(m => m.den);
+                        if (!mats.length) return [];
+                        return mats.map((m, mi) => {
+                          const rowBg = pi % 2 === 0 ? "#fff" : "#fff8f5";
+                          const isFirst = mi === 0;
+                          return (
+                            <tr key={`${r.id}-${mi}`} style={{ background: rowBg, borderTop: isFirst && pi > 0 ? "2px solid #ffcc80" : "1px solid #d0d0d0" }}>
+                              <td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{pi + 1}</td>
+                              <td style={td({ background: isFirst ? "#fff3e0" : rowBg, fontWeight: 700, color: "#e65100", textAlign: "center" })}>{isFirst ? r.serie : ""}</td>
+                              <td style={td({ textAlign: "center", fontWeight: isFirst ? 700 : 400, color: isFirst ? "#1565c0" : "#aaa", background: rowBg })}>{isFirst ? r.nr_pv : ""}</td>
+                              <td style={td({ textAlign: "center", color: isFirst ? "#333" : "#aaa", background: rowBg })}>{isFirst ? r.data : ""}</td>
+                              <td style={td({ fontWeight: isFirst ? 600 : 400, color: isFirst ? "#333" : "#aaa", background: rowBg })}>{isFirst ? r.client_denumire : ""}</td>
+                              <td style={td({ fontFamily: "monospace", fontSize: 11, color: isFirst ? "#333" : "#aaa", background: rowBg })}>{isFirst ? r.client_cui : ""}</td>
+                              <td style={td({ background: rowBg })}>{m.den.toUpperCase()} <span style={{ color: "#888", fontSize: 10 }}>({m.cod})</span></td>
+                              <td style={td({ textAlign: "right", background: "#e8f5e9", fontWeight: 700, color: G })}>{fmt(m.cant)}</td>
+                              <td style={td({ textAlign: "center", padding: 3, background: rowBg })}>
+                                {isFirst && (
+                                  <button onClick={() => printRegistruPV(r.id)} title={`Printează PV ${r.serie} ${r.nr_pv}`} style={{ background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 4, cursor: "pointer", color: "#1565c0", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}
+                                    onMouseEnter={(e) => { e.currentTarget.style.background = "#1565c0"; e.currentTarget.style.color = "#fff"; }}
+                                    onMouseLeave={(e) => { e.currentTarget.style.background = "#e3f2fd"; e.currentTarget.style.color = "#1565c0"; }}
+                                  >🖨️ {mats.length > 1 ? `(${mats.length})` : ""}</button>
+                                )}
+                              </td>
+                              <td style={td({ textAlign: "center", padding: 3, background: rowBg })}>{isFirst && <button onClick={() => delPV(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button>}</td>
+                            </tr>
+                          );
+                        });
                       })}
                     </tbody>
+                    <tfoot><tr style={{ background: "#e65100", color: "#fff" }}><td colSpan={7} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(pvList.reduce((s, p) => s + (p.materiale || []).reduce((ss, m) => ss + (parseFloat(m.cant) || 0), 0), 0))} kg</td><td colSpan={2}></td></tr></tfoot>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {pvSubTab === "pj" && (
+              <div>
+                <div style={{ background: "linear-gradient(135deg,#fff3e0,#fff8f5)", border: "2px solid #ffcc80", borderRadius: 10, padding: 12, marginBottom: 12 }}>
+                  <div style={{ fontWeight: 700, color: "#e65100", fontSize: 13, marginBottom: 10 }}>🔍 Caută firmă după CUI</div>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
+                    <div style={{ flex: "0 0 210px" }}>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <input value={cuiSearch} onChange={(e) => { setCuiSearch(e.target.value); setCuiResult(null); setCuiErr(""); }} onKeyDown={(e) => e.key === "Enter" && searchCUI()} placeholder="ex: 36191378" style={{ ...IFS, borderColor: "#ffcc80", fontFamily: "monospace" }} />
+                        <button onClick={searchCUI} disabled={cuiLoading} style={{ padding: "5px 12px", background: cuiLoading ? "#ccc" : "#e65100", color: "#fff", border: "none", borderRadius: 6, cursor: cuiLoading ? "wait" : "pointer", fontSize: 12, fontWeight: 700 }}>{cuiLoading ? "⏳" : "🔎"}</button>
+                      </div>
+                      {cuiErr && <div style={{ marginTop: 5, background: "#ffebee", border: "1px solid #ef9a9a", borderRadius: 5, padding: "5px 8px", fontSize: 11, color: "#c62828" }}>{cuiErr}</div>}
+                    </div>
+                    {cuiResult && !cuiLoading && (<div style={{ flex: 1, minWidth: 260, background: "#fff", border: "2px solid #a5d6a7", borderRadius: 8, padding: 10 }}><div style={{ fontWeight: 700, color: G, fontSize: 12, marginBottom: 6 }}>✅ Date găsite</div><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "3px 10px", fontSize: 12 }}>{[["Denumire", cuiResult.denumire], ["CUI", cuiResult.cod_fiscal], ["Adresă", cuiResult.adresa], ["Reg.Com.", cuiResult.reg_com], ["Județ", cuiResult.judet], ["Tel.", cuiResult.tel]].map(([l, v]) => v ? (<div key={l}><span style={{ color: "#888", fontSize: 10 }}>{l}: </span><strong>{v}</strong></div>) : null)}</div><div style={{ display: "flex", gap: 8, marginTop: 8 }}><button onClick={importCUI} style={{ padding: "6px 14px", background: G, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>⬇️ Importă</button><button onClick={() => setCuiResult(null)} style={{ padding: "6px 10px", background: "#f5f5f5", border: "1px solid #ccc", borderRadius: 6, cursor: "pointer", fontSize: 12 }}>✕</button></div></div>)}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
+                  <SC label="Total Firme" value={pjList.length + " firme"} c="#e65100" bg="#fff3e0" />
+                  <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+                    <input value={pjFilter} onChange={(e) => setPjFilter(e.target.value)} placeholder="🔍 Caută..." style={{ border: "1px solid #ccc", borderRadius: 6, padding: "5px 10px", fontSize: 12, width: 180 }} />
+                    <button onClick={addPJ} style={{ padding: "6px 12px", background: "#e65100", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Adaugă</button>
+                  </div>
+                </div>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 900 }}>
+                    <thead><tr><th style={th({ background: "#b71c1c", width: 28 })}></th>{[{ l: "Cod", w: 55 }, { l: "Denumire", w: 185 }, { l: "CUI", w: 105 }, { l: "Analitic", w: 82 }, { l: "Jud.", w: 45 }, { l: "Adresa", w: 180 }, { l: "Cont Bancă", w: 165 }, { l: "Bancă", w: 130 }, { l: "Reg.Com.", w: 100 }, { l: "Tel.", w: 90 }].map((c) => <th key={c.l} style={{ ...th({ background: "#e65100" }), width: c.w, textAlign: "left" }}>{c.l}</th>)}<th style={th({ background: "#e65100", width: 30 })}></th></tr></thead>
+                    <tbody>{pjList.filter((r) => !pjFilter || r.denumire?.toLowerCase().includes(pjFilter.toLowerCase()) || r.cod?.includes(pjFilter) || r.cod_fiscal?.toLowerCase().includes(pjFilter.toLowerCase())).map((r, i) => { const rowBg = i % 2 === 0 ? "#fff" : "#fff8f5"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 2}</td><td style={td({ background: "#fff3e0", fontWeight: 700, color: "#e65100", textAlign: "center" })}><input style={inp({ textAlign: "center", fontWeight: 700, color: "#e65100" })} value={r.cod || ""} onChange={(e) => updPJ(i, "cod", e.target.value)} /></td><td style={td({ fontWeight: 600 })}><input style={inp({ fontWeight: 600, fontSize: 11 })} value={r.denumire || ""} onChange={(e) => updPJ(i, "denumire", e.target.value)} /></td><td style={td({ background: "#fff8e1" })}><input style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.cod_fiscal || ""} onChange={(e) => updPJ(i, "cod_fiscal", e.target.value)} /></td><td style={td()}><input style={inp({ fontSize: 11 })} value={r.analitic || ""} onChange={(e) => updPJ(i, "analitic", e.target.value)} /></td><td style={td({ background: "#e8f5e9", textAlign: "center", fontWeight: 600, color: G })}><input style={inp({ textAlign: "center", fontWeight: 600, color: G })} value={r.judet || ""} onChange={(e) => updPJ(i, "judet", e.target.value)} /></td><td style={td({ fontSize: 11 })}><input style={inp({ fontSize: 11 })} value={r.adresa || ""} onChange={(e) => updPJ(i, "adresa", e.target.value)} /></td><td style={td({ background: r.cont_banca ? "#e8f5e9" : "#fff", fontFamily: "monospace", fontSize: 10 })}><input style={inp({ fontFamily: "monospace", fontSize: 10 })} value={r.cont_banca || ""} onChange={(e) => updPJ(i, "cont_banca", e.target.value)} /></td><td style={td({ fontSize: 11 })}><input style={inp({ fontSize: 11 })} value={r.banca || ""} onChange={(e) => updPJ(i, "banca", e.target.value)} /></td><td style={td({ fontFamily: "monospace", fontSize: 11 })}><input style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.reg_com || ""} onChange={(e) => updPJ(i, "reg_com", e.target.value)} /></td><td style={td({ fontSize: 11 })}><input style={inp({ fontSize: 11 })} value={r.tel || ""} onChange={(e) => updPJ(i, "tel", e.target.value)} /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delPJ(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
                   </table>
                 </div>
               </div>
