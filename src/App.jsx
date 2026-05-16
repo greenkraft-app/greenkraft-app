@@ -575,13 +575,13 @@ export default function App() {
   const newBord = (serie = "GK", reg = []) => ({
     serie, nr: getNextNr(serie, reg), data: today(),
     det: "", dom: "", ci_s: "", ci_n: "", ci_e: "", ci_v: "", cnp: "", trans: "Auto", sursa: "alte",
-    produse: [{ den: "", cod: "", cant: "", pret: "" }],
+    produse: [{ den: "", cod: "", cod_art: "", cant: "", pret: "" }],
   });
   const [borderouri, setBorderouri] = useState([newBord()]);
   const b = borderouri[activeBord] || newBord();
   const setB = (fn) => setBorderouri((p) => { const n = [...p]; n[activeBord] = fn(n[activeBord]); return n; });
   const updB = (f, v) => setB((b) => f === "serie" ? { ...b, serie: v, nr: getNextNr(v, registru) } : { ...b, [f]: v });
-  const updP = (i, f, v) => setB((b) => { const ps = [...b.produse]; ps[i] = { ...ps[i], [f]: v }; if (f === "den") { const fd = PRODUSE_LIST.find((p) => p.den === v); if (fd) ps[i].cod = fd.cod; } return { ...b, produse: ps }; });
+  const updP = (i, f, v) => setB((b) => { const ps = [...b.produse]; ps[i] = { ...ps[i], [f]: v }; if (f === "den") { const fd = PRODUSE_LIST.find((p) => p.den === v); if (fd) { ps[i].cod = fd.cod; ps[i].cod_art = fd.cod_art; } } return { ...b, produse: ps }; });
   const bTot = b.produse.reduce((s, p) => s + (parseFloat(p.cant) || 0) * (parseFloat(p.pret) || 0), 0);
   const bImp = Math.round(bTot * 0.1), bTax = Math.round(bTot * 0.02), bRest = bTot - bImp - bTax;
 
@@ -809,7 +809,7 @@ export default function App() {
       licenta: "nu e cazul",
       licenta_exp: "",
       destinatie: "Valorificare",
-      materiale: [{ den: "", cod: "", cant: "" }],
+      materiale: [{ den: "", cod: "", cod_art: "", cant: "" }],
     };
   };
   const [pvBorderouri, setPvBorderouri] = useState([newPV()]);
@@ -819,7 +819,7 @@ export default function App() {
   const updPVMat = (i, f, v) => setPV((p) => {
     const ms = [...p.materiale];
     ms[i] = { ...ms[i], [f]: v };
-    if (f === "den") { const fd = PV_MATERIALE.find((x) => x.den === v); if (fd) ms[i].cod = fd.cod; }
+    if (f === "den") { const fd = PRODUSE_LIST.find((x) => x.den === v); if (fd) { ms[i].cod = fd.cod; ms[i].cod_art = fd.cod_art; } }
     return { ...p, materiale: ms };
   });
 
@@ -912,15 +912,17 @@ export default function App() {
     const tax = Math.round(v * 0.02);
     const fd = PRODUSE_LIST.find(p => p.den === r.denumire || p.den.toUpperCase() === r.denumire);
     const codSaga = fd?.cod_art || "";
-    return [r.serie || "", r.nr || "", r.data || "", r.furnizor || "", r.adresa || "", r.cnp || "", r.furnizor || "", codSaga, cant, pu, "", "", "", r.denumire || "", imp, tax, parseFloat(r.valoare) || 0];
+    const denSaga = fd?.den || r.denumire || "";
+    return [r.serie || "", r.nr || "", r.data || "", r.furnizor || "", r.adresa || "", r.cnp || "", denSaga, codSaga, cant, pu, "", "", "", r.denumire || "", imp, tax, parseFloat(r.valoare) || 0];
   });
 
   const buildPJRows = () => pvList.filter(p => inRange(p.data)).flatMap(p => {
     const mats = (p.materiale || []).filter(m => m.den);
     return mats.map(m => {
       const fd = PRODUSE_LIST.find(x => x.den === m.den);
-      const codSaga = fd?.cod_art || "";
-      return [p.serie || "", p.nr_pv || "", p.data || "", p.client_denumire || "", p.client_adresa || "", p.client_cui || "", p.client_denumire || "", codSaga, parseFloat(m.cant) || 0, "", "", "", "", m.den || "", "", "", ""];
+      const codSaga = m.cod_art || fd?.cod_art || "";
+      const denSaga = fd?.den || m.den || "";
+      return [p.serie || "", p.nr_pv || "", p.data || "", p.client_denumire || "", p.client_adresa || "", p.client_cui || "", denSaga, codSaga, parseFloat(m.cant) || 0, "", "", "", "", m.den || "", "", "", ""];
     });
   });
 
@@ -1257,10 +1259,10 @@ export default function App() {
                       <div style={{ background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 8, padding: 12, marginBottom: 10 }}>
                         <div style={{ fontWeight: 700, color: "#e65100", marginBottom: 8, fontSize: 12 }}>📦 Produse / Deșeuri</div>
                         <table style={{ borderCollapse: "collapse", width: "100%" }}>
-                          <thead><tr><th style={th({ textAlign: "left", background: "#e65100", minWidth: 170 })}>Denumire</th><th style={th({ width: 85, background: "#e65100" })}>Cod HG 856</th><th style={th({ width: 80, background: "#e65100" })}>Cant.(kg)</th><th style={th({ width: 68, background: "#e65100" })}>Preț</th><th style={th({ width: 72, background: "#e65100" })}>Valoare</th><th style={th({ width: 26, background: "#e65100" })}></th></tr></thead>
-                          <tbody>{b.produse.map((p, i) => { const v = (parseFloat(p.cant) || 0) * (parseFloat(p.pret) || 0); return (<tr key={i} style={{ background: i % 2 === 0 ? "#fff" : "#fffde7" }}><td style={td()}><AC value={p.den} options={PRODUSE} placeholder="Selectează..." onChange={(v) => updP(i, "den", v)} /></td><td style={td()}><input style={inp({ textAlign: "center" })} value={p.cod} onChange={(e) => updP(i, "cod", e.target.value)} /></td><td style={td()}><input style={inp({ textAlign: "right" })} type="number" value={p.cant} onChange={(e) => updP(i, "cant", e.target.value)} /></td><td style={td()}><input style={inp({ textAlign: "right" })} type="number" value={p.pret} onChange={(e) => updP(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", fontWeight: 600, background: "#fff8e1" })}>{v > 0 ? fmt(v) : "—"}</td><td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => setB((b) => ({ ...b, produse: b.produse.filter((_, j) => j !== i) }))} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                          <thead><tr><th style={th({ textAlign: "left", background: "#e65100", minWidth: 170 })}>Denumire</th><th style={th({ width: 85, background: "#e65100" })}>CodSAGA</th><th style={th({ width: 80, background: "#e65100" })}>Cant.(kg)</th><th style={th({ width: 68, background: "#e65100" })}>Preț</th><th style={th({ width: 72, background: "#e65100" })}>Valoare</th><th style={th({ width: 26, background: "#e65100" })}></th></tr></thead>
+                          <tbody>{b.produse.map((p, i) => { const v = (parseFloat(p.cant) || 0) * (parseFloat(p.pret) || 0); return (<tr key={i} style={{ background: i % 2 === 0 ? "#fff" : "#fffde7" }}><td style={td()}><AC value={p.den} options={PRODUSE} placeholder="Selectează..." onChange={(v) => updP(i, "den", v)} /></td><td style={td()}><input style={inp({ textAlign: "center" })} value={p.cod_art || ""} onChange={(e) => updP(i, "cod_art", e.target.value)} /></td><td style={td()}><input style={inp({ textAlign: "right" })} type="number" value={p.cant} onChange={(e) => updP(i, "cant", e.target.value)} /></td><td style={td()}><input style={inp({ textAlign: "right" })} type="number" value={p.pret} onChange={(e) => updP(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", fontWeight: 600, background: "#fff8e1" })}>{v > 0 ? fmt(v) : "—"}</td><td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => setB((b) => ({ ...b, produse: b.produse.filter((_, j) => j !== i) }))} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
                         </table>
-                        <button onClick={() => setB((b) => ({ ...b, produse: [...b.produse, { den: "", cod: "", cant: "", pret: "" }] }))} style={{ marginTop: 6, background: "#e65100", color: "#fff", border: "none", borderRadius: 4, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Adaugă produs</button>
+                        <button onClick={() => setB((b) => ({ ...b, produse: [...b.produse, { den: "", cod: "", cod_art: "", cant: "", pret: "" }] }))} style={{ marginTop: 6, background: "#e65100", color: "#fff", border: "none", borderRadius: 4, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Adaugă produs</button>
                       </div>
                       <div style={{ background: "#f3e5f5", border: "1px solid #ce93d8", borderRadius: 8, padding: 12 }}>
                         <div style={{ fontWeight: 700, color: "#6a1b9a", marginBottom: 8, fontSize: 12 }}>💰 Calcule Automate</div>
@@ -1414,17 +1416,17 @@ export default function App() {
                       <div style={{ background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 8, padding: 12 }}>
                         <div style={{ fontWeight: 700, color: "#e65100", marginBottom: 8, fontSize: 12 }}>📦 Materiale / Deșeuri</div>
                         <table style={{ borderCollapse: "collapse", width: "100%" }}>
-                          <thead><tr><th style={th({ textAlign: "left", background: "#e65100", minWidth: 200 })}>Denumire</th><th style={th({ width: 85, background: "#e65100" })}>Cod</th><th style={th({ width: 85, background: "#e65100" })}>Cant.(kg)</th><th style={th({ width: 26, background: "#e65100" })}></th></tr></thead>
+                          <thead><tr><th style={th({ textAlign: "left", background: "#e65100", minWidth: 200 })}>Denumire</th><th style={th({ width: 85, background: "#e65100" })}>CodSAGA</th><th style={th({ width: 85, background: "#e65100" })}>Cant.(kg)</th><th style={th({ width: 26, background: "#e65100" })}></th></tr></thead>
                           <tbody>{pv.materiale.map((m, i) => (
                             <tr key={i} style={{ background: i % 2 === 0 ? "#fff" : "#fffde7" }}>
-                              <td style={td()}><AC value={m.den} options={PV_DEN_OPTIONS} placeholder="Selectează..." onChange={(v) => updPVMat(i, "den", v)} /></td>
-                              <td style={td()}><input style={inp({ textAlign: "center" })} value={m.cod} onChange={(e) => updPVMat(i, "cod", e.target.value)} /></td>
+                              <td style={td()}><AC value={m.den} options={PRODUSE} placeholder="Selectează..." onChange={(v) => updPVMat(i, "den", v)} /></td>
+                              <td style={td()}><input style={inp({ textAlign: "center" })} value={m.cod_art || ""} onChange={(e) => updPVMat(i, "cod_art", e.target.value)} /></td>
                               <td style={td()}><input style={inp({ textAlign: "right" })} type="number" value={m.cant} onChange={(e) => updPVMat(i, "cant", e.target.value)} /></td>
                               <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => setPV((p) => ({ ...p, materiale: p.materiale.filter((_, j) => j !== i) }))} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
                             </tr>
                           ))}</tbody>
                         </table>
-                        <button onClick={() => setPV((p) => ({ ...p, materiale: [...p.materiale, { den: "", cod: "", cant: "" }] }))} style={{ marginTop: 6, background: "#e65100", color: "#fff", border: "none", borderRadius: 4, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Adaugă material</button>
+                        <button onClick={() => setPV((p) => ({ ...p, materiale: [...p.materiale, { den: "", cod: "", cod_art: "", cant: "" }] }))} style={{ marginTop: 6, background: "#e65100", color: "#fff", border: "none", borderRadius: 4, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Adaugă material</button>
                       </div>
                     </div>
                   </div>
