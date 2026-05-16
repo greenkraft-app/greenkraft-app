@@ -565,6 +565,8 @@ export default function App() {
   const [trasNrInreg, setTrasNrInreg] = useState("");
   const [trasContract, setTrasContract] = useState("");
   const [trasFactura, setTrasFactura] = useState("");
+  const [pdfBundle, setPdfBundle] = useState({ borderouri: [], pvuri: [] });
+  const pdfBundleRef = useRef();
   const [cuiSearch, setCuiSearch] = useState("");
   const [cuiLoading, setCuiLoading] = useState(false);
   const [cuiResult, setCuiResult] = useState(null);
@@ -1022,128 +1024,199 @@ export default function App() {
 
   const LUNI_RO = ["ianuarie","februarie","martie","aprilie","mai","iunie","iulie","august","septembrie","octombrie","noiembrie","decembrie"];
 
-  // Generator: Anexa de raportare (Excel)
-  const generateAnexaRaportare = async () => {
+  // ── Generator: Anexa de raportare (PDF A4) ───────────────
+  const generateAnexaRaportare = () => {
     if (!trasCompany) { alert("Selectează firma!"); return; }
     if (!trasMonth) { alert("Selectează luna!"); return; }
-    setTrasGenLoading(true);
-    try {
-      const XLSX = await loadXLSX();
-      const entries = trasEntries.filter(e => e.trasabilitate === trasCompany && monthOf(e.data) === trasMonth && e.type === "PF");
-      const [mm, yyyy] = trasMonth.split(".");
-      const lunaText = LUNI_RO[parseInt(mm) - 1].charAt(0).toUpperCase() + LUNI_RO[parseInt(mm) - 1].slice(1);
-      // Group by material
-      const byMat = {};
-      entries.forEach(e => {
-        const key = e.denumire;
-        if (!byMat[key]) byMat[key] = [];
-        byMat[key].push(e);
+    const entries = trasEntries.filter(e => e.trasabilitate === trasCompany && monthOf(e.data) === trasMonth && e.type === "PF");
+    if (!entries.length) { alert("Nicio înregistrare PF găsită pentru firma și luna selectată!"); return; }
+
+    const [mm, yyyy] = trasMonth.split(".");
+    const lunaText = LUNI_RO[parseInt(mm) - 1].charAt(0).toUpperCase() + LUNI_RO[parseInt(mm) - 1].slice(1);
+
+    // Group by material
+    const byMat = {};
+    entries.forEach(e => {
+      const key = e.denumire;
+      if (!byMat[key]) byMat[key] = [];
+      byMat[key].push(e);
+    });
+
+    // Build rows HTML
+    let nrCrt = 1;
+    let totalGen = 0;
+    let rowsHTML = "";
+    Object.entries(byMat).forEach(([matName, items]) => {
+      // Short material name (e.g., "Deseu amb din PET - 15 01 02")
+      const codMatch = matName.match(/COD[:\s\-]*(\d{2}\s*\d{2}\s*\d{2})/);
+      const matShort = codMatch
+        ? matName.replace(/-?\s*COD[\s\S]*$/i, '').trim() + ' - ' + codMatch[1]
+        : matName;
+      let matTotal = 0;
+      items.forEach(item => {
+        rowsHTML += `<tr>
+          <td style="border:1px solid #000;padding:3px 5px;text-align:center;">${nrCrt++}</td>
+          <td style="border:1px solid #000;padding:3px 5px;">${item.furnizor}</td>
+          <td style="border:1px solid #000;padding:3px 5px;font-family:monospace;">${item.cui_cnp}</td>
+          <td style="border:1px solid #000;padding:3px 5px;">${matShort}</td>
+          <td style="border:1px solid #000;padding:3px 5px;text-align:right;">${item.cant}</td>
+          <td style="border:1px solid #000;padding:3px 5px;">${item.nr}/${item.data}</td>
+        </tr>`;
+        matTotal += item.cant;
       });
+      // Subtotal row per material
+      rowsHTML += `<tr style="background:#eee;">
+        <td style="border:1px solid #000;padding:3px 5px;"></td>
+        <td style="border:1px solid #000;padding:3px 5px;font-weight:bold;">${matShort}</td>
+        <td style="border:1px solid #000;padding:3px 5px;"></td>
+        <td style="border:1px solid #000;padding:3px 5px;"></td>
+        <td style="border:1px solid #000;padding:3px 5px;text-align:right;font-weight:bold;">${matTotal}</td>
+        <td style="border:1px solid #000;padding:3px 5px;"></td>
+      </tr>`;
+      totalGen += matTotal;
+    });
+    // TOTAL row
+    rowsHTML += `<tr style="background:#ddd;">
+      <td colspan="4" style="border:1px solid #000;padding:5px;font-weight:bold;text-align:center;">TOTAL</td>
+      <td style="border:1px solid #000;padding:5px;text-align:right;font-weight:bold;">${totalGen}</td>
+      <td style="border:1px solid #000;padding:5px;"></td>
+    </tr>`;
 
-      const rows = [];
-      rows.push([`BORDEROU DE COLECTARE A DESEURILOR DE AMBALAJE DIN FLUX MUNICIPAL AL GREENKRAFT SRL`]);
-      rows.push([`în luna ${lunaText} ${yyyy}`]);
-      rows.push([""]);
-      rows.push(["Nota: cantitatile se raporteaza in kilograme"]);
-      rows.push([""]);
-      rows.push(["Nr crt", "Nume si prenume persoane fizice (pt des de amb preluate direct de Prestator din fluxul municipal)", "CNP pers.fizica", "Tip material Deseu amb/Cod deseu *)", "Cantitate (kilograme)", "Nr si data document de colectare"]);
+    const dataDoc = `31-${mm}-${String(yyyy).slice(-2)}`;
 
-      let nrCrt = 1;
-      let totalGen = 0;
-      Object.entries(byMat).forEach(([matName, items]) => {
-        let matTotal = 0;
-        items.forEach(item => {
-          rows.push([nrCrt++, item.furnizor, item.cui_cnp, matName, item.cant, `${item.nr}/${item.data}`]);
-          matTotal += item.cant;
-        });
-        rows.push(["", matName, "", "", matTotal, ""]);
-        totalGen += matTotal;
-      });
-      rows.push(["", "TOTAL", "", "", totalGen, ""]);
-      rows.push([""]);
-      rows.push(["*) conf Anexa nr 2 din HG 856/2002 (Decizia 20)"]);
-      rows.push(["Din flux municipal = achizitie de la populatie"]);
-      rows.push(["Materialele compozite se incadreaza in functie de materialul preponderent"]);
-      rows.push([""]);
-      rows.push([today(), "", "", "", "", "Semnatura si stampila"]);
-      rows.push(["Nume, Prenume, Functie"]);
-      rows.push(["MIHAI GANA"]);
-      rows.push(["Gestionar Depozit"]);
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Anexa raportare ${trasCompany} ${trasMonth}</title>
+<style>
+@page { size: A4 portrait; margin: 10mm; }
+body { font-family: 'Times New Roman', serif; font-size: 9pt; margin: 0; padding: 0; color: #000; }
+.container { padding: 5mm; }
+table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
+th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight: bold; }
+</style></head>
+<body>
+<div class="container">
+  <div style="text-align: right; font-weight: bold; font-size: 10pt; margin-bottom: 6px;">Anexa 4.1.A</div>
+  <div style="text-align: center; font-weight: bold; font-size: 11pt; margin: 4px 0;">BORDEROU DE COLECTARE A DESEURILOR DE AMBALAJE DIN FLUX MUNICIPAL AL GREENKRAFT SRL</div>
+  <div style="text-align: center; font-weight: bold; margin-bottom: 8px;">in luna ${lunaText} ${yyyy}</div>
+  <div style="font-size: 8pt; margin-bottom: 8px;"><strong>Nota:</strong> cantitatile se raporteaza in tone, cu trei zecimale, iar din total se pastreaza doar primele doua zecimale pentru anexa 4.3.A</div>
+  <table>
+    <thead><tr>
+      <th style="width: 30px;">Nr crt</th>
+      <th>Nume si prenume persoane fizice (pt des de amb preluate direct de Prestator din fluxul municipal)</th>
+      <th style="width: 95px;">CNP pers.fizica</th>
+      <th style="width: 150px;">Tip material Deseu amb/Cod deseu *)</th>
+      <th style="width: 60px;">Cantitate (tone)</th>
+      <th style="width: 110px;">Nr si data document de colectare</th>
+    </tr></thead>
+    <tbody>${rowsHTML}</tbody>
+  </table>
+  <div style="font-size: 8pt; margin-top: 10px;"><strong>*) conf Anexa nr 2 din HG 856/2002 (Decizia 2014/955/UE)</strong></div>
+  <div style="font-size: 8pt;"><strong>Din flux municipal = achizitie de la populatie</strong></div>
+  <div style="font-size: 8pt;">Materialele compozite se incadreaza in functie de materialul preponderent</div>
+  <div style="display: flex; justify-content: space-between; margin-top: 25px; font-size: 9pt;">
+    <div>
+      <div>${dataDoc}</div>
+      <div style="margin-top: 4px;">Nume, Prenume, Functie</div>
+      <div style="font-weight: bold;">MIHAI GANA</div>
+      <div>Gestionar Depozit</div>
+    </div>
+    <div style="text-align: right;">Semnatura si stampila</div>
+  </div>
+</div>
+</body></html>`;
 
-      const ws = XLSX.utils.aoa_to_sheet(rows);
-      ws["!cols"] = [{ wch: 8 }, { wch: 40 }, { wch: 18 }, { wch: 30 }, { wch: 18 }, { wch: 22 }];
-      ws["!merges"] = [
-        { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } },
-        { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } },
-      ];
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Anexa raportare");
-      XLSX.writeFile(wb, `Anexa_raportare_${trasCompany.replace(/\s/g, "_")}_${trasMonth.replace(".", "-")}.xlsx`);
-    } catch (e) { alert("Eroare: " + e.message); }
-    setTrasGenLoading(false);
+    const w = window.open("", "_blank");
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(() => w.print(), 300);
   };
 
-  // Generator: Declaratia (Word .doc via HTML)
-  const generateDeclaratia = () => {
+  // ── Generator: Declaratia (PDF cu auto-increment) ────────
+  const generateDeclaratia = async () => {
     if (!trasCompany) { alert("Selectează firma!"); return; }
     if (!trasMonth) { alert("Selectează luna!"); return; }
     const entries = trasEntries.filter(e => e.trasabilitate === trasCompany && monthOf(e.data) === trasMonth);
     if (!entries.length) { alert("Nicio înregistrare găsită!"); return; }
-    const [mm, yyyy] = trasMonth.split(".");
-    const lunaText = LUNI_RO[parseInt(mm) - 1];
 
-    // Group by material
-    const byMat = {};
-    entries.forEach(e => { byMat[e.denumire] = (byMat[e.denumire] || 0) + e.cant; });
+    setTrasGenLoading(true);
+    try {
+      // Group by material
+      const byMat = {};
+      entries.forEach(e => { byMat[e.denumire] = (byMat[e.denumire] || 0) + e.cant; });
 
-    const nrInreg = trasNrInreg || `27/${today()}`;
-    const contract = trasContract || "ECO 17/01.07.2024";
-    const factura = trasFactura || "GKF ____";
+      // Get next number from declaratii table
+      const { data: maxData } = await sb.from("declaratii").select("numar").order("numar", { ascending: false }).limit(1);
+      let nextNr = (maxData && maxData[0] && maxData[0].numar ? maxData[0].numar : (parseInt(trasNrInreg) || 0)) + 1;
 
-    Object.entries(byMat).forEach(([matName, totalCant]) => {
-      const matCode = matName.match(/COD[:\s\-]*(\d{2}\s*\d{2}\s*\d{2})/);
-      const matLine = matCode ? matName.replace(/-?\s*COD[\s\S]*$/i, '').trim().toUpperCase() + ` - COD ${matCode[1]}` : matName.toUpperCase();
+      const [mm, yyyy] = trasMonth.split(".");
+      const lunaText = LUNI_RO[parseInt(mm) - 1];
+      const contract = trasContract || "ECO 17/01.07.2024";
+      const factura = trasFactura || "GKF ____";
       const dataDecl = `31.${mm}.${yyyy}`;
 
-      const html = `<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
-<head><meta charset="utf-8"><title>Declaratie</title>
-<style>
-body { font-family: 'Times New Roman', serif; font-size: 12pt; line-height: 1.5; margin: 40px; }
-.right { text-align: right; }
-.center { text-align: center; }
-.title { font-weight: bold; font-size: 14pt; text-decoration: underline; }
-p { margin: 12pt 0; text-align: justify; }
-</style></head>
-<body>
-<p class="right"><strong>Nr. Inregistrare ${nrInreg}</strong></p>
-<br/><br/>
-<p class="center title">DECLARATIE PE PROPRIA RASPUNDERE</p>
-<br/>
-<p>Subsemnatul <strong>ZICA ZISU CATALIN</strong>, in calitate de administrator al Societatii <strong>GREENKRAFT SRL</strong>, cu sediul in Afumati, Ilfov, inregistrata la Registrul Comertului J23/2426/2016 cod fiscal RO3619138, autorizatie de mediu nr. 233/22.12.2021, declar pe propria raspundere urmatoarele: <strong>${matLine}</strong> in cantitate de <strong>${totalCant} kg</strong>, generate de persoane fizice si/sau de persoane juridice de pe de teritoriul Romaniei, predate in luna ${lunaText} ${yyyy}, in baza contractului <strong>${contract}</strong>, conform factura/facturi <strong>${factura}</strong>, nu au mai fost si nu vor fi utilizate si/sau raportate la realizarea obiectivelor de valorificare si reciclare conf. Legii 249/2015 catre alti agenti economici, astfel cum sunt stabilite de legislatia in vigoare privind gestionarea ambalajelor si deseurilor de ambalaje.</p>
-<br/>
-<p>Prezenta declarație este data azi ${dataDecl}, pe propria raspundere, cunoscand ca falsul in declaratii, uzul de fals și înșelăciunea sunt sancționate de legislatia in vigoare cu pedeapsa cu închisoarea.</p>
-<br/><br/><br/>
-<p><strong>GREENKRAFT SRL</strong></p>
-<p>Prin reprezentant legal/administrator</p>
-<p>Nume si Prenume <strong>ZICA ZISU CATALIN</strong></p>
-<br/><br/>
-<p>Semnatura (Stampila)</p>
-<p>..............................</p>
-</body></html>`;
+      // Build one HTML with all declarations (page break between)
+      let allDeclHTML = "";
+      const insertsToSave = [];
 
-      const blob = new Blob([html], { type: "application/msword" });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = `Declaratie_${matLine.replace(/\s/g, "_").replace(/[^a-zA-Z0-9_]/g, "")}_${lunaText}_${yyyy}.doc`;
-      link.click();
-    });
+      for (const [matName, totalCant] of Object.entries(byMat)) {
+        const matCode = matName.match(/COD[:\s\-]*(\d{2}\s*\d{2}\s*\d{2})/);
+        const matLine = matCode
+          ? matName.replace(/-?\s*COD[\s\S]*$/i, '').trim().toUpperCase() + ` - COD ${matCode[1]}`
+          : matName.toUpperCase();
+        const nrInreg = `${nextNr}/${dataDecl}`;
+
+        allDeclHTML += `<div style="page-break-after: always; padding: 20mm; font-family: 'Times New Roman', serif; font-size: 12pt; line-height: 1.6;">
+  <div style="text-align: right; font-weight: bold;">Nr. Inregistrare ${nrInreg}</div>
+  <br/><br/>
+  <div style="text-align: center; font-weight: bold; font-size: 14pt; text-decoration: underline;">DECLARATIE PE PROPRIA RASPUNDERE</div>
+  <br/><br/>
+  <p style="text-align: justify; text-indent: 30px;">Subsemnatul <strong>ZICA ZISU CATALIN</strong>, in calitate de administrator al Societatii <strong>GREENKRAFT SRL</strong>, cu sediul in Afumati, Ilfov, inregistrata la Registrul Comertului J23/2426/2016 cod fiscal RO3619138, autorizatie de mediu nr. 233/22.12.2021, declar pe propria raspundere urmatoarele: <strong>${matLine}</strong> in cantitate de <strong>${totalCant} kg</strong>, generate de persoane fizice si/sau de persoane juridice de pe de teritoriul Romaniei, predate in luna ${lunaText} ${yyyy}, in baza contractului <strong>${contract}</strong>, conform factura/facturi <strong>${factura}</strong>, nu au mai fost si nu vor fi utilizate si/sau raportate la realizarea obiectivelor de valorificare si reciclare conf. Legii 249/2015 catre alti agenti economici, astfel cum sunt stabilite de legislatia in vigoare privind gestionarea ambalajelor si deseurilor de ambalaje.</p>
+  <br/>
+  <p style="text-align: justify; text-indent: 30px;">Prezenta declarație este data azi ${dataDecl}, pe propria raspundere, cunoscand ca falsul in declaratii, uzul de fals și înșelăciunea sunt sancționate de legislatia in vigoare cu pedeapsa cu închisoarea.</p>
+  <br/><br/>
+  <div style="font-weight: bold;">GREENKRAFT SRL</div>
+  <div>Prin reprezentant legal/administrator</div>
+  <div>Nume si Prenume <strong>ZICA ZISU CATALIN</strong></div>
+  <br/><br/>
+  <div>Semnatura (Stampila)</div>
+  <div>..............................</div>
+</div>`;
+
+        insertsToSave.push({
+          numar: nextNr,
+          data: dataDecl,
+          trasabilitate: trasCompany,
+          material: matLine,
+          cantitate: totalCant,
+          luna: trasMonth,
+          contract,
+          factura
+        });
+        nextNr++;
+      }
+
+      // Save to DB
+      await sb.from("declaratii").insert(insertsToSave);
+
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Declaratie ${trasCompany} ${trasMonth}</title>
+<style>@page { size: A4 portrait; margin: 0; } body { margin: 0; }</style>
+</head><body>${allDeclHTML}</body></html>`;
+
+      const w = window.open("", "_blank");
+      w.document.write(html);
+      w.document.close();
+      w.focus();
+      setTimeout(() => w.print(), 300);
+    } catch (e) { alert("Eroare: " + e.message); }
+    setTrasGenLoading(false);
   };
 
-  // Generator: PDF combinat (toate borderourile + PV-urile)
+  // ── Generator: PDF Toate Documentele ────────────────────
   const generatePDFToate = () => {
     if (!trasCompany) { alert("Selectează firma!"); return; }
     if (!trasMonth) { alert("Selectează luna!"); return; }
-    // Find unique PF borderouri (serie+nr) and PJ PVs
+
+    // Find unique PF borderouri and PJ PVs
     const pfKeys = new Set();
     trasEntries.filter(e => e.trasabilitate === trasCompany && monthOf(e.data) === trasMonth && e.type === "PF").forEach(e => pfKeys.add(`${e.serie}__${e.nr}`));
     const pjIds = new Set();
@@ -1176,117 +1249,19 @@ p { margin: 12pt 0; text-align: justify; }
 
     const pvDocs = [...pjIds].map(id => pvList.find(p => p.id === id)).filter(Boolean);
 
-    // Build HTML with all docs
-    const renderBordHTML = (b) => {
-      const tot = b.produse.reduce((s, p) => s + (parseFloat(p.cant) || 0) * (parseFloat(p.pret) || 0), 0);
-      const imp = Math.round(tot * 0.1), tax = Math.round(tot * 0.02), rest = tot - imp - tax;
-      return `<div style="page-break-after:always;font-family:'Times New Roman',serif;font-size:11px;color:#000;padding:18px 24px;max-width:760px;margin:0 auto;line-height:1.5;">
-        <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-          <div><div style="font-weight:bold;font-size:13px;">S.C. GREEN KRAFT S.R.L.</div><div>CUI:36191378</div><div>Nr. Reg Comert: J23/2426/2016</div></div>
-          <div style="text-align:right;font-size:10px;"><div>Autorizatie Mediu : 233/22.12.2021</div><div>Soseaua de centura dreapta 18A, Afumați</div><div>Judeţul Ilfov, cod postal 770110</div></div>
-        </div>
-        <div style="text-align:center;margin:8px 0;">
-          <div style="font-size:18px;font-weight:bold;font-style:italic;">BORDEROU</div>
-          <div style="font-size:12px;font-style:italic;">De achizitie deseuri</div>
-          <div style="font-size:12px;font-weight:bold;">Seria ${b.serie} Nr. ${b.nr} din data de ${b.data}</div>
-        </div>
-        <div style="margin:8px 0;font-size:11px;">S-au primit de la (detinator) <strong>${(b.det || "").toUpperCase()}</strong>, CNP <strong>${b.cnp}</strong>, cu mijloc de transport <strong>${b.trans}</strong>:</div>
-        <table style="width:100%;border-collapse:collapse;margin:8px 0;font-size:11px;">
-          <thead><tr>
-            <th style="border:1px solid #000;padding:4px 6px;text-align:left;background:#f5f5f5;">Denumire deseu</th>
-            <th style="border:1px solid #000;padding:4px 6px;background:#f5f5f5;">Cod HG 856</th>
-            <th style="border:1px solid #000;padding:4px 6px;background:#f5f5f5;">U/M</th>
-            <th style="border:1px solid #000;padding:4px 6px;background:#f5f5f5;">Cant.(Kg)</th>
-            <th style="border:1px solid #000;padding:4px 6px;background:#f5f5f5;">Pret</th>
-            <th style="border:1px solid #000;padding:4px 6px;background:#f5f5f5;">Valoare</th>
-          </tr></thead>
-          <tbody>
-            ${b.produse.map(p => { const v = (parseFloat(p.cant) || 0) * (parseFloat(p.pret) || 0); return `<tr>
-              <td style="border:1px solid #000;padding:4px 6px;">${(p.den || "").toUpperCase()}</td>
-              <td style="border:1px solid #000;padding:4px 6px;text-align:center;">${p.cod || ""}</td>
-              <td style="border:1px solid #000;padding:4px 6px;text-align:center;">KG</td>
-              <td style="border:1px solid #000;padding:4px 6px;text-align:center;">${p.cant || ""}</td>
-              <td style="border:1px solid #000;padding:4px 6px;text-align:center;">${p.pret || ""}</td>
-              <td style="border:1px solid #000;padding:4px 6px;text-align:center;">${v > 0 ? fmt(v) : ""}</td>
-            </tr>`; }).join("")}
-          </tbody>
-        </table>
-        <table style="width:55%;margin-left:auto;border-collapse:collapse;font-size:11px;">
-          <tr><td style="border:1px solid #000;padding:3px 6px;font-weight:bold;">TOTAL</td><td style="border:1px solid #000;padding:3px 6px;text-align:right;font-weight:bold;">${fmt(tot)}</td></tr>
-          <tr><td style="border:1px solid #000;padding:3px 6px;">Impozit 10%</td><td style="border:1px solid #000;padding:3px 6px;text-align:right;">${imp}</td></tr>
-          <tr><td style="border:1px solid #000;padding:3px 6px;">Taxa mediu 2%</td><td style="border:1px solid #000;padding:3px 6px;text-align:right;">${fmt(tax)}</td></tr>
-          <tr style="background:#f0f0f0;"><td style="border:1px solid #000;padding:3px 6px;font-weight:bold;">REST PLATA</td><td style="border:1px solid #000;padding:3px 6px;text-align:right;font-weight:bold;font-size:14px;">${fmt(rest)}</td></tr>
-        </table>
-      </div>`;
-    };
+    // Set bundle state - components will render in hidden ref
+    setPdfBundle({ borderouri: bordList, pvuri: pvDocs });
 
-    const renderPVHTML = (pv) => {
-      const mats = (pv.materiale || []).filter(m => m.den && m.cant);
-      return `<div style="page-break-after:always;font-family:'Times New Roman',serif;font-size:11px;color:#000;padding:30px 40px;max-width:800px;margin:0 auto;">
-        <div style="text-align:center;margin-bottom:20px;">
-          <div style="font-size:16px;font-weight:bold;">PROCES VERBAL DE PREDARE –PRIMIRE</div>
-          <div style="font-size:13px;font-weight:bold;margin-top:5px;">Serie ${pv.serie} nr. ${pv.nr_pv} din data: ${pv.data}</div>
-        </div>
-        <div style="margin-bottom:12px;line-height:1.6;">Incheiat intre:</div>
-        <div style="margin-bottom:12px;line-height:1.6;"><strong>Societatea GREENKRAFT S.R.L.</strong>, CUI 36191378, reprezentata de Catalin Zica, in calitate de <strong>COLECTOR/PRESTATOR</strong>,</div>
-        <div style="text-align:center;margin:8px 0;">și</div>
-        <div style="margin-bottom:12px;line-height:1.6;"><strong>Societatea ${(pv.client_denumire || "").toUpperCase()}</strong>, cu sediul în ${pv.client_adresa || ""}, CUI ${pv.client_cui || ""}, înregistrată sub nr. ${pv.client_reg_com || ""}, reprezentată de ${pv.client_reprezentant || "_____"}, în calitate de <strong>BENEFICIAR</strong>.</div>
-        <div style="margin-bottom:6px;">Am procedat la predarea-primirea:</div>
-        <table style="width:100%;border-collapse:collapse;font-size:11px;">
-          ${mats.map(m => `<tr><td style="padding:3px 8px;border-bottom:1px dotted #999;">${m.den}</td><td style="padding:3px 8px;border-bottom:1px dotted #999;text-align:right;white-space:nowrap;">${m.cant} kg</td></tr>`).join("")}
-        </table>
-        <div style="margin:8px 0;font-size:11px;">Deseurile de ambalaje au fost predate cu titlu gratuit.</div>
-        <div style="display:flex;justify-content:space-around;margin-top:40px;font-size:11px;">
-          <div style="text-align:center;"><div style="font-weight:bold;">Am predat,</div><div style="font-weight:bold;">${(pv.client_denumire || "").toUpperCase()}</div><div style="font-size:10px;margin-top:30px;">(stampila si semnatura)</div></div>
-          <div style="text-align:center;"><div style="font-weight:bold;">Am primit,</div><div style="font-weight:bold;">GREENKRAFT SRL</div><div style="font-size:10px;margin-top:30px;">(stampila si semnatura)</div></div>
-        </div>
-      </div>
-      <div style="page-break-after:always;font-family:'Times New Roman',serif;font-size:10px;color:#000;padding:30px 40px;max-width:800px;margin:0 auto;">
-        <div style="text-align:center;margin-bottom:6px;">Anexa 3 - Nr. ${pv.nr_anexa} din data de ${pv.data}</div>
-        <div style="text-align:center;margin-bottom:14px;">Formular de încărcare – descărcare deşeuri nepericuloase</div>
-        <table style="width:100%;border-collapse:collapse;border:1px solid #000;font-size:10px;">
-          <thead><tr>
-            <th style="border:1px solid #000;padding:5px;">Transportator</th>
-            <th style="border:1px solid #000;padding:5px;">Data</th>
-            <th style="border:1px solid #000;padding:5px;">Caracteristici</th>
-            <th style="border:1px solid #000;padding:5px;">Cantitate</th>
-            <th style="border:1px solid #000;padding:5px;">Punct lucru</th>
-          </tr></thead>
-          <tbody><tr>
-            <td style="border:1px solid #000;padding:8px;vertical-align:top;line-height:1.6;">
-              <div><strong>GREEN KRAFT S.R.L.</strong></div>
-              <div style="margin-top:8px;">Delegat: <strong>${pv.delegat || ""}</strong></div>
-              <div style="margin-top:8px;">Nr. înmatriculare: <strong>${pv.nr_masina || ""}</strong></div>
-              <div style="margin-top:8px;">Licență: ${pv.licenta || "nu e cazul"}</div>
-            </td>
-            <td style="border:1px solid #000;padding:8px;vertical-align:top;"><div>Încărcare: <strong>${pv.data}</strong></div><div style="margin-top:50px;">Descărcare: <strong>${pv.data}</strong></div></td>
-            <td style="border:1px solid #000;padding:8px;vertical-align:top;line-height:1.4;">
-              ${mats.map(m => `<div style="min-height:36px;margin-bottom:6px;">${m.den}</div>`).join("")}
-              <div style="margin-top:20px;text-align:center;font-weight:bold;">Destinație: ${pv.destinatie || ""}</div>
-            </td>
-            <td style="border:1px solid #000;padding:8px;vertical-align:top;line-height:1.4;font-weight:bold;">
-              ${mats.map(m => `<div style="min-height:36px;margin-bottom:6px;">${m.cant} Kg</div>`).join("")}
-            </td>
-            <td style="border:1px solid #000;padding:8px;vertical-align:top;line-height:1.6;">
-              <div style="text-align:center;font-weight:bold;">ÎNCĂRCAREA</div>
-              <div style="font-weight:bold;">${(pv.client_denumire || "").toUpperCase()}</div>
-              <div>${pv.client_adresa || ""}</div>
-              <div style="margin-top:20px;text-align:center;font-weight:bold;">DESCĂRCAREA</div>
-              <div style="font-weight:bold;">GREEN KRAFT S.R.L.</div>
-              <div>Aut. Mediu 233/22.12.2021</div>
-            </td>
-          </tr></tbody>
-        </table>
-      </div>`;
-    };
-
-    const allHTML = bordList.map(renderBordHTML).join("") + pvDocs.map(renderPVHTML).join("");
-
-    const w = window.open("", "_blank");
-    w.document.write(`<html><head><title>Toate documentele - ${trasCompany} - ${trasMonth}</title><style>body{margin:0;padding:0;} @media print { .page-break-after { page-break-after: always; } }</style></head><body>${allHTML}</body></html>`);
-    w.document.close();
-    w.focus();
-    setTimeout(() => w.print(), 500);
+    setTimeout(() => {
+      if (pdfBundleRef.current) {
+        const c = pdfBundleRef.current.innerHTML;
+        const w = window.open("", "_blank");
+        w.document.write(`<html><head><title>Toate documentele - ${trasCompany} - ${trasMonth}</title><style>body{margin:0;padding:0;font-family:'Times New Roman',serif;} @page { size: A4; margin: 10mm; } @media print { .page-break-after { page-break-after: always; } }</style></head><body>${c}</body></html>`);
+        w.document.close();
+        w.focus();
+        setTimeout(() => w.print(), 400);
+      }
+    }, 400);
   };
 
   // ── Print borderou din Registru ───────────────────────────
@@ -1506,6 +1481,20 @@ p { margin: 12pt 0; text-align: justify; }
       {/* Hidden div for PV print */}
       <div ref={pvPrintRef} style={{ display: "none" }}>
         {(printPV || pv) && <PVPrint pv={printPV || pv} />}
+      </div>
+
+      {/* Hidden div for PDF bundle (toate documentele) */}
+      <div ref={pdfBundleRef} style={{ display: "none" }}>
+        {pdfBundle.borderouri.map((b, i) => (
+          <div key={`b-${i}`} style={{ pageBreakAfter: "always" }}>
+            <BordPrint b={b} />
+          </div>
+        ))}
+        {pdfBundle.pvuri.map((p, i) => (
+          <div key={`p-${i}`}>
+            <PVPrint pv={p} />
+          </div>
+        ))}
       </div>
 
       {/* Header */}
