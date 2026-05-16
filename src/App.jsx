@@ -409,7 +409,7 @@ function PVPrint({ pv }) {
       </div>
 
       {/* PAGE 2 — Anexa 3 */}
-      <div style={{ padding: "30px 40px", maxWidth: 800, margin: "0 auto" }}>
+      <div style={{ padding: "30px 40px", maxWidth: 800, margin: "0 auto", pageBreakAfter: "always", breakAfter: "page" }}>
         <div style={{ textAlign: "center", marginBottom: 6 }}>Anexa 3 - Nr. {pv.nr_anexa} din data de {pv.data}</div>
         <div style={{ textAlign: "center", marginBottom: 14 }}>Formular de încărcare – descărcare deşeuri nepericuloase</div>
         <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #000", fontSize: 10 }}>
@@ -1028,8 +1028,9 @@ export default function App() {
   const generateAnexaRaportare = () => {
     if (!trasCompany) { alert("Selectează firma!"); return; }
     if (!trasMonth) { alert("Selectează luna!"); return; }
-    const entries = trasEntries.filter(e => e.trasabilitate === trasCompany && monthOf(e.data) === trasMonth && e.type === "PF");
-    if (!entries.length) { alert("Nicio înregistrare PF găsită pentru firma și luna selectată!"); return; }
+    // Include both PF and PJ entries
+    const entries = trasEntries.filter(e => e.trasabilitate === trasCompany && monthOf(e.data) === trasMonth);
+    if (!entries.length) { alert("Nicio înregistrare găsită pentru firma și luna selectată!"); return; }
 
     const [mm, yyyy] = trasMonth.split(".");
     const lunaText = LUNI_RO[parseInt(mm) - 1].charAt(0).toUpperCase() + LUNI_RO[parseInt(mm) - 1].slice(1);
@@ -1047,7 +1048,7 @@ export default function App() {
     let totalGen = 0;
     let rowsHTML = "";
     Object.entries(byMat).forEach(([matName, items]) => {
-      // Short material name (e.g., "Deseu amb din PET - 15 01 02")
+      // Short material name
       const codMatch = matName.match(/COD[:\s\-]*(\d{2}\s*\d{2}\s*\d{2})/);
       const matShort = codMatch
         ? matName.replace(/-?\s*COD[\s\S]*$/i, '').trim() + ' - ' + codMatch[1]
@@ -1064,12 +1065,10 @@ export default function App() {
         </tr>`;
         matTotal += item.cant;
       });
-      // Subtotal row per material
+      // Subtotal row - only show total, no material name in name column
       rowsHTML += `<tr style="background:#eee;">
         <td style="border:1px solid #000;padding:3px 5px;"></td>
-        <td style="border:1px solid #000;padding:3px 5px;font-weight:bold;">${matShort}</td>
-        <td style="border:1px solid #000;padding:3px 5px;"></td>
-        <td style="border:1px solid #000;padding:3px 5px;"></td>
+        <td style="border:1px solid #000;padding:3px 5px;font-weight:bold;text-align:right;" colspan="3">Subtotal ${matShort}</td>
         <td style="border:1px solid #000;padding:3px 5px;text-align:right;font-weight:bold;">${matTotal}</td>
         <td style="border:1px solid #000;padding:3px 5px;"></td>
       </tr>`;
@@ -1097,14 +1096,14 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
   <div style="text-align: right; font-weight: bold; font-size: 10pt; margin-bottom: 6px;">Anexa 4.1.A</div>
   <div style="text-align: center; font-weight: bold; font-size: 11pt; margin: 4px 0;">BORDEROU DE COLECTARE A DESEURILOR DE AMBALAJE DIN FLUX MUNICIPAL AL GREENKRAFT SRL</div>
   <div style="text-align: center; font-weight: bold; margin-bottom: 8px;">in luna ${lunaText} ${yyyy}</div>
-  <div style="font-size: 8pt; margin-bottom: 8px;"><strong>Nota:</strong> cantitatile se raporteaza in tone, cu trei zecimale, iar din total se pastreaza doar primele doua zecimale pentru anexa 4.3.A</div>
+  <div style="font-size: 8pt; margin-bottom: 8px;"><strong>Nota:</strong> cantitatile se raporteaza in kilograme</div>
   <table>
     <thead><tr>
       <th style="width: 30px;">Nr crt</th>
-      <th>Nume si prenume persoane fizice (pt des de amb preluate direct de Prestator din fluxul municipal)</th>
-      <th style="width: 95px;">CNP pers.fizica</th>
+      <th>Nume si prenume / Firma</th>
+      <th style="width: 95px;">CNP / CUI</th>
       <th style="width: 150px;">Tip material Deseu amb/Cod deseu *)</th>
-      <th style="width: 60px;">Cantitate (tone)</th>
+      <th style="width: 70px;">Cantitate (kg)</th>
       <th style="width: 110px;">Nr si data document de colectare</th>
     </tr></thead>
     <tbody>${rowsHTML}</tbody>
