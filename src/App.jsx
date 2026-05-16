@@ -386,7 +386,7 @@ function PVPrint({ pv }) {
           <tbody>
             {pv.materiale?.filter(m => m.den).map((m, i) => (
               <tr key={i}>
-                <td style={{ padding: "3px 8px", borderBottom: "1px dotted #999" }}>{m.den} cod {m.cod}</td>
+                <td style={{ padding: "3px 8px", borderBottom: "1px dotted #999" }}>{m.den}</td>
                 <td style={{ padding: "3px 8px", borderBottom: "1px dotted #999", textAlign: "right", whiteSpace: "nowrap" }}>{m.cant || 0} kg</td>
               </tr>
             ))}
@@ -448,7 +448,6 @@ function PVPrint({ pv }) {
                 {pv.materiale?.filter(m => m.den && m.cant).map((m, i) => (
                   <div key={i} style={{ minHeight: 36, marginBottom: 6 }}>
                     <div>{m.den}</div>
-                    <div>Cod {m.cod.replace(/\s/g, "")}</div>
                   </div>
                 ))}
                 <div style={{ marginTop: 30, textAlign: "center", fontWeight: "bold" }}><u>Descriere destinație:</u></div>
