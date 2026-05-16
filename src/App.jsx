@@ -523,7 +523,51 @@ export default function App() {
   };
 
   // ── UI state ─────────────────────────────────────────────
-  const [tab, setTab] = useState("borderou");
+  const [tab, setTab] = useState("dashboard");
+  const [currentUser, setCurrentUser] = useState(() => localStorage.getItem("currentUser") || "");
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [auditLog, setAuditLog] = useState([]);
+  // ── Helper: confirmation dialog for deletes ──────────────
+  const confirmDel = (what) => window.confirm(`⚠️ Sigur vrei să ștergi ${what}?\n\nAcțiunea NU poate fi anulată.`);
+  // ── Helper: audit log ─────────────────────────────────────
+  const logAction = async (action, entity, entityId, details = null) => {
+    try {
+      await sb.from("audit_log").insert({
+        user_name: currentUser || "Anonim",
+        action, entity,
+        entity_id: String(entityId || ""),
+        details
+      });
+    } catch (e) { console.warn("Audit log failed:", e); }
+  };
+  // ── Helper: backup all data ───────────────────────────────
+  const generateBackup = async () => {
+    setBackupLoading(true);
+    try {
+      const tables = ['registru', 'procese_verbale', 'cheltuieli', 'colectari', 'livrari', 'datorii', 'avansuri', 'contracte', 'furnizori_pf', 'furnizori_pj', 'salariati', 'stoc_manual', 'parole', 'declaratii', 'audit_log'];
+      const backup = { version: 1, app: "greenkraft-app", timestamp: new Date().toISOString(), generated_by: currentUser || "Anonim" };
+      for (const t of tables) {
+        try { const { data } = await sb.from(t).select("*"); backup[t] = data || []; }
+        catch (e) { backup[t] = { error: e.message }; }
+      }
+      const json = JSON.stringify(backup, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+      link.download = `backup_greenkraft_${ts}.json`;
+      link.click();
+      await logAction("backup", "system", "", { tables: tables.length });
+    } catch (e) { alert("Eroare backup: " + e.message); }
+    setBackupLoading(false);
+  };
+  // ── Load audit log ────────────────────────────────────────
+  useEffect(() => {
+    (async () => {
+      const { data } = await sb.from("audit_log").select("*").order("created_at", { ascending: false }).limit(200);
+      setAuditLog(data || []);
+    })();
+  }, [currentUser]);
   const [bordSubTab, setBordSubTab] = useState("editor");
   const [activeBord, setActiveBord] = useState(0);
   const [previewMode, setPreviewMode] = useState(false);
@@ -641,14 +685,16 @@ export default function App() {
     setRows((p) => { const n = [...p]; n[i] = { ...n[i], [f]: v }; return n; });
     dbSave(table, rows[i]?.id, { [f]: v });
   };
-  const mkDel = (setRows, table) => async (id) => {
+  const mkDel = (setRows, table, label = "această înregistrare") => async (id) => {
+    if (!confirmDel(label)) return;
     setRows((p) => p.filter((r) => r.id !== id));
     await sb.from(table).delete().eq("id", id);
+    await logAction("delete", table, id);
   };
 
   // Cheltuieli
   const updCH = mkUpd(chRows, setChRows, "cheltuieli");
-  const delCH = mkDel(setChRows, "cheltuieli");
+  const delCH = mkDel(setChRows, "cheltuieli", "această cheltuială");
   const addCH = async () => {
     const row = { data: today(), gk: "Deee", suma: "", cat: "Diverse", det: "", ach: "", ach_de: "", note: "" };
     const { data } = await sb.from("cheltuieli").insert(row).select();
@@ -657,7 +703,7 @@ export default function App() {
 
   // Colectari
   const updCOL = mkUpd(colRows, setColRows, "colectari");
-  const delCOL = mkDel(setColRows, "colectari");
+  const delCOL = mkDel(setColRows, "colectari", "această colectare");
   const addCOL = async () => {
     const row = { data: today(), agent: "", furn: "", cat: "Curte", produs: "", cant: 0, pret: 0, ach: "", ach_de: "" };
     const { data } = await sb.from("colectari").insert(row).select();
@@ -666,7 +712,7 @@ export default function App() {
 
   // Livrari
   const updLIV = mkUpd(livRows, setLivRows, "livrari");
-  const delLIV = mkDel(setLivRows, "livrari");
+  const delLIV = mkDel(setLivRows, "livrari", "această livrare");
   const addLIV = async () => {
     const row = { data: today(), nr: "", client: "", produs: "", cant: 0, pret: 0, fact: "", inc: "", det: "" };
     const { data } = await sb.from("livrari").insert(row).select();
@@ -675,7 +721,7 @@ export default function App() {
 
   // Datorii
   const updDAT = mkUpd(datRows, setDatRows, "datorii");
-  const delDAT = mkDel(setDatRows, "datorii");
+  const delDAT = mkDel(setDatRows, "datorii", "această datorie");
   const addDAT = async () => {
     const row = { data: today(), nume: "", suma: "", det: "" };
     const { data } = await sb.from("datorii").insert(row).select();
@@ -684,7 +730,7 @@ export default function App() {
 
   // Avansuri
   const updAV = mkUpd(avRows, setAvRows, "avansuri");
-  const delAV = mkDel(setAvRows, "avansuri");
+  const delAV = mkDel(setAvRows, "avansuri", "acest avans/dividend");
   const addAV = async (tip) => {
     const row = { data: today(), catre: "", suma: "", tip, det: "" };
     const { data } = await sb.from("avansuri").insert(row).select();
@@ -693,7 +739,7 @@ export default function App() {
 
   // Contracte
   const updCT = mkUpd(contracte, setContracte, "contracte");
-  const delCT = mkDel(setContracte, "contracte");
+  const delCT = mkDel(setContracte, "contracte", "acest contract");
   const addCT = async () => {
     const maxNr = contracte.reduce((m, r) => Math.max(m, parseInt(r.nr) || 0), 0);
     const row = { nr: String(maxNr + 1), companie: "", data: today(), detalii: "" };
@@ -703,7 +749,7 @@ export default function App() {
 
   // Furnizori PF
   const updPF = mkUpd(pfList, setPfList, "furnizori_pf");
-  const delPF = mkDel(setPfList, "furnizori_pf");
+  const delPF = mkDel(setPfList, "furnizori_pf", "această persoană fizică");
   const addPF = async () => {
     const codes = pfList.map((f) => parseInt(f.cod) || 0);
     const cod = String((codes.length ? Math.max(...codes) : 0) + 1).padStart(5, "0");
@@ -714,7 +760,7 @@ export default function App() {
 
   // Furnizori PJ
   const updPJ = mkUpd(pjList, setPjList, "furnizori_pj");
-  const delPJ = mkDel(setPjList, "furnizori_pj");
+  const delPJ = mkDel(setPjList, "furnizori_pj", "această persoană juridică");
   const addPJ = async () => {
     const row = { cod: "", denumire: "", cod_fiscal: "", analitic: "", tara: "RO", judet: "B", adresa: "", cont_banca: "", banca: "", reg_com: "", grupa: "", tel: "" };
     const { data } = await sb.from("furnizori_pj").insert(row).select();
@@ -727,7 +773,7 @@ export default function App() {
     const id = parole[i]?.id;
     if (id) dbSave("parole", id, { [f === "user" ? "utilizator" : f]: v });
   };
-  const delPAR = mkDel(setParole, "parole");
+  const delPAR = mkDel(setParole, "parole", "această parolă");
   const addPAR = async () => {
     const row = { platforma: "", cat: "Platformă", utilizator: "", parola: "", note: "" };
     const { data } = await sb.from("parole").insert(row).select();
@@ -739,7 +785,7 @@ export default function App() {
     setSalRows((p) => { const n = [...p]; n[i] = { ...n[i], [f]: v }; return n; });
     dbSave("salariati", salRows[i]?.id, { [f]: v });
   };
-  const delSAL = mkDel(setSalRows, "salariati");
+  const delSAL = mkDel(setSalRows, "salariati", "acest salariat");
   const addSAL = async () => {
     const row = { nume: "Nume Nou", functie: "", net: 0, taxe: 0, co: 21, ef: 0, conc: [] };
     const { data } = await sb.from("salariati").insert(row).select();
@@ -762,7 +808,7 @@ export default function App() {
   };
 
   // Stoc manual
-  const delManMisc = mkDel(setManMisc, "stoc_manual");
+  const delManMisc = mkDel(setManMisc, "stoc_manual", "această mișcare manuală");
   const addManMisc = async () => {
     if (!newM.produs || !newM.cant) return;
     const fd = PRODUSE_LIST.find((p) => p.den === newM.produs);
@@ -892,8 +938,10 @@ export default function App() {
   };
 
   const delPV = async (id) => {
+    if (!confirmDel("acest PV")) return;
     setPvList(p => p.filter(x => x.id !== id));
     await sb.from("procese_verbale").delete().eq("id", id);
+    await logAction("delete", "procese_verbale", id);
   };
 
   // ── Excel Export (Rapoarte) ───────────────────────────────
@@ -1508,17 +1556,216 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
             <div style={{ fontSize: 10, opacity: 0.65 }}>S.C. GREEN KRAFT S.R.L. • CUI: 36191378</div>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 16, fontSize: 11, opacity: 0.8 }}><span>📍 Afumați, Jud. Ilfov</span><span>📋 Autorizație Mediu: 233/22.12.2021</span></div>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 6, fontSize: 11, opacity: 0.8 }}><span>📍 Afumați, Jud. Ilfov</span><span>📋 Aut. Mediu: 233/22.12.2021</span></div>
+          <div style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(255,255,255,0.15)", borderRadius: 6, padding: "3px 8px" }}>
+            <span style={{ fontSize: 11 }}>👤</span>
+            <select value={currentUser} onChange={(e) => { setCurrentUser(e.target.value); localStorage.setItem("currentUser", e.target.value); }} style={{ background: "transparent", border: "none", color: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer", outline: "none" }}>
+              <option value="" style={{ color: "#000" }}>— alege user —</option>
+              <option style={{ color: "#000" }}>Catalin</option>
+              <option style={{ color: "#000" }}>Alexandru</option>
+              <option style={{ color: "#000" }}>Mihai</option>
+            </select>
+          </div>
+          <button onClick={generateBackup} disabled={backupLoading} title="Descarcă backup JSON" style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.3)", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: backupLoading ? "wait" : "pointer", fontSize: 11, fontWeight: 600 }}>{backupLoading ? "⏳" : "💾 Backup"}</button>
+        </div>
       </div>
 
       {/* Tabs */}
       <div style={{ display: "flex", background: "#e8f0eb", borderLeft: "1px solid #ccc", borderRight: "1px solid #ccc", overflowX: "auto" }}>
-        {[["borderou","📄 Borderouri"],["pv","📋 PV & Anexa 3"],["cheltuieli","💸 Cheltuieli"],["colectari","🚛 Colectări"],["livrari","📤 Livrări"],["stoc","📦 Stocuri"],["salariati","👷 Salariați"],["calculator","🧮 Calculator"],["datorii","💳 Datorii"],["avansuri","💵 Avansuri & Dividende"],["contracte","📃 Contracte"],["parole","🔐 Parole"],["rapoarte","📊 Rapoarte"],["trasabilitate","🔄 Trasabilitate"]].map(([k, l]) => (
+        {[["dashboard","🏠 Acasă"],["borderou","📄 Borderouri"],["pv","📋 PV & Anexa 3"],["cheltuieli","💸 Cheltuieli"],["colectari","🚛 Colectări"],["livrari","📤 Livrări"],["stoc","📦 Stocuri"],["salariati","👷 Salariați"],["calculator","🧮 Calculator"],["datorii","💳 Datorii"],["avansuri","💵 Avansuri & Dividende"],["contracte","📃 Contracte"],["parole","🔐 Parole"],["rapoarte","📊 Rapoarte"],["trasabilitate","🔄 Trasabilitate"],["audit","🕘 Istoric"]].map(([k, l]) => (
           <button key={k} style={tabSt(k)} onClick={() => setTab(k)}>{l}</button>
         ))}
       </div>
 
       <div style={{ background: "#fff", border: "1px solid #ccc", borderTop: "none", borderRadius: "0 0 8px 8px", padding: 14, boxShadow: "0 2px 8px rgba(0,0,0,.08)" }}>
+
+        {/* ══ DASHBOARD (ACASĂ) ══ */}
+        {tab === "dashboard" && (() => {
+          // Compute stats
+          const now = new Date();
+          const curMonth = `${String(now.getMonth() + 1).padStart(2, "0")}.${now.getFullYear()}`;
+          const isCurMonth = (d) => monthOf(d) === curMonth;
+          const todayStr = today();
+          const isToday = (d) => d === todayStr;
+
+          const bordToday = registru.filter(r => isToday(r.data));
+          const bordMonth = registru.filter(r => isCurMonth(r.data));
+          const pvToday = pvList.filter(p => isToday(p.data));
+          const pvMonth = pvList.filter(p => isCurMonth(p.data));
+          const colToday = colRows.filter(c => isToday(c.data));
+          const chMonth = chRows.filter(c => isCurMonth(c.data));
+
+          const cantToday = bordToday.reduce((s, r) => s + (parseFloat(r.cantitate) || 0), 0) + colToday.reduce((s, c) => s + (parseFloat(c.cant) || 0), 0);
+          const cantMonth = bordMonth.reduce((s, r) => s + (parseFloat(r.cantitate) || 0), 0);
+          const cantPVMonth = pvMonth.reduce((s, p) => s + (p.materiale || []).reduce((ss, m) => ss + (parseFloat(m.cant) || 0), 0), 0);
+          const chTotalMonth = chMonth.reduce((s, c) => s + (parseFloat(c.suma) || 0), 0);
+
+          const totStocKg = stocAg.reduce((s, r) => s + Math.max(0, r.cant), 0);
+          const stocNegativ = stocAg.filter(r => r.cant < 0).length;
+
+          // Alerts
+          const allTrasEntries = getTrasEntries();
+          const trasNealocate = allTrasEntries.filter(e => !e.trasabilitate);
+          const cheltNeach = chRows.filter(c => c.ach !== "Da").length;
+          const datUnpaid = datRows.filter(d => d.stat !== "Achitată").length;
+
+          // Recent activity
+          const recentActivity = auditLog.slice(0, 10);
+
+          return (
+            <div>
+              {/* Welcome */}
+              <div style={{ background: `linear-gradient(135deg,#1b5e20,${G},#43a047)`, color: "#fff", borderRadius: 10, padding: "16px 20px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                <div>
+                  <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>👋 Bună{currentUser ? `, ${currentUser}` : ""}!</div>
+                  <div style={{ fontSize: 12, opacity: 0.9 }}>{new Date().toLocaleDateString("ro-RO", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</div>
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button onClick={() => setTab("borderou")} style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.4)", color: "#fff", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Borderou nou</button>
+                  <button onClick={() => setTab("pv")} style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.4)", color: "#fff", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ PV nou</button>
+                  <button onClick={() => setTab("cheltuieli")} style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.4)", color: "#fff", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Cheltuială</button>
+                </div>
+              </div>
+
+              {/* Stats Cards */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 12, marginBottom: 16 }}>
+                <div style={{ background: "#fff", border: "2px solid #1565c0", borderRadius: 10, padding: 14 }}>
+                  <div style={{ fontSize: 11, color: "#666", marginBottom: 4 }}>📄 BORDEROURI</div>
+                  <div style={{ fontSize: 26, fontWeight: 800, color: "#1565c0" }}>{bordToday.length}</div>
+                  <div style={{ fontSize: 11, color: "#888" }}>azi • {bordMonth.length} luna asta</div>
+                </div>
+                <div style={{ background: "#fff", border: "2px solid #e65100", borderRadius: 10, padding: 14 }}>
+                  <div style={{ fontSize: 11, color: "#666", marginBottom: 4 }}>📋 PV-URI</div>
+                  <div style={{ fontSize: 26, fontWeight: 800, color: "#e65100" }}>{pvToday.length}</div>
+                  <div style={{ fontSize: 11, color: "#888" }}>azi • {pvMonth.length} luna asta</div>
+                </div>
+                <div style={{ background: "#fff", border: `2px solid ${G}`, borderRadius: 10, padding: 14 }}>
+                  <div style={{ fontSize: 11, color: "#666", marginBottom: 4 }}>⚖️ CANTITATE COLECTATĂ</div>
+                  <div style={{ fontSize: 26, fontWeight: 800, color: G }}>{fmt(cantToday)} kg</div>
+                  <div style={{ fontSize: 11, color: "#888" }}>azi • {fmt(cantMonth + cantPVMonth)} kg luna asta</div>
+                </div>
+                <div style={{ background: "#fff", border: "2px solid #6a1b9a", borderRadius: 10, padding: 14 }}>
+                  <div style={{ fontSize: 11, color: "#666", marginBottom: 4 }}>📦 STOC TOTAL</div>
+                  <div style={{ fontSize: 26, fontWeight: 800, color: "#6a1b9a" }}>{fmt(totStocKg)} kg</div>
+                  <div style={{ fontSize: 11, color: stocNegativ > 0 ? "#c62828" : "#888", fontWeight: stocNegativ > 0 ? 700 : 400 }}>{stocNegativ > 0 ? `⚠️ ${stocNegativ} stoc negativ` : `${stocAg.length} produse`}</div>
+                </div>
+                <div style={{ background: "#fff", border: "2px solid #c62828", borderRadius: 10, padding: 14 }}>
+                  <div style={{ fontSize: 11, color: "#666", marginBottom: 4 }}>💸 CHELTUIELI LUNA</div>
+                  <div style={{ fontSize: 26, fontWeight: 800, color: "#c62828" }}>{fmt(chTotalMonth)} lei</div>
+                  <div style={{ fontSize: 11, color: "#888" }}>{chMonth.length} înregistrări</div>
+                </div>
+              </div>
+
+              {/* Alerts + Recent Activity */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))", gap: 16 }}>
+                {/* Alerts */}
+                <div style={{ background: "#fff", border: "1px solid #ffcdd2", borderRadius: 10, padding: 14 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#c62828", marginBottom: 10 }}>🔔 Necesită atenție</div>
+                  {trasNealocate.length === 0 && cheltNeach === 0 && datUnpaid === 0 && stocNegativ === 0 ? (
+                    <div style={{ textAlign: "center", padding: 20, color: G, fontSize: 13 }}>✅ Totul e în ordine!</div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {trasNealocate.length > 0 && (
+                        <div onClick={() => setTab("trasabilitate")} style={{ background: "#fff3e0", border: "1px solid #ffcc80", borderRadius: 6, padding: "8px 10px", cursor: "pointer", fontSize: 12 }}>
+                          <strong style={{ color: "#e65100" }}>🔄 {trasNealocate.length} intrări fără trasabilitate</strong>
+                          <div style={{ fontSize: 11, color: "#888", marginTop: 2 }}>Click pentru a aloca firma →</div>
+                        </div>
+                      )}
+                      {cheltNeach > 0 && (
+                        <div onClick={() => setTab("cheltuieli")} style={{ background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 6, padding: "8px 10px", cursor: "pointer", fontSize: 12 }}>
+                          <strong style={{ color: "#f57f17" }}>💸 {cheltNeach} cheltuieli neachitate</strong>
+                          <div style={{ fontSize: 11, color: "#888", marginTop: 2 }}>Click pentru a vedea →</div>
+                        </div>
+                      )}
+                      {datUnpaid > 0 && (
+                        <div onClick={() => setTab("datorii")} style={{ background: "#ffebee", border: "1px solid #ef9a9a", borderRadius: 6, padding: "8px 10px", cursor: "pointer", fontSize: 12 }}>
+                          <strong style={{ color: "#c62828" }}>💳 {datUnpaid} datorii neachitate</strong>
+                          <div style={{ fontSize: 11, color: "#888", marginTop: 2 }}>Click pentru a vedea →</div>
+                        </div>
+                      )}
+                      {stocNegativ > 0 && (
+                        <div onClick={() => setTab("stoc")} style={{ background: "#ffebee", border: "1px solid #ef9a9a", borderRadius: 6, padding: "8px 10px", cursor: "pointer", fontSize: 12 }}>
+                          <strong style={{ color: "#c62828" }}>⚠️ {stocNegativ} produse cu stoc negativ</strong>
+                          <div style={{ fontSize: 11, color: "#888", marginTop: 2 }}>Click pentru a vedea →</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Recent Activity */}
+                <div style={{ background: "#fff", border: "1px solid #e0e0e0", borderRadius: 10, padding: 14 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#333", marginBottom: 10, display: "flex", justifyContent: "space-between" }}>
+                    <span>🕘 Activitate recentă</span>
+                    <button onClick={() => setTab("audit")} style={{ background: "none", border: "none", color: G, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Vezi tot →</button>
+                  </div>
+                  {recentActivity.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: 20, color: "#888", fontSize: 12 }}>Nicio activitate înregistrată</div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 280, overflowY: "auto" }}>
+                      {recentActivity.map((a, i) => {
+                        const dt = new Date(a.created_at);
+                        const tDelta = Math.floor((Date.now() - dt.getTime()) / 1000);
+                        const ago = tDelta < 60 ? "acum câteva sec." : tDelta < 3600 ? `${Math.floor(tDelta / 60)} min` : tDelta < 86400 ? `${Math.floor(tDelta / 3600)} ore` : `${Math.floor(tDelta / 86400)} zile`;
+                        const iconColor = a.action === "delete" ? "#c62828" : a.action === "create" || a.action === "insert" ? G : "#1565c0";
+                        const icon = a.action === "delete" ? "🗑️" : a.action === "create" || a.action === "insert" ? "➕" : a.action === "update" ? "✏️" : "💾";
+                        return (
+                          <div key={i} style={{ display: "flex", gap: 8, padding: "5px 0", borderBottom: i < recentActivity.length - 1 ? "1px solid #f0f0f0" : "none", fontSize: 11 }}>
+                            <div style={{ fontSize: 14 }}>{icon}</div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div><strong style={{ color: iconColor }}>{a.user_name}</strong> a {a.action === "delete" ? "șters" : a.action === "create" || a.action === "insert" ? "adăugat" : "modificat"} în <em>{a.entity}</em></div>
+                              <div style={{ color: "#888", fontSize: 10 }}>acum {ago}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ══ AUDIT LOG (ISTORIC) ══ */}
+        {tab === "audit" && (
+          <div>
+            <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+              <SC label="Total acțiuni" value={auditLog.length + " (ultimele 200)"} c="#333" bg="#f5f5f5" />
+              <SC label="Ștergeri" value={auditLog.filter(a => a.action === "delete").length + " buc."} c="#c62828" bg="#ffebee" />
+              <SC label="Modificări" value={auditLog.filter(a => a.action === "update").length + " buc."} c="#1565c0" bg="#e3f2fd" />
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 700 }}>
+                <thead><tr>
+                  <th style={th({ background: "#455a64", width: 140 })}>Dată/Ora</th>
+                  <th style={th({ background: "#455a64", width: 100 })}>User</th>
+                  <th style={th({ background: "#455a64", width: 90 })}>Acțiune</th>
+                  <th style={th({ background: "#455a64", width: 130 })}>Entitate</th>
+                  <th style={th({ background: "#455a64", textAlign: "left" })}>ID / Detalii</th>
+                </tr></thead>
+                <tbody>
+                  {auditLog.length === 0 && <tr><td colSpan={5} style={{ textAlign: "center", padding: 20, color: "#aaa" }}>Nicio activitate înregistrată.</td></tr>}
+                  {auditLog.map((a, i) => {
+                    const dt = new Date(a.created_at);
+                    const dtStr = `${String(dt.getDate()).padStart(2, "0")}.${String(dt.getMonth() + 1).padStart(2, "0")}.${dt.getFullYear()} ${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}`;
+                    const actColor = a.action === "delete" ? "#c62828" : a.action === "create" || a.action === "insert" ? G : a.action === "backup" ? "#6a1b9a" : "#1565c0";
+                    return (
+                      <tr key={a.id || i} style={{ background: i % 2 === 0 ? "#fff" : "#f8f9fa" }}>
+                        <td style={td({ fontFamily: "monospace", fontSize: 11 })}>{dtStr}</td>
+                        <td style={td({ fontWeight: 600 })}>{a.user_name || "—"}</td>
+                        <td style={td({ textAlign: "center" })}><span style={{ background: actColor, color: "#fff", padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: 700, textTransform: "uppercase" }}>{a.action}</span></td>
+                        <td style={td({ fontFamily: "monospace", fontSize: 11 })}>{a.entity}</td>
+                        <td style={td({ fontSize: 11, color: "#666" })}>{a.entity_id}{a.details ? " • " + JSON.stringify(a.details).slice(0, 100) : ""}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* ══ BORDEROURI ══ */}
         {tab === "borderou" && (
@@ -1628,7 +1875,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                               >🖨️ {groupSize > 1 ? `(${groupSize})` : ""}</button>
                             )}
                           </td>
-                          <td style={td({ textAlign: "center", padding: 3 })}><button onClick={async () => { await sb.from("registru").delete().eq("id", r.id); setRegistru(p => p.filter(x => x.id !== r.id)); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
+                          <td style={td({ textAlign: "center", padding: 3 })}><button onClick={async () => { if (!confirmDel("acest borderou")) return; await sb.from("registru").delete().eq("id", r.id); setRegistru(p => p.filter(x => x.id !== r.id)); await logAction("delete", "registru", r.id); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
                         </tr>
                       );
                     })}</tbody>
