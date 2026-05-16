@@ -10,24 +10,175 @@ const sb = createClient(
 // ── Constants ─────────────────────────────────────────────────
 const G = "#1d6f42";
 const PRODUSE_LIST = [
-  { den: "DESEURI DE AMBALAJE DIN STICLA", cod: "15 01 07" },
-  { den: "Deseu Fier -17 04 05", cod: "17 04 05" },
-  { den: "Fier - dezmembrare manuala", cod: "17 04 05" },
-  { den: "Deseu Aluminiu - 17 04 02", cod: "17 04 02" },
-  { den: "Deseu DEEE - 16 02 14", cod: "16 02 14" },
-  { den: "Deseu Inox - 17 04 05", cod: "17 04 05" },
-  { den: "Deseu Cupru - 17 04 01", cod: "17 04 01" },
-  { den: "Deseu amb Sticla - 15 01 07", cod: "15 01 07" },
-  { den: "Deseu Baterii DBA Mixt - 16 06 05", cod: "16 06 05" },
-  { den: "Deseu amb Aluminiu - 15 01 04", cod: "15 01 04" },
-  { den: "Deseu amb folie transparenta - 15 01 02", cod: "15 01 02" },
-  { den: "Deseu cabluri cupru - 17 04 11", cod: "17 04 11" },
-  { den: "Deseu Alama - 17 04 01", cod: "17 04 01" },
-  { den: "Piatra din DEEE", cod: "16 02 14" },
-  { den: "Deseu folie color - 15 01 02", cod: "15 01 02" },
-  { den: "Deseu amb din PET - 15 01 02", cod: "15 01 02" },
-  { den: "DESEURI DE AMBALAJE DIN HDPE-COD 15 01 02", cod: "15 01 02" },
-  { den: "VSU", cod: "16 01 04" },
+  { den: "DESEURI DE AMBALAJE DIN CARTON-COD 15 01 01", cod: "15 01 01", cod_art: "1" },
+  { den: "DESEURI DE AMBALAJE DIN PLASTIC (AFARA DE PET)-COD 15 01 02", cod: "15 01 02", cod_art: "2" },
+  { den: "DESEURI DE AMBALAJE DIN PET-COD 15 01 02", cod: "15 01 02", cod_art: "3" },
+  { den: "DESEURI DE AMBALAJE DIN LEMN-COD 15 01 03", cod: "15 01 03", cod_art: "4" },
+  { den: "DESEURI DE AMBALAJE DIN ALUMINIU-COD 15 01 04", cod: "15 01 04", cod_art: "5" },
+  { den: "DESEURI DE AMBALAJE DIN STICLA-COD 15 01 07", cod: "15 01 07", cod_art: "8" },
+  { den: "DESEURI DE AMBALAJE FOLIE TRANSPARENTA-COD 15 01 02", cod: "15 01 02", cod_art: "10" },
+  { den: "DESEURI DE AMBALAJE DIN CARTON - COD 15 01 01", cod: "15 01 01", cod_art: "16" },
+  { den: "DESEURI DE AMBALAJE DIN PLASTIC (AFARA DE PET)-COD 15 01 02", cod: "15 01 02", cod_art: "17" },
+  { den: "DESEURI DE AMBALAJE DIN PET - COD 15 01 02", cod: "15 01 02", cod_art: "18" },
+  { den: "DESEURI DE AMBALAJE DIN LEMN - COD 15 01 03", cod: "15 01 03", cod_art: "19" },
+  { den: "DESEURI DE AMBALAJE DIN ALUMINIU - COD 15 01 04", cod: "15 01 04", cod_art: "20" },
+  { den: "DESEURI DE AMBALAJE DIN OTEL - COD 15 01 04", cod: "15 01 04", cod_art: "21" },
+  { den: "DESEURI DE AMBALAJE DIN STICLA - COD 15 01 07", cod: "15 01 07", cod_art: "23" },
+  { den: "DESEURI DE AMBALAJE FOLIE TRANSPARENTA - COD 15 01 02", cod: "15 01 02", cod_art: "24" },
+  { den: "DESEURI DE AMBALAJE PP - COD 15 01 02", cod: "15 01 02", cod_art: "25" },
+  { den: "DESEURI DE AMBALAJE PE - COD 15 01 02", cod: "15 01 02", cod_art: "26" },
+  { den: "DESEURI DE AMBALAJE DIN PET-COD 15 01 02-FARA TRASABILITATE", cod: "15 01 02", cod_art: "49" },
+  { den: "DESEURI DE AMBALAJE DIN CARTON-COD 15 01 01-FARA TRASABILITA", cod: "15 01 01", cod_art: "50" },
+  { den: "DESEURI DE AMBALAJE DIN ALUMINIU-COD 15 01 04-FARA TRASABILI", cod: "15 01 04", cod_art: "51" },
+  { den: "DESEURI DE AMBALAJE DIN STICLA-COD 15 01 07-FARA TRASABILITA", cod: "15 01 07", cod_art: "52" },
+  { den: "DESEURI DE AMBALAJE PP-COD 15 01 02-FARA TRASABILITATE", cod: "15 01 02", cod_art: "53" },
+  { den: "DESEURI DE AMBALAJE PE-COD 15 01 02-FARA TRASABILITATE", cod: "15 01 02", cod_art: "54" },
+  { den: "DESEURI HARTIE -COD 20 01 01", cod: "20 01 01", cod_art: "55" },
+  { den: "FIER DESEURI - COD 17 04 05", cod: "17 04 05", cod_art: "56" },
+  { den: "CUPRU DESEURI  - COD 17 04 01", cod: "17 04 01", cod_art: "57" },
+  { den: "ALUMINIU DESEURI - COD 17 04 02", cod: "17 04 02", cod_art: "58" },
+  { den: "INOX DESEURI - COD 17 04 05", cod: "17 04 05", cod_art: "59" },
+  { den: "ALAMA DESEURI - COD 17 04 01", cod: "17 04 01", cod_art: "61" },
+  { den: "DESEURI DE AMBALAJE DIN PET ALBASTRU - COD 15 01 02", cod: "15 01 02", cod_art: "78" },
+  { den: "DESEURI DE AMBALAJE DIN PET TRANSPARENT - COD 15 01 02", cod: "15 01 02", cod_art: "79" },
+  { den: "DESEURI DE AMBALAJE DIN PET MARO - COD 15 01 02", cod: "15 01 02", cod_art: "80" },
+  { den: "DESEURI DE AMBALAJE DIN PET VERDE - COD 15 01 02", cod: "15 01 02", cod_art: "81" },
+  { den: "DESEURI DE AMBALAJE DIN HDPE - COD 15 01 02", cod: "15 01 02", cod_art: "128" },
+  { den: "DESEURI DE AMBALAJE DIN HDPE SUFLARE < 5L- COD 15 01 02", cod: "15 01 02", cod_art: "132" },
+  { den: "DESEURI DE AMBALAJE DIN HDPE SUFLARE > 5L- COD 15 01 02", cod: "15 01 02", cod_art: "133" },
+  { den: "DESEURI DE AMBALAJE DIN PP SUFLARE - COD 15 01 02", cod: "15 01 02", cod_art: "134" },
+  { den: "DESEURI DE AMBALAJE DIN PET FLORAL - COD 15 01 02", cod: "15 01 02", cod_art: "135" },
+  { den: "DESEU DEEE COD 160214", cod: "16 02 14", cod_art: "163" },
+  { den: "DESEURI DE AMBALAJE DIN FOLIE COLOR - COD 15 01 02", cod: "15 01 02", cod_art: "174" },
+  { den: "FIER DESEURI - COD 16 01 17", cod: "16 01 17", cod_art: "188" },
+  { den: "CARTON GOFRAT PENTRU AMBALARE - CUTIE 4KG", cod: "", cod_art: "189" },
+  { den: "FOLIE CU BULE 50 GR/MP - 0,30 M LATIME X 100 M", cod: "", cod_art: "190" },
+  { den: "HARTIE ALBA COPIATOR A4,80G/MP,CLASA A. DOUBLE A PREMIUM", cod: "", cod_art: "191" },
+  { den: "DESEURI DE AMBALAJE DIN PET MIXT - COD 15 01 02", cod: "15 01 02", cod_art: "192" },
+  { den: "DESEURI DE AMBALAJE DIN PET MIXT BALOTAT - COD 15 01 02", cod: "15 01 02", cod_art: "193" },
+  { den: "DESEURI DE AMBALAJE DIN PET T/V/A BALOTAT - COD 15 01 02", cod: "15 01 02", cod_art: "194" },
+  { den: "DESEURI DE AMBALAJE DIN PET ALBASTRU BALOTAT - COD 15 01 02", cod: "15 01 02", cod_art: "195" },
+  { den: "DESEURI DE AMBALAJE DIN PET VERDE BALOTAT - COD 15 01 02", cod: "15 01 02", cod_art: "196" },
+  { den: "DESEURI DE AMBALAJE DIN PET MARO BALOTAT - COD 15 01 02", cod: "15 01 02", cod_art: "197" },
+  { den: "DESEURI DE AMBALAJE DIN PET TRANSPARENT BALOTAT - COD 15 01", cod: "", cod_art: "198" },
+  { den: "DESEURI LEMN - COD 20 01 38", cod: "20 01 38", cod_art: "218" },
+  { den: "EUROPALETI", cod: "", cod_art: "219" },
+  { den: "DESEURI DE AMBALAJE DIN RAFIE-COD 15 01 02", cod: "15 01 02", cod_art: "239" },
+  { den: "DESEU BATERII DBA MIXT - COD 16 06 05", cod: "16 06 05", cod_art: "261" },
+  { den: "DESEURI CABLURI CUPRU-COD 17 04 11", cod: "17 04 11", cod_art: "276" },
+  { den: "DESEURI CABLURI ALUMINIU-COD 17 04 11", cod: "17 04 11", cod_art: "277" },
+  { den: "CUPRU DIN DESEU DE CABLURI-COD 17 04 01", cod: "17 04 01", cod_art: "279" },
+  { den: "ALUMINIU DIN DESEU DE CABLURI -COD 17 04 02", cod: "17 04 02", cod_art: "280" },
+  { den: "DESEU PLASTIC AMESTEC DIN CABLU", cod: "", cod_art: "281" },
+  { den: "DESEURI DE ULEI SI GRASIMI COMESTIBILE - COD 20 01 25", cod: "20 01 25", cod_art: "299" },
+  { den: "EUROPALET ALB", cod: "", cod_art: "333" },
+  { den: "EUROPALET NEGRU", cod: "", cod_art: "334" },
+  { den: "NONEUROPALET", cod: "", cod_art: "335" },
+  { den: "DESEU ACUMULATORI  - COD 16 06 01", cod: "16 06 01", cod_art: "336" },
+  { den: "DESEU MATERIALE PLASTICE - COD 16 01 19", cod: "16 01 19", cod_art: "337" },
+  { den: "DESEU FIER DIN DEEE-COD 16 02 16", cod: "16 02 16", cod_art: "362" },
+  { den: "DESEU DEEE-COD 16 02 14", cod: "16 02 14", cod_art: "363" },
+  { den: "DESEU DEEE-COD 20 01 36", cod: "20 01 36", cod_art: "364" },
+  { den: "DESEU VSU PROVENITE DIN CASARE  AUTO", cod: "", cod_art: "393" },
+  { den: "APARAT PT.INGRIJIRE PAR SI INGRIJIRE CORPORALA-COD: 16 02 14", cod: "16 02 14", cod_art: "395" },
+  { den: "APARAT PT.INGRIJIRE PAR SI INGRIJIRE CORPORALA-COD: 20 01 36", cod: "20 01 36", cod_art: "396" },
+  { den: "APARAT RADIO-COD: 16 02 14", cod: "16 02 14", cod_art: "397" },
+  { den: "APARAT RADIO-COD: 20 01 36", cod: "20 01 36", cod_art: "398" },
+  { den: "APARATE DE PRAJIT PAINE-COD: 20 01 36", cod: "20 01 36", cod_art: "399" },
+  { den: "ASPIRATOR-COD: 16 02 14", cod: "16 02 14", cod_art: "400" },
+  { den: "ASPIRATOR-COD: 20 01 36", cod: "20 01 36", cod_art: "401" },
+  { den: "AUTOMATE CU MONEDE DE MARI DIMENSIUNI-COD: 20 01 36", cod: "20 01 36", cod_art: "402" },
+  { den: "CUPTOR CU MICROUNDE-COD: 16 02 14", cod: "16 02 14", cod_art: "404" },
+  { den: "CUPTOR CU MICROUNDE-COD: 20 01 36", cod: "20 01 36", cod_art: "405" },
+  { den: "FIARE DE CALCAT-COD: 20 01 36", cod: "20 01 36", cod_art: "410" },
+  { den: "FIERBATOARE DE APA-COD: 20 01 36", cod: "20 01 36", cod_art: "411" },
+  { den: "IMPRIMANTE MARI-COD: 16 02 14", cod: "16 02 14", cod_art: "412" },
+  { den: "IMPRIMANTE MARI-COD: 20 01 36", cod: "20 01 36", cod_art: "413" },
+  { den: "IMPRIMANTE MICI-COD: 16 02 14", cod: "16 02 14", cod_art: "414" },
+  { den: "IMPRIMANTE MICI-COD: 20 01 36", cod: "20 01 36", cod_art: "415" },
+  { den: "JUCARII-COD: 20 01 36", cod: "20 01 36", cod_art: "416" },
+  { den: "MASINA DE SPALAT RUFE-COD: 16 02 14", cod: "16 02 14", cod_art: "417" },
+  { den: "MASINA DE SPALAT RUFE-COD: 20 01 36", cod: "20 01 36", cod_art: "418" },
+  { den: "MASINA DE SPALAT VASE-COD: 16 02 14", cod: "16 02 14", cod_art: "419" },
+  { den: "MASINA DE SPALAT VASE-COD: 20 01 36", cod: "20 01 36", cod_art: "420" },
+  { den: "MASINA DE USCAT RUFE-COD: 16 02 14", cod: "16 02 14", cod_art: "421" },
+  { den: "MASINI DE GATIT-COD: 16 02 14", cod: "16 02 14", cod_art: "423" },
+  { den: "MASINI DE GATIT-COD: 20 01 36", cod: "20 01 36", cod_art: "424" },
+  { den: "SOBE ELECTRICE-COD: 16 02 14", cod: "16 02 14", cod_art: "427" },
+  { den: "SOBE ELECTRICE-COD: 20 01 36", cod: "20 01 36", cod_art: "428" },
+  { den: "TELEFOANE-COD: 20 01 36", cod: "20 01 36", cod_art: "429" },
+  { den: "UNELTE ELECTRICE & ELECTRONICE MICI DIMENSIUNI-COD: 20 01 36", cod: "20 01 36", cod_art: "431" },
+  { den: "UNITATE CENTRALA PC-COD: 16 02 14", cod: "16 02 14", cod_art: "432" },
+  { den: "VENTILATOARE-COD: 16 02 14", cod: "16 02 14", cod_art: "435" },
+  { den: "VENTILATOARE-COD: 20 01 36", cod: "20 01 36", cod_art: "436" },
+  { den: "CONDENSATORI-COD: 16 02 15*", cod: "16 02 15*", cod_art: "438" },
+  { den: "ALUMINIU- DEZMEMBRARE MANUALA-COD: 16 02 16", cod: "16 02 16", cod_art: "439" },
+  { den: "COMPONENTE ELECTRONICE-COD: 16 02 16", cod: "16 02 16", cod_art: "440" },
+  { den: "CUPRU - DEZMEMBRARE MANUALA-COD: 16 02 16", cod: "16 02 16", cod_art: "441" },
+  { den: "FIER - DEZMEMBRARE MANUALA-COD: 16 02 16", cod: "16 02 16", cod_art: "442" },
+  { den: "PLACI CU CIRCUITE IMPRIMATE-COD: 16 02 16", cod: "16 02 16", cod_art: "443" },
+  { den: "PLASTIC NESORTAT-COD: 16 02 16", cod: "16 02 16", cod_art: "444" },
+  { den: "STICLA-COD: 16 02 16", cod: "16 02 16", cod_art: "445" },
+  { den: "SURSE ALIMENTARE-COD: 16 02 16", cod: "16 02 16", cod_art: "446" },
+  { den: "ALTE BATERII-COD: 16 06 05", cod: "16 06 05", cod_art: "447" },
+  { den: "BETON-COD: 19 12 12", cod: "19 12 12", cod_art: "448" },
+  { den: "IMPURITATI FARA COMPUSI PERICULOSI-COD: 19 12 12", cod: "19 12 12", cod_art: "449" },
+  { den: "CARTUSE, TONERE-COD: 08 03 18", cod: "08 03 18", cod_art: "450" },
+  { den: "CAUCIUC-COD: 16 02 16", cod: "16 02 16", cod_art: "452" },
+  { den: "MOTOARE/TRANSFORMATOARE-COD: 16 02 16", cod: "16 02 16", cod_art: "453" },
+  { den: "VATA MINERALA-COD: 19 12 12", cod: "19 12 12", cod_art: "454" },
+  { den: "HDD/SSD-COD: 16 02 16", cod: "16 02 16", cod_art: "455" },
+  { den: "UNELTE ELECTRICE & ELECTRONICE MICI DIMENSIUNI-COD: 16 02 14", cod: "16 02 14", cod_art: "459" },
+  { den: "ECRANE-COD: 16 02 14", cod: "16 02 14", cod_art: "460" },
+  { den: "MONITOARE-COD: 16 02 14", cod: "16 02 14", cod_art: "461" },
+  { den: "TELEFOANE-COD: 16 02 14", cod: "16 02 14", cod_art: "462" },
+  { den: "TELEVIZOARE-COD: 16 02 14", cod: "16 02 14", cod_art: "463" },
+  { den: "CALCULATOARE MICI PORTABILE-COD: 16 02 14", cod: "16 02 14", cod_art: "464" },
+  { den: "CALCULATOARE PORTABILE-COD: 16 02 14", cod: "16 02 14", cod_art: "465" },
+  { den: "CALCULATOARE PORTABILE-COD: 20 01 36", cod: "20 01 36", cod_art: "466" },
+  { den: "CALCULATOARE PERSONALE-COD: 20 01 36", cod: "20 01 36", cod_art: "467" },
+  { den: "USCATOARE DE HAINE-COD: 20 01 36", cod: "20 01 36", cod_art: "468" },
+  { den: "APARATE VIDEO-COD: 20 01 36", cod: "20 01 36", cod_art: "469" },
+  { den: "ALTELE-COD: 20 01 36", cod: "20 01 36", cod_art: "470" },
+  { den: "ALTELE-COD: 16 02 14", cod: "16 02 14", cod_art: "477" },
+  { den: "INOX - DEZMEMBRARE MANUALA-COD: 16 02 16", cod: "16 02 16", cod_art: "478" },
+  { den: "CALCULATOARE MICI PORTABILE-COD: 20 01 36", cod: "20 01 36", cod_art: "479" },
+  { den: "TELEVIZOARE-COD: 20 01 36", cod: "20 01 36", cod_art: "480" },
+  { den: "MONITOARE-COD: 20 01 36", cod: "20 01 36", cod_art: "481" },
+  { den: "CALCULATOARE DE BUZUNAR-COD: 20 01 36", cod: "20 01 36", cod_art: "484" },
+  { den: "GPS-COD: 16 02 14", cod: "16 02 14", cod_art: "485" },
+  { den: "CALCULATOARE PERSONALE-COD: 16 02 14", cod: "16 02 14", cod_art: "487" },
+  { den: "FIARE DE CALCAT-COD: 16 02 14", cod: "16 02 14", cod_art: "505" },
+  { den: "CALCULATOARE MARI-COD: 16 02 14", cod: "16 02 14", cod_art: "506" },
+  { den: "CALCULATOARE MARI-COD: 20 01 36", cod: "20 01 36", cod_art: "507" },
+  { den: "ECHIPAMENTE DE AER CONDITIONAT-COD: 16 02 14", cod: "16 02 14", cod_art: "508" },
+  { den: "ECHIPAMENTE DE AER CONDITIONAT-COD: 20 01 36", cod: "20 01 36", cod_art: "509" },
+  { den: "ECHIPAMENTE DE DEZUMIDIFICARE-COD: 16 02 14", cod: "16 02 14", cod_art: "510" },
+  { den: "ECHIPAMENTE DE DEZUMIDIFICARE-COD: 20 01 36", cod: "20 01 36", cod_art: "511" },
+  { den: "RADIATOARE CU ULEI-COD: 16 02 14", cod: "16 02 14", cod_art: "512" },
+  { den: "RADIATOARE CU ULEI-COD: 20 01 36", cod: "20 01 36", cod_art: "513" },
+  { den: "APARATE DE PRAJIT PAINE-COD: 16 02 14", cod: "16 02 14", cod_art: "514" },
+  { den: "FIERBATOARE DE APA-COD: 16 02 14", cod: "16 02 14", cod_art: "515" },
+  { den: "GRANULA LDPE RECICLAT", cod: "", cod_art: "517" },
+  { den: "MATERIAL ABSORBANT-COD: 19 12 04", cod: "19 12 04", cod_art: "526" },
+  { den: "SPUMA POLIUTERMICA-COD: 16 02 16", cod: "16 02 16", cod_art: "527" },
+  { den: "VENTILATOARE-COD: 16 02 16", cod: "16 02 16", cod_art: "528" },
+  { den: "DESEU FIER DIN DEEE-COD 19 12 02", cod: "19 12 02", cod_art: "533" },
+  { den: "POMPE DRC 80-400", cod: "", cod_art: "535" },
+  { den: "POMPE MV 253", cod: "", cod_art: "536" },
+  { den: "POMPE NC 200", cod: "", cod_art: "537" },
+  { den: "DESEURI HARTIE-COD 20 01 01", cod: "20 01 01", cod_art: "538" },
+  { den: "FIER DESEURI -COD 17 04 05", cod: "17 04 05", cod_art: "539" },
+  { den: "CUPRU DESEURI -COD 17 04 01", cod: "17 04 01", cod_art: "540" },
+  { den: "ALUMINIU DESEURI -COD 17 04 02", cod: "17 04 02", cod_art: "541" },
+  { den: "INOX DESEURI-COD 17 04 05", cod: "17 04 05", cod_art: "542" },
+  { den: "DESEURI DE AMBALAJE DIN HDPE-COD 15 01 02", cod: "15 01 02", cod_art: "543" },
+  { den: "DESEU DEEE COD 16 02 14", cod: "16 02 14", cod_art: "544" },
+  { den: "DESEURI DE AMBALAJE DIN FOLIE COLOR-COD 15 01 02", cod: "15 01 02", cod_art: "545" },
+  { den: "FIER DESEURI-COD 16 01 17", cod: "16 01 17", cod_art: "546" },
+  { den: "DESEU FIER DIN DEEE - COD 16 02 16", cod: "16 02 16", cod_art: "547" },
+  { den: "DESEU FIER DIN DEEE - COD 19 12 02", cod: "19 12 02", cod_art: "548" },
+  { den: "GRANULA LDPE  RECICLAT", cod: "", cod_art: "549" },
 ];
 const PRODUSE = PRODUSE_LIST.map((p) => p.den);
 const AGENTI = ["Alex","Sandel","Cosereni","Tanase George","Iacob Marian","Cuscru","Ecosal","Ecovol","Nea Costel"];
@@ -119,19 +270,30 @@ const IFS = { width: "100%", border: "1px solid #ccc", borderRadius: 4, padding:
 function AC({ value, onChange, options, placeholder = "" }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState(value);
+  const [pos, setPos] = useState({ top: 0, left: 0, width: 200 });
+  const inputRef = useRef();
+  const updatePos = () => {
+    if (inputRef.current) {
+      const r = inputRef.current.getBoundingClientRect();
+      setPos({ top: r.bottom + 2, left: r.left, width: Math.max(220, r.width) });
+    }
+  };
+  const filtered = options.filter((o) => o.toLowerCase().includes((q || "").toLowerCase()));
   return (
     <div style={{ position: "relative" }}>
-      <input style={inp()} value={q} placeholder={placeholder}
-        onChange={(e) => { setQ(e.target.value); onChange(e.target.value); setOpen(true); }}
-        onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)} />
-      {open && options.filter((o) => o.toLowerCase().includes((q || "").toLowerCase())).length > 0 && (
-        <div style={{ position: "absolute", top: "100%", left: 0, zIndex: 999, background: "#fff", border: "1px solid #ccc", borderRadius: 4, boxShadow: "0 4px 12px rgba(0,0,0,.15)", maxHeight: 180, overflowY: "auto", minWidth: 200 }}>
-          {options.filter((o) => o.toLowerCase().includes((q || "").toLowerCase())).map((o) => (
+      <input ref={inputRef} style={inp()} value={q} placeholder={placeholder}
+        onChange={(e) => { setQ(e.target.value); onChange(e.target.value); updatePos(); setOpen(true); }}
+        onFocus={() => { updatePos(); setOpen(true); }}
+        onBlur={() => setTimeout(() => setOpen(false), 150)} />
+      {open && filtered.length > 0 && (
+        <div style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width, zIndex: 99999, background: "#fff", border: "1px solid #1565c0", borderRadius: 4, boxShadow: "0 4px 16px rgba(0,0,0,.2)", maxHeight: 240, overflowY: "auto" }}>
+          {filtered.slice(0, 50).map((o) => (
             <div key={o} onMouseDown={() => { setQ(o); onChange(o); setOpen(false); }}
-              style={{ padding: "5px 10px", fontSize: 12, cursor: "pointer", borderBottom: "1px solid #eee" }}
+              style={{ padding: "6px 10px", fontSize: 12, cursor: "pointer", borderBottom: "1px solid #eee", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
               onMouseEnter={(e) => (e.currentTarget.style.background = "#e8f5e9")}
               onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}>{o}</div>
           ))}
+          {filtered.length > 50 && <div style={{ padding: "4px 10px", fontSize: 10, color: "#888", textAlign: "center", background: "#f5f5f5" }}>+ {filtered.length - 50} rezultate. Filtrează mai precis.</div>}
         </div>
       )}
     </div>
@@ -748,12 +910,18 @@ export default function App() {
     const v = cant * pu;
     const imp = Math.round(v * 0.1);
     const tax = Math.round(v * 0.02);
-    return [r.serie || "", r.nr || "", r.data || "", r.furnizor || "", r.adresa || "", r.cnp || "", r.furnizor || "", "", cant, pu, "", "", "", r.denumire || "", imp, tax, parseFloat(r.valoare) || 0];
+    const fd = PRODUSE_LIST.find(p => p.den === r.denumire || p.den.toUpperCase() === r.denumire);
+    const codSaga = fd?.cod_art || "";
+    return [r.serie || "", r.nr || "", r.data || "", r.furnizor || "", r.adresa || "", r.cnp || "", r.furnizor || "", codSaga, cant, pu, "", "", "", r.denumire || "", imp, tax, parseFloat(r.valoare) || 0];
   });
 
   const buildPJRows = () => pvList.filter(p => inRange(p.data)).flatMap(p => {
     const mats = (p.materiale || []).filter(m => m.den);
-    return mats.map(m => [p.serie || "", p.nr_pv || "", p.data || "", p.client_denumire || "", p.client_adresa || "", p.client_cui || "", p.client_denumire || "", "", parseFloat(m.cant) || 0, "", "", "", "", m.den || "", "", "", ""]);
+    return mats.map(m => {
+      const fd = PRODUSE_LIST.find(x => x.den === m.den);
+      const codSaga = fd?.cod_art || "";
+      return [p.serie || "", p.nr_pv || "", p.data || "", p.client_denumire || "", p.client_adresa || "", p.client_cui || "", p.client_denumire || "", codSaga, parseFloat(m.cant) || 0, "", "", "", "", m.den || "", "", "", ""];
+    });
   });
 
   const loadXLSX = async () => {
