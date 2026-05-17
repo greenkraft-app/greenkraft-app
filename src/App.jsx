@@ -186,7 +186,7 @@ const ACHITAT_DE_OPT = ["Alex","Maria","Ion","Andrei","Nea Costel"];
 const CLIENTI = ["ROMRECYCLING","CRILELMAR SRL","GREENTECH","METALROM","RECYCLE PRO","Altul"];
 const CATEGORIE_COL = ["Curte","Deee","Diverse","Altele"];
 const COL_COLORS = { Curte: "#c6efce", Deee: "#bdd7ee", Diverse: "#fff2cc", Altele: "#fce4d6" };
-const CATEGORIE_CH = ["Diverse","Taxe","Salarii","Utilități","Transport","Altele"];
+const CATEGORIE_CH = ["Diverse","Taxe","Salarii","Utilități","Transport","Combustibil","Altele"];
 const GREENKRAFT_OPT = ["Deee","Greenkraft"];
 const LUNI = ["Ian","Feb","Mar","Apr","Mai","Iun","Iul","Aug","Sep","Oct","Nov","Dec"];
 const SERII = ["GK","GKR"];
@@ -596,6 +596,20 @@ export default function App() {
   const [parolaEdit, setParolaEdit] = useState(null);
   const [pfFilter, setPfFilter] = useState("");
   const [pjFilter, setPjFilter] = useState("");
+  // ── Filtre pentru Cheltuieli/Colectari/Livrari ───────────
+  const [chSearch, setChSearch] = useState("");
+  const [chCat, setChCat] = useState("");
+  const [chAchitat, setChAchitat] = useState("");
+  const [chAchDe, setChAchDe] = useState("");
+  const [chMonth, setChMonth] = useState("");
+  const [colSearch, setColSearch] = useState("");
+  const [colCat, setColCat] = useState("");
+  const [colAgent, setColAgent] = useState("");
+  const [colAchitat, setColAchitat] = useState("");
+  const [colMonth, setColMonth] = useState("");
+  const [livSearch, setLivSearch] = useState("");
+  const [livClient, setLivClient] = useState("");
+  const [livMonth, setLivMonth] = useState("");
   // ── Rapoarte state ────────────────────────────────────────
   const [rapDateStart, setRapDateStart] = useState("");
   const [rapDateEnd, setRapDateEnd] = useState("");
@@ -2100,61 +2114,149 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
         )}
 
         {/* ══ CHELTUIELI ══ */}
-        {tab === "cheltuieli" && (
+        {tab === "cheltuieli" && (() => {
+          const chFiltered = chRows.filter(r => {
+            if (chMonth && monthOf(r.data) !== chMonth) return false;
+            if (chCat && r.cat !== chCat) return false;
+            if (chAchitat && r.ach !== chAchitat) return false;
+            if (chAchDe && r.ach_de !== chAchDe) return false;
+            if (chSearch) { const q = chSearch.toLowerCase(); if (!(r.det?.toLowerCase().includes(q) || r.note?.toLowerCase().includes(q) || String(r.suma).includes(q))) return false; }
+            return true;
+          });
+          const chMonthOpts = [...new Set(chRows.map(r => monthOf(r.data)).filter(Boolean))].sort();
+          return (
           <div>
             <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
-              <SC label="Total" value={fmt(chRows.reduce((s, r) => s + parseSuma(r.suma), 0)) + " lei"} c="#1565c0" bg="#e3f2fd" />
-              <SC label="✅ Achitat" value={fmt(chRows.filter((r) => r.ach === "Da").reduce((s, r) => s + parseSuma(r.suma), 0)) + " lei"} c={G} bg="#e8f5e9" />
-              <SC label="⏳ Neachitat" value={fmt(chRows.filter((r) => r.ach === "Nu").reduce((s, r) => s + parseSuma(r.suma), 0)) + " lei"} c="#c62828" bg="#ffebee" />
+              <SC label="Total filtrat" value={fmt(chFiltered.reduce((s, r) => s + parseSuma(r.suma), 0)) + " lei"} c="#1565c0" bg="#e3f2fd" />
+              <SC label="✅ Achitat" value={fmt(chFiltered.filter((r) => r.ach === "Da").reduce((s, r) => s + parseSuma(r.suma), 0)) + " lei"} c={G} bg="#e8f5e9" />
+              <SC label="⏳ Neachitat" value={fmt(chFiltered.filter((r) => r.ach === "Nu").reduce((s, r) => s + parseSuma(r.suma), 0)) + " lei"} c="#c62828" bg="#ffebee" />
+              <SC label="Înregistrări" value={chFiltered.length + " / " + chRows.length} c="#6a1b9a" bg="#f3e5f5" />
+            </div>
+            <div style={{ background: "#f5f5f5", border: "1px solid #ddd", borderRadius: 8, padding: 10, marginBottom: 10, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <input value={chSearch} onChange={(e) => setChSearch(e.target.value)} placeholder="🔍 Caută detalii, sumă, note..." style={{ flex: 1, minWidth: 180, border: "1px solid #ccc", borderRadius: 5, padding: "5px 10px", fontSize: 12 }} />
+              <select value={chMonth} onChange={(e) => setChMonth(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}>
+                <option value="">📅 Toate lunile</option>
+                {chMonthOpts.map(m => <option key={m}>{m}</option>)}
+              </select>
+              <select value={chCat} onChange={(e) => setChCat(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}>
+                <option value="">📂 Toate categoriile</option>
+                {CATEGORIE_CH.map(c => <option key={c}>{c}</option>)}
+              </select>
+              <select value={chAchitat} onChange={(e) => setChAchitat(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}>
+                <option value="">💰 Toate</option>
+                <option value="Da">✅ Achitat</option>
+                <option value="Nu">⏳ Neachitat</option>
+              </select>
+              <select value={chAchDe} onChange={(e) => setChAchDe(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}>
+                <option value="">👤 Toți</option>
+                {achitatOptions.map(o => <option key={o}>{o}</option>)}
+              </select>
+              {(chSearch || chMonth || chCat || chAchitat || chAchDe) && <button onClick={() => { setChSearch(""); setChMonth(""); setChCat(""); setChAchitat(""); setChAchDe(""); }} style={{ background: "#e53935", color: "#fff", border: "none", borderRadius: 5, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕ Reset</button>}
             </div>
             <div style={{ overflowX: "auto" }}>
               <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 640 }}>
                 <thead><tr><th style={th({ width: 28 })}></th>{["Data", "Greenkraft/Deee", "Suma(lei)", "Categorie", "Detalii", "Achitat", "Achitat De", "Note"].map((h, ci) => <th key={ci} style={th({ textAlign: ci === 2 ? "right" : "left" })}>{h}</th>)}<th style={th({ width: 28 })}></th></tr></thead>
-                <tbody>{chRows.map((r, i) => { const rowBg = i % 2 === 0 ? "#fff" : "#f7faf8"; const achBg = r.ach === "Da" ? "#e8f5e9" : r.ach === "Nu" ? "#fff8e1" : "#fff"; const achC = r.ach === "Da" ? G : r.ach === "Nu" ? "#e65100" : "#555"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 2}</td><td style={td({ background: rowBg })}><input style={inp()} value={r.data || ""} onChange={(e) => updCH(i, "data", e.target.value)} /></td><td style={td({ background: "#fffde7" })}><select style={sel()} value={r.gk || ""} onChange={(e) => updCH(i, "gk", e.target.value)}>{GREENKRAFT_OPT.map((o) => <option key={o}>{o}</option>)}</select></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "right" })} value={r.suma || ""} onChange={(e) => updCH(i, "suma", e.target.value)} /></td><td style={td({ background: "#fffde7" })}><select style={sel()} value={r.cat || ""} onChange={(e) => updCH(i, "cat", e.target.value)}>{CATEGORIE_CH.map((o) => <option key={o}>{o}</option>)}</select></td><td style={td({ background: rowBg })}><input style={inp()} value={r.det || ""} onChange={(e) => updCH(i, "det", e.target.value)} /></td><td style={td({ background: achBg })}><select style={sel({ color: achC, fontWeight: 700 })} value={r.ach || ""} onChange={(e) => updCH(i, "ach", e.target.value)}><option value=""></option><option>Da</option><option>Nu</option></select></td><td style={td({ background: "#fffde7" })}><AC value={r.ach_de || ""} options={achitatOptions} onChange={(v) => updCH(i, "ach_de", v)} placeholder="—" /></td><td style={td({ background: rowBg })}><input style={inp()} value={r.note || ""} onChange={(e) => updCH(i, "note", e.target.value)} /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delCH(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
-                <tfoot><tr style={{ background: G, color: "#fff" }}><td></td><td colSpan={2} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(chRows.reduce((s, r) => s + parseSuma(r.suma), 0))}</td><td colSpan={5}></td><td></td></tr></tfoot>
+                <tbody>{chFiltered.map((r, idx) => { const i = chRows.indexOf(r); const rowBg = idx % 2 === 0 ? "#fff" : "#f7faf8"; const achBg = r.ach === "Da" ? "#e8f5e9" : r.ach === "Nu" ? "#fff8e1" : "#fff"; const achC = r.ach === "Da" ? G : r.ach === "Nu" ? "#e65100" : "#555"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 2}</td><td style={td({ background: rowBg })}><input style={inp()} value={r.data || ""} onChange={(e) => updCH(i, "data", e.target.value)} /></td><td style={td({ background: "#fffde7" })}><select style={sel()} value={r.gk || ""} onChange={(e) => updCH(i, "gk", e.target.value)}>{GREENKRAFT_OPT.map((o) => <option key={o}>{o}</option>)}</select></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "right" })} value={r.suma || ""} onChange={(e) => updCH(i, "suma", e.target.value)} /></td><td style={td({ background: "#fffde7" })}><select style={sel()} value={r.cat || ""} onChange={(e) => updCH(i, "cat", e.target.value)}>{CATEGORIE_CH.map((o) => <option key={o}>{o}</option>)}</select></td><td style={td({ background: rowBg })}><input style={inp()} value={r.det || ""} onChange={(e) => updCH(i, "det", e.target.value)} /></td><td style={td({ background: achBg })}><select style={sel({ color: achC, fontWeight: 700 })} value={r.ach || ""} onChange={(e) => updCH(i, "ach", e.target.value)}><option value=""></option><option>Da</option><option>Nu</option></select></td><td style={td({ background: "#fffde7" })}><AC value={r.ach_de || ""} options={achitatOptions} onChange={(v) => updCH(i, "ach_de", v)} placeholder="—" /></td><td style={td({ background: rowBg })}><input style={inp()} value={r.note || ""} onChange={(e) => updCH(i, "note", e.target.value)} /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delCH(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                <tfoot><tr style={{ background: G, color: "#fff" }}><td></td><td colSpan={2} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(chFiltered.reduce((s, r) => s + parseSuma(r.suma), 0))}</td><td colSpan={5}></td><td></td></tr></tfoot>
               </table>
             </div>
             <AddBtn onClick={addCH} label="+ Adaugă cheltuială" />
           </div>
-        )}
+          );
+        })()}
 
         {/* ══ COLECTARI ══ */}
-        {tab === "colectari" && (
+        {tab === "colectari" && (() => {
+          const colFiltered = colRows.filter(r => {
+            if (colMonth && monthOf(r.data) !== colMonth) return false;
+            if (colCat && r.cat !== colCat) return false;
+            if (colAgent && r.agent !== colAgent) return false;
+            if (colAchitat && r.ach !== colAchitat) return false;
+            if (colSearch) { const q = colSearch.toLowerCase(); if (!(r.furn?.toLowerCase().includes(q) || r.produs?.toLowerCase().includes(q) || r.ach_de?.toLowerCase().includes(q))) return false; }
+            return true;
+          });
+          const colMonthOpts = [...new Set(colRows.map(r => monthOf(r.data)).filter(Boolean))].sort();
+          return (
           <div>
             <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
-              <SC label="Total Cant." value={fmt(colRows.reduce((s, r) => s + (parseFloat(r.cant) || 0), 0)) + " kg"} c="#1565c0" bg="#e3f2fd" />
-              <SC label="Total Valoare" value={fmt(colRows.reduce((s, r) => s + (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0), 0)) + " lei"} c={G} bg="#e8f5e9" />
+              <SC label="Total Cant." value={fmt(colFiltered.reduce((s, r) => s + (parseFloat(r.cant) || 0), 0)) + " kg"} c="#1565c0" bg="#e3f2fd" />
+              <SC label="Total Valoare" value={fmt(colFiltered.reduce((s, r) => s + (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0), 0)) + " lei"} c={G} bg="#e8f5e9" />
+              <SC label="Înregistrări" value={colFiltered.length + " / " + colRows.length} c="#6a1b9a" bg="#f3e5f5" />
+            </div>
+            <div style={{ background: "#f5f5f5", border: "1px solid #ddd", borderRadius: 8, padding: 10, marginBottom: 10, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <input value={colSearch} onChange={(e) => setColSearch(e.target.value)} placeholder="🔍 Caută furnizor, produs, achitat de..." style={{ flex: 1, minWidth: 180, border: "1px solid #ccc", borderRadius: 5, padding: "5px 10px", fontSize: 12 }} />
+              <select value={colMonth} onChange={(e) => setColMonth(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}>
+                <option value="">📅 Toate lunile</option>
+                {colMonthOpts.map(m => <option key={m}>{m}</option>)}
+              </select>
+              <select value={colCat} onChange={(e) => setColCat(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}>
+                <option value="">📂 Toate cat.</option>
+                {CATEGORIE_COL.map(c => <option key={c}>{c}</option>)}
+              </select>
+              <select value={colAgent} onChange={(e) => setColAgent(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}>
+                <option value="">👤 Toți agenții</option>
+                {agentOptions.map(a => <option key={a}>{a}</option>)}
+              </select>
+              <select value={colAchitat} onChange={(e) => setColAchitat(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}>
+                <option value="">💰 Toate</option>
+                <option value="Da">✅ Achitat</option>
+                <option value="Nu">⏳ Neachitat</option>
+              </select>
+              {(colSearch || colMonth || colCat || colAgent || colAchitat) && <button onClick={() => { setColSearch(""); setColMonth(""); setColCat(""); setColAgent(""); setColAchitat(""); }} style={{ background: "#e53935", color: "#fff", border: "none", borderRadius: 5, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕ Reset</button>}
             </div>
             <div style={{ overflowX: "auto" }}>
               <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 800 }}>
                 <thead><tr><th style={th({ width: 28 })}></th><th style={th({ width: 80 })}>Data</th><th style={th({ width: 82 })}>Agent</th><th style={th({ width: 90 })}>Furnizor</th><th style={th({ width: 68 })}>Cat.</th><th style={th({ minWidth: 160 })}>Produs</th><th style={th({ width: 78 })}>Cant.(kg)</th><th style={th({ width: 62 })}>Preț</th><th style={th({ width: 78 })}>Total</th><th style={th({ width: 88 })}>Fără Imp.12%</th><th style={th({ width: 72 })}>Achitat</th><th style={th({ width: 78 })}>Achitat De</th><th style={th({ width: 28 })}></th></tr></thead>
-                <tbody>{colRows.map((r, i) => { const tot = (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0); const faraImp = tot ? +(tot * 0.88).toFixed(2) : 0; const rowBg = i % 2 === 0 ? "#fff" : "#f8fbf9"; const achBg = r.ach === "Da" ? "#e8f5e9" : r.ach === "Nu" ? "#fff8e1" : "#fff"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 2}</td><td style={td({ background: rowBg })}><input style={inp()} value={r.data || ""} onChange={(e) => updCOL(i, "data", e.target.value)} /></td><td style={td({ background: rowBg })}><AC value={r.agent || ""} options={agentOptions} onChange={(v) => updCOL(i, "agent", v)} placeholder="—" /></td><td style={td({ background: rowBg })}><AC value={r.furn || ""} options={furnOptions} onChange={(v) => updCOL(i, "furn", v)} placeholder="—" /></td><td style={td({ background: COL_COLORS[r.cat] || "#eee", textAlign: "center" })}><select style={sel({ fontWeight: 600 })} value={r.cat || ""} onChange={(e) => updCOL(i, "cat", e.target.value)}>{CATEGORIE_COL.map((o) => <option key={o}>{o}</option>)}</select></td><td style={td({ background: rowBg })}><AC value={r.produs || ""} options={PRODUSE} onChange={(v) => updCOL(i, "produs", v)} /></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "right" })} type="number" value={r.cant || ""} onChange={(e) => updCOL(i, "cant", e.target.value)} /></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "right" })} type="number" value={r.pret || ""} onChange={(e) => updCOL(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 600 })}>{tot > 0 ? fmt(tot) : "0,00"}</td><td style={td({ textAlign: "right", background: "#fce4d6", fontWeight: 600, color: "#bf360c" })}>{faraImp > 0 ? fmt(faraImp) : "0,00"}</td><td style={td({ background: achBg })}><select style={sel({ color: r.ach === "Da" ? G : r.ach === "Nu" ? "#e65100" : "#555", fontWeight: 700 })} value={r.ach || ""} onChange={(e) => updCOL(i, "ach", e.target.value)}><option value=""></option><option>Da</option><option>Nu</option></select></td><td style={td({ background: r.ach_de ? "#ffe0b2" : "#fff" })}><AC value={r.ach_de || ""} options={achitatOptions} onChange={(v) => updCOL(i, "ach_de", v)} placeholder="—" /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delCOL(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
-                <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={6} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(colRows.reduce((s, r) => s + (parseFloat(r.cant) || 0), 0))} kg</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(colRows.reduce((s, r) => s + (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0), 0))}</td><td colSpan={4}></td></tr></tfoot>
+                <tbody>{colFiltered.map((r, idx) => { const i = colRows.indexOf(r); const tot = (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0); const faraImp = tot ? +(tot * 0.88).toFixed(2) : 0; const rowBg = idx % 2 === 0 ? "#fff" : "#f8fbf9"; const achBg = r.ach === "Da" ? "#e8f5e9" : r.ach === "Nu" ? "#fff8e1" : "#fff"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 2}</td><td style={td({ background: rowBg })}><input style={inp()} value={r.data || ""} onChange={(e) => updCOL(i, "data", e.target.value)} /></td><td style={td({ background: rowBg })}><AC value={r.agent || ""} options={agentOptions} onChange={(v) => updCOL(i, "agent", v)} placeholder="—" /></td><td style={td({ background: rowBg })}><AC value={r.furn || ""} options={furnOptions} onChange={(v) => updCOL(i, "furn", v)} placeholder="—" /></td><td style={td({ background: COL_COLORS[r.cat] || "#eee", textAlign: "center" })}><select style={sel({ fontWeight: 600 })} value={r.cat || ""} onChange={(e) => updCOL(i, "cat", e.target.value)}>{CATEGORIE_COL.map((o) => <option key={o}>{o}</option>)}</select></td><td style={td({ background: rowBg })}><AC value={r.produs || ""} options={PRODUSE} onChange={(v) => updCOL(i, "produs", v)} /></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "right" })} type="number" value={r.cant || ""} onChange={(e) => updCOL(i, "cant", e.target.value)} /></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "right" })} type="number" value={r.pret || ""} onChange={(e) => updCOL(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 600 })}>{tot > 0 ? fmt(tot) : "0,00"}</td><td style={td({ textAlign: "right", background: "#fce4d6", fontWeight: 600, color: "#bf360c" })}>{faraImp > 0 ? fmt(faraImp) : "0,00"}</td><td style={td({ background: achBg })}><select style={sel({ color: r.ach === "Da" ? G : r.ach === "Nu" ? "#e65100" : "#555", fontWeight: 700 })} value={r.ach || ""} onChange={(e) => updCOL(i, "ach", e.target.value)}><option value=""></option><option>Da</option><option>Nu</option></select></td><td style={td({ background: r.ach_de ? "#ffe0b2" : "#fff" })}><AC value={r.ach_de || ""} options={achitatOptions} onChange={(v) => updCOL(i, "ach_de", v)} placeholder="—" /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delCOL(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={6} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(colFiltered.reduce((s, r) => s + (parseFloat(r.cant) || 0), 0))} kg</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(colFiltered.reduce((s, r) => s + (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0), 0))}</td><td colSpan={4}></td></tr></tfoot>
               </table>
             </div>
             <AddBtn onClick={addCOL} label="+ Adaugă colectare" />
           </div>
-        )}
+          );
+        })()}
 
         {/* ══ LIVRARI ══ */}
-        {tab === "livrari" && (
+        {tab === "livrari" && (() => {
+          const livFiltered = livRows.filter(r => {
+            if (livMonth && monthOf(r.data) !== livMonth) return false;
+            if (livClient && r.client !== livClient) return false;
+            if (livSearch) { const q = livSearch.toLowerCase(); if (!(r.client?.toLowerCase().includes(q) || r.produs?.toLowerCase().includes(q) || r.det?.toLowerCase().includes(q) || String(r.nr).includes(q))) return false; }
+            return true;
+          });
+          const livMonthOpts = [...new Set(livRows.map(r => monthOf(r.data)).filter(Boolean))].sort();
+          return (
           <div>
             <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
-              <SC label="Total Cant." value={fmt(livRows.reduce((s, r) => s + (parseFloat(r.cant) || 0), 0)) + " kg"} c="#1565c0" bg="#e3f2fd" />
-              <SC label="Total Valoare" value={fmt(livRows.reduce((s, r) => s + (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0), 0)) + " lei"} c={G} bg="#e8f5e9" />
-              <SC label="✅ Încasat" value={fmt(livRows.filter((r) => r.inc === "DA").reduce((s, r) => s + (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0), 0)) + " lei"} c="#2e7d32" bg="#c8e6c9" />
+              <SC label="Total Cant." value={fmt(livFiltered.reduce((s, r) => s + (parseFloat(r.cant) || 0), 0)) + " kg"} c="#1565c0" bg="#e3f2fd" />
+              <SC label="Total Valoare" value={fmt(livFiltered.reduce((s, r) => s + (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0), 0)) + " lei"} c={G} bg="#e8f5e9" />
+              <SC label="✅ Încasat" value={fmt(livFiltered.filter((r) => r.inc === "DA").reduce((s, r) => s + (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0), 0)) + " lei"} c="#2e7d32" bg="#c8e6c9" />
+              <SC label="Înregistrări" value={livFiltered.length + " / " + livRows.length} c="#6a1b9a" bg="#f3e5f5" />
+            </div>
+            <div style={{ background: "#f5f5f5", border: "1px solid #ddd", borderRadius: 8, padding: 10, marginBottom: 10, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <input value={livSearch} onChange={(e) => setLivSearch(e.target.value)} placeholder="🔍 Caută client, produs, nr factură, detalii..." style={{ flex: 1, minWidth: 180, border: "1px solid #ccc", borderRadius: 5, padding: "5px 10px", fontSize: 12 }} />
+              <select value={livMonth} onChange={(e) => setLivMonth(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}>
+                <option value="">📅 Toate lunile</option>
+                {livMonthOpts.map(m => <option key={m}>{m}</option>)}
+              </select>
+              <select value={livClient} onChange={(e) => setLivClient(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}>
+                <option value="">🏢 Toți clienții</option>
+                {clientOptions.map(c => <option key={c}>{c}</option>)}
+              </select>
+              {(livSearch || livMonth || livClient) && <button onClick={() => { setLivSearch(""); setLivMonth(""); setLivClient(""); }} style={{ background: "#e53935", color: "#fff", border: "none", borderRadius: 5, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕ Reset</button>}
             </div>
             <div style={{ overflowX: "auto" }}>
               <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 720 }}>
                 <colgroup><col style={{ width: 28 }} /><col style={{ width: 82 }} /><col style={{ width: 52 }} /><col style={{ width: 115 }} /><col /><col style={{ width: 78 }} /><col style={{ width: 62 }} /><col style={{ width: 85 }} /><col style={{ width: 68 }} /><col style={{ width: 68 }} /><col style={{ width: 150 }} /><col style={{ width: 28 }} /></colgroup>
                 <thead><tr><th style={th({})}></th><th style={th({})}>Data</th><th style={th({})}>Nr.</th><th style={th({})}>Client</th><th style={th({ textAlign: "left" })}>Produs</th><th style={th({})}>Cant.(kg)</th><th style={th({})}>Preț</th><th style={th({})}>Total(lei)</th><th style={th({})}>Facturat</th><th style={th({})}>Încasat</th><th style={th({ textAlign: "left" })}>Detalii</th><th style={th({})}></th></tr></thead>
-                <tbody>{livRows.map((r, i) => { const tot = (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0); const rowBg = i % 2 === 0 ? "#fff" : "#f8fbf9"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 2}</td><td style={td({ background: rowBg })}><input style={inp()} value={r.data || ""} onChange={(e) => updLIV(i, "data", e.target.value)} /></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "center" })} value={r.nr || ""} onChange={(e) => updLIV(i, "nr", e.target.value)} /></td><td style={td({ background: "#fffde7" })}><AC value={r.client || ""} options={clientOptions} onChange={(v) => updLIV(i, "client", v)} placeholder="—" /></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.produs}><AC value={r.produs || ""} options={PRODUSE} onChange={(v) => updLIV(i, "produs", v)} /></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "right" })} type="number" value={r.cant || ""} onChange={(e) => updLIV(i, "cant", e.target.value)} /></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "right" })} type="number" value={r.pret || ""} onChange={(e) => updLIV(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 600 })}>{tot > 0 ? fmt(tot) : "0,00"}</td><td style={td({ background: r.fact === "DA" ? "#e8f5e9" : "#fff", textAlign: "center" })}><select style={sel({ color: r.fact === "DA" ? G : "#555", fontWeight: 700 })} value={r.fact || ""} onChange={(e) => updLIV(i, "fact", e.target.value)}><option value=""></option><option>DA</option><option>NU</option></select></td><td style={td({ background: r.inc === "DA" ? "#c8e6c9" : r.inc === "NU" ? "#ffebee" : "#fff", textAlign: "center" })}><select style={sel({ color: r.inc === "DA" ? G : r.inc === "NU" ? "#c62828" : "#555", fontWeight: 700 })} value={r.inc || ""} onChange={(e) => updLIV(i, "inc", e.target.value)}><option value=""></option><option>DA</option><option>NU</option></select></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.det}><input style={inp()} value={r.det || ""} onChange={(e) => updLIV(i, "det", e.target.value)} placeholder="..." /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delLIV(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
-                <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={5} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(livRows.reduce((s, r) => s + (parseFloat(r.cant) || 0), 0))} kg</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(livRows.reduce((s, r) => s + (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0), 0))}</td><td colSpan={4}></td></tr></tfoot>
+                <tbody>{livFiltered.map((r, idx) => { const i = livRows.indexOf(r); const tot = (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0); const rowBg = idx % 2 === 0 ? "#fff" : "#f8fbf9"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 2}</td><td style={td({ background: rowBg })}><input style={inp()} value={r.data || ""} onChange={(e) => updLIV(i, "data", e.target.value)} /></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "center" })} value={r.nr || ""} onChange={(e) => updLIV(i, "nr", e.target.value)} /></td><td style={td({ background: "#fffde7" })}><AC value={r.client || ""} options={clientOptions} onChange={(v) => updLIV(i, "client", v)} placeholder="—" /></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.produs}><AC value={r.produs || ""} options={PRODUSE} onChange={(v) => updLIV(i, "produs", v)} /></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "right" })} type="number" value={r.cant || ""} onChange={(e) => updLIV(i, "cant", e.target.value)} /></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "right" })} type="number" value={r.pret || ""} onChange={(e) => updLIV(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 600 })}>{tot > 0 ? fmt(tot) : "0,00"}</td><td style={td({ background: r.fact === "DA" ? "#e8f5e9" : "#fff", textAlign: "center" })}><select style={sel({ color: r.fact === "DA" ? G : "#555", fontWeight: 700 })} value={r.fact || ""} onChange={(e) => updLIV(i, "fact", e.target.value)}><option value=""></option><option>DA</option><option>NU</option></select></td><td style={td({ background: r.inc === "DA" ? "#c8e6c9" : r.inc === "NU" ? "#ffebee" : "#fff", textAlign: "center" })}><select style={sel({ color: r.inc === "DA" ? G : r.inc === "NU" ? "#c62828" : "#555", fontWeight: 700 })} value={r.inc || ""} onChange={(e) => updLIV(i, "inc", e.target.value)}><option value=""></option><option>DA</option><option>NU</option></select></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.det}><input style={inp()} value={r.det || ""} onChange={(e) => updLIV(i, "det", e.target.value)} placeholder="..." /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delLIV(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={5} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(livFiltered.reduce((s, r) => s + (parseFloat(r.cant) || 0), 0))} kg</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(livFiltered.reduce((s, r) => s + (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0), 0))}</td><td colSpan={4}></td></tr></tfoot>
               </table>
             </div>
             <AddBtn onClick={addLIV} label="+ Adaugă livrare" />
           </div>
-        )}
+          );
+        })()}
 
         {/* ══ STOCURI ══ */}
         {tab === "stoc" && (
