@@ -538,21 +538,32 @@ export default function App() {
   const parseScaleLine = (line) => {
     if (!line || !line.trim()) return null;
     const upper = line.toUpperCase();
-    let stable = true;
-    if (/\bUS\b/.test(upper)) stable = false;
+    let stable = !/\bUS\b/.test(upper);
     if (/\bOL\b/.test(upper)) return { value: 0, stable: false, overload: true, raw: line };
-    // PRIORITY 1: number followed by "kg" (e.g., "0.000 kg" or "0.000kg")
-    let m = line.match(/([+-]?\s*\d+[.,]?\d*)\s*kg/i);
-    // PRIORITY 2: number followed by "g" (grams)
-    if (!m) m = line.match(/([+-]?\s*\d+[.,]?\d*)\s*g(?![a-z])/i);
-    // PRIORITY 3: number with decimal (likely weight)
-    if (!m) m = line.match(/([+-]?\d+[.,]\d+)/);
-    // LAST RESORT: any integer (least reliable)
-    if (!m) return null;
-    const numStr = m[1].replace(/\s+/g, "").replace(",", ".");
-    const value = parseFloat(numStr);
-    if (isNaN(value)) return null;
-    return { value, stable, raw: line };
+
+    // METHOD 1: Dini Argeo comma format: "1,ST,-3560,PT 3560," or "ST,GS,0.000"
+    // The weight follows a status keyword (ST/US/GS/NT)
+    const stMatch = line.match(/\b(ST|US|GS|NT)\b[,\s]*([+-]?\s*\d+(?:[.,]\d+)?)/i);
+    if (stMatch) {
+      const val = parseFloat(stMatch[2].replace(/\s+/g, "").replace(",", "."));
+      if (!isNaN(val)) return { value: val, stable, raw: line };
+    }
+
+    // METHOD 2: number followed by "kg"
+    let m = line.match(/([+-]?\s*\d+(?:[.,]\d+)?)\s*kg/i);
+    if (m) {
+      const val = parseFloat(m[1].replace(/\s+/g, "").replace(",", "."));
+      if (!isNaN(val)) return { value: val, stable, raw: line };
+    }
+
+    // METHOD 3: any number with decimal
+    m = line.match(/([+-]?\d+[.,]\d+)/);
+    if (m) {
+      const val = parseFloat(m[1].replace(",", "."));
+      if (!isNaN(val)) return { value: val, stable, raw: line };
+    }
+
+    return null;
   };
 
   const startScaleReader = async (port) => {
@@ -1726,7 +1737,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
           <button onClick={generateBackup} disabled={backupLoading} title="Descarcă backup JSON" style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.3)", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: backupLoading ? "wait" : "pointer", fontSize: 11, fontWeight: 600 }}>{backupLoading ? "⏳" : "💾 Backup"}</button>
           {scalePort ? (
             <button onClick={disconnectScale} title={scaleRawLine ? `Raw: ${scaleRawLine}\nClick pentru deconectare` : "Click pentru deconectare"} style={{ background: scaleReading?.stable ? "rgba(76,175,80,0.4)" : "rgba(255,193,7,0.4)", border: "1px solid rgba(255,255,255,0.4)", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 12, fontWeight: 700, fontFamily: "monospace" }}>
-              ⚖️ {scaleReading ? `${scaleReading.value.toFixed(scaleReading.value < 10 ? 3 : 1)} kg ${scaleReading.stable ? "✓" : "⚠"}` : "..."}
+              ⚖️ {scaleReading ? `${Number.isInteger(scaleReading.value) ? scaleReading.value : scaleReading.value.toFixed(3)} kg ${scaleReading.stable ? "✓" : "⚠"}` : "..."}
             </button>
           ) : (
             <button onClick={connectScale} title="Conectează cantar Dini Argeo" style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.3)", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>⚖️ Cantar</button>
