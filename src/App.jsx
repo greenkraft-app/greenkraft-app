@@ -527,6 +527,103 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(() => localStorage.getItem("currentUser") || "");
   const [backupLoading, setBackupLoading] = useState(false);
   const [auditLog, setAuditLog] = useState([]);
+  // ── Cantar (Dini Argeo via Web Serial) ────────────────────
+  const [scalePort, setScalePort] = useState(null);
+  const [scaleReading, setScaleReading] = useState(null);
+  const [scaleError, setScaleError] = useState("");
+  const scaleReaderRef = useRef(null);
+
+  const parseScaleLine = (line) => {
+    if (!line || !line.trim()) return null;
+    const upper = line.toUpperCase();
+    let stable = true;
+    if (/\bUS\b/.test(upper)) stable = false;
+    if (/\bOL\b/.test(upper)) return { value: 0, stable: false, overload: true, raw: line };
+    const m = line.match(/([+-]?)\s*(\d+(?:[.,]\d+)?)/);
+    if (!m) return null;
+    const sign = m[1] === "-" ? -1 : 1;
+    const value = sign * parseFloat(m[2].replace(",", "."));
+    return { value, stable, raw: line };
+  };
+
+  const startScaleReader = async (port) => {
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (port.readable) {
+      const reader = port.readable.getReader();
+      scaleReaderRef.current = reader;
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value);
+          const lines = buffer.split(/[\r\n]+/);
+          if (lines.length > 1) {
+            for (let i = 0; i < lines.length - 1; i++) {
+              const parsed = parseScaleLine(lines[i]);
+              if (parsed) setScaleReading(parsed);
+            }
+            buffer = lines[lines.length - 1];
+          }
+        }
+      } catch (e) {
+        console.warn("Scale read error:", e.message);
+      } finally {
+        try { reader.releaseLock(); } catch (e) {}
+      }
+    }
+  };
+
+  const connectScale = async () => {
+    setScaleError("");
+    try {
+      if (!navigator.serial) {
+        setScaleError("Browser-ul nu suportă cantar. Folosește Chrome sau Edge.");
+        return;
+      }
+      const port = await navigator.serial.requestPort();
+      await port.open({ baudRate: 9600, dataBits: 8, stopBits: 1, parity: "none" });
+      setScalePort(port);
+      startScaleReader(port);
+      localStorage.setItem("scaleAutoConnect", "1");
+    } catch (e) {
+      if (e.name !== "NotFoundError") setScaleError("Eroare: " + e.message);
+    }
+  };
+
+  const disconnectScale = async () => {
+    try { if (scaleReaderRef.current) await scaleReaderRef.current.cancel(); } catch (e) {}
+    try { if (scalePort) await scalePort.close(); } catch (e) {}
+    setScalePort(null);
+    setScaleReading(null);
+    localStorage.removeItem("scaleAutoConnect");
+  };
+
+  // Auto-reconnect on page load if previously connected
+  useEffect(() => {
+    if (!navigator.serial || !localStorage.getItem("scaleAutoConnect")) return;
+    (async () => {
+      try {
+        const ports = await navigator.serial.getPorts();
+        if (ports.length > 0) {
+          const port = ports[0];
+          await port.open({ baudRate: 9600, dataBits: 8, stopBits: 1, parity: "none" });
+          setScalePort(port);
+          startScaleReader(port);
+        }
+      } catch (e) { console.warn("Scale auto-connect failed:", e); }
+    })();
+  }, []);
+
+  const useScaleWeight = (callback) => {
+    if (!scalePort) { alert("Cantarul nu e conectat. Click pe ⚖️ în header."); return; }
+    if (!scaleReading) { alert("Aștept date de la cantar..."); return; }
+    if (scaleReading.overload) { alert("Suprasarcină!"); return; }
+    if (!scaleReading.stable) {
+      if (!window.confirm(`Cântărire instabilă (${scaleReading.value} kg). Folosești această valoare?`)) return;
+    }
+    callback(scaleReading.value);
+  };
   // ── Helper: confirmation dialog for deletes ──────────────
   const confirmDel = (what) => window.confirm(`⚠️ Sigur vrei să ștergi ${what}?\n\nAcțiunea NU poate fi anulată.`);
   // ── Helper: audit log ─────────────────────────────────────
@@ -1600,6 +1697,13 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
             <button onClick={() => { if (window.confirm("Schimbi user-ul?")) { localStorage.removeItem("currentUser"); setCurrentUser(""); } }} title="Schimbă user" style={{ background: "transparent", border: "none", color: "#fff", cursor: "pointer", fontSize: 10, marginLeft: 4, opacity: 0.7 }}>🔄</button>
           </div>
           <button onClick={generateBackup} disabled={backupLoading} title="Descarcă backup JSON" style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.3)", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: backupLoading ? "wait" : "pointer", fontSize: 11, fontWeight: 600 }}>{backupLoading ? "⏳" : "💾 Backup"}</button>
+          {scalePort ? (
+            <button onClick={disconnectScale} title="Click pentru deconectare" style={{ background: scaleReading?.stable ? "rgba(76,175,80,0.4)" : "rgba(255,193,7,0.4)", border: "1px solid rgba(255,255,255,0.4)", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 12, fontWeight: 700, fontFamily: "monospace" }}>
+              ⚖️ {scaleReading ? `${scaleReading.value.toFixed(scaleReading.value < 10 ? 3 : 1)} kg ${scaleReading.stable ? "✓" : "⚠"}` : "..."}
+            </button>
+          ) : (
+            <button onClick={connectScale} title="Conectează cantar Dini Argeo" style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.3)", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>⚖️ Cantar</button>
+          )}
         </div>
       </div>
 
@@ -1866,7 +1970,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                         <div style={{ fontWeight: 700, color: "#e65100", marginBottom: 8, fontSize: 12 }}>📦 Produse / Deșeuri</div>
                         <table style={{ borderCollapse: "collapse", width: "100%" }}>
                           <thead><tr><th style={th({ textAlign: "left", background: "#e65100", minWidth: 170 })}>Denumire</th><th style={th({ width: 85, background: "#e65100" })}>CodSAGA</th><th style={th({ width: 80, background: "#e65100" })}>Cant.(kg)</th><th style={th({ width: 68, background: "#e65100" })}>Preț</th><th style={th({ width: 72, background: "#e65100" })}>Valoare</th><th style={th({ width: 26, background: "#e65100" })}></th></tr></thead>
-                          <tbody>{b.produse.map((p, i) => { const v = (parseFloat(p.cant) || 0) * (parseFloat(p.pret) || 0); return (<tr key={i} style={{ background: i % 2 === 0 ? "#fff" : "#fffde7" }}><td style={td()}><AC value={p.den} options={PRODUSE} placeholder="Selectează..." onChange={(v) => updP(i, "den", v)} /></td><td style={td()}><input style={inp({ textAlign: "center" })} value={p.cod_art || ""} onChange={(e) => updP(i, "cod_art", e.target.value)} /></td><td style={td()}><input style={inp({ textAlign: "right" })} type="number" value={p.cant} onChange={(e) => updP(i, "cant", e.target.value)} /></td><td style={td()}><input style={inp({ textAlign: "right" })} type="number" value={p.pret} onChange={(e) => updP(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", fontWeight: 600, background: "#fff8e1" })}>{v > 0 ? fmt(v) : "—"}</td><td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => setB((b) => ({ ...b, produse: b.produse.filter((_, j) => j !== i) }))} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                          <tbody>{b.produse.map((p, i) => { const v = (parseFloat(p.cant) || 0) * (parseFloat(p.pret) || 0); return (<tr key={i} style={{ background: i % 2 === 0 ? "#fff" : "#fffde7" }}><td style={td()}><AC value={p.den} options={PRODUSE} placeholder="Selectează..." onChange={(v) => updP(i, "den", v)} /></td><td style={td()}><input style={inp({ textAlign: "center" })} value={p.cod_art || ""} onChange={(e) => updP(i, "cod_art", e.target.value)} /></td><td style={td()}><div style={{ display: "flex", gap: 2, alignItems: "center" }}><input style={inp({ textAlign: "right" })} type="number" value={p.cant} onChange={(e) => updP(i, "cant", e.target.value)} />{scalePort && <button onClick={() => useScaleWeight(v => updP(i, "cant", v))} title="Citește din cantar" style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 3, padding: "1px 4px", cursor: "pointer", fontSize: 11 }}>⚖️</button>}</div></td><td style={td()}><input style={inp({ textAlign: "right" })} type="number" value={p.pret} onChange={(e) => updP(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", fontWeight: 600, background: "#fff8e1" })}>{v > 0 ? fmt(v) : "—"}</td><td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => setB((b) => ({ ...b, produse: b.produse.filter((_, j) => j !== i) }))} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
                         </table>
                         <button onClick={() => setB((b) => ({ ...b, produse: [...b.produse, { den: "", cod: "", cod_art: "", cant: "", pret: "" }] }))} style={{ marginTop: 6, background: "#e65100", color: "#fff", border: "none", borderRadius: 4, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Adaugă produs</button>
                       </div>
@@ -2027,7 +2131,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                             <tr key={i} style={{ background: i % 2 === 0 ? "#fff" : "#fffde7" }}>
                               <td style={td()}><AC value={m.den} options={PRODUSE} placeholder="Selectează..." onChange={(v) => updPVMat(i, "den", v)} /></td>
                               <td style={td()}><input style={inp({ textAlign: "center" })} value={m.cod_art || ""} onChange={(e) => updPVMat(i, "cod_art", e.target.value)} /></td>
-                              <td style={td()}><input style={inp({ textAlign: "right" })} type="number" value={m.cant} onChange={(e) => updPVMat(i, "cant", e.target.value)} /></td>
+                              <td style={td()}><div style={{ display: "flex", gap: 2, alignItems: "center" }}><input style={inp({ textAlign: "right" })} type="number" value={m.cant} onChange={(e) => updPVMat(i, "cant", e.target.value)} />{scalePort && <button onClick={() => useScaleWeight(v => updPVMat(i, "cant", v))} title="Citește din cantar" style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 3, padding: "1px 4px", cursor: "pointer", fontSize: 11 }}>⚖️</button>}</div></td>
                               <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => setPV((p) => ({ ...p, materiale: p.materiale.filter((_, j) => j !== i) }))} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
                             </tr>
                           ))}</tbody>
@@ -2284,7 +2388,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   <th style={th({ textAlign: "center" })}>Achitat De</th>
                   <th style={th({})}></th>
                 </tr></thead>
-                <tbody>{colFiltered.map((r, idx) => { const i = colRows.indexOf(r); const tot = (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0); const faraImp = tot ? +(tot * 0.88).toFixed(2) : 0; const rowBg = idx % 2 === 0 ? "#fff" : "#f8fbf9"; const achBg = r.ach === "Da" ? "#e8f5e9" : r.ach === "Nu" ? "#fff8e1" : "#fff"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 2}</td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "center" })} value={r.data || ""} onChange={(e) => updCOL(i, "data", e.target.value)} /></td><td style={td({ background: rowBg })}><AC value={r.agent || ""} options={agentOptions} onChange={(v) => updCOL(i, "agent", v)} placeholder="—" /></td><td style={td({ background: rowBg })}><AC value={r.furn || ""} options={furnOptions} onChange={(v) => updCOL(i, "furn", v)} placeholder="—" /></td><td style={td({ background: COL_COLORS[r.cat] || "#eee", textAlign: "center" })}><select style={sel({ fontWeight: 600, textAlign: "center" })} value={r.cat || ""} onChange={(e) => updCOL(i, "cat", e.target.value)}>{CATEGORIE_COL.map((o) => <option key={o}>{o}</option>)}</select></td><td style={td({ background: rowBg })}><AC value={r.produs || ""} options={PRODUSE} onChange={(v) => updCOL(i, "produs", v)} /></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "right" })} type="number" value={r.cant || ""} onChange={(e) => updCOL(i, "cant", e.target.value)} /></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "right" })} type="number" value={r.pret || ""} onChange={(e) => updCOL(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 600 })}>{tot > 0 ? fmt(tot) : "0,00"}</td><td style={td({ textAlign: "right", background: "#fce4d6", fontWeight: 600, color: "#bf360c" })}>{faraImp > 0 ? fmt(faraImp) : "0,00"}</td><td style={td({ background: achBg })}><select style={sel({ color: r.ach === "Da" ? G : r.ach === "Nu" ? "#e65100" : "#555", fontWeight: 700, textAlign: "center" })} value={r.ach || ""} onChange={(e) => updCOL(i, "ach", e.target.value)}><option value=""></option><option>Da</option><option>Nu</option></select></td><td style={td({ background: r.ach_de ? "#ffe0b2" : "#fff" })}><AC value={r.ach_de || ""} options={achitatOptions} onChange={(v) => updCOL(i, "ach_de", v)} placeholder="—" /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delCOL(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                <tbody>{colFiltered.map((r, idx) => { const i = colRows.indexOf(r); const tot = (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0); const faraImp = tot ? +(tot * 0.88).toFixed(2) : 0; const rowBg = idx % 2 === 0 ? "#fff" : "#f8fbf9"; const achBg = r.ach === "Da" ? "#e8f5e9" : r.ach === "Nu" ? "#fff8e1" : "#fff"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 2}</td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "center" })} value={r.data || ""} onChange={(e) => updCOL(i, "data", e.target.value)} /></td><td style={td({ background: rowBg })}><AC value={r.agent || ""} options={agentOptions} onChange={(v) => updCOL(i, "agent", v)} placeholder="—" /></td><td style={td({ background: rowBg })}><AC value={r.furn || ""} options={furnOptions} onChange={(v) => updCOL(i, "furn", v)} placeholder="—" /></td><td style={td({ background: COL_COLORS[r.cat] || "#eee", textAlign: "center" })}><select style={sel({ fontWeight: 600, textAlign: "center" })} value={r.cat || ""} onChange={(e) => updCOL(i, "cat", e.target.value)}>{CATEGORIE_COL.map((o) => <option key={o}>{o}</option>)}</select></td><td style={td({ background: rowBg })}><AC value={r.produs || ""} options={PRODUSE} onChange={(v) => updCOL(i, "produs", v)} /></td><td style={td({ background: rowBg })}><div style={{ display: "flex", gap: 2, alignItems: "center" }}><input style={inp({ textAlign: "right" })} type="number" value={r.cant || ""} onChange={(e) => updCOL(i, "cant", e.target.value)} />{scalePort && <button onClick={() => useScaleWeight(v => updCOL(i, "cant", v))} title="Citește din cantar" style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 3, padding: "1px 4px", cursor: "pointer", fontSize: 11 }}>⚖️</button>}</div></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "right" })} type="number" value={r.pret || ""} onChange={(e) => updCOL(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 600 })}>{tot > 0 ? fmt(tot) : "0,00"}</td><td style={td({ textAlign: "right", background: "#fce4d6", fontWeight: 600, color: "#bf360c" })}>{faraImp > 0 ? fmt(faraImp) : "0,00"}</td><td style={td({ background: achBg })}><select style={sel({ color: r.ach === "Da" ? G : r.ach === "Nu" ? "#e65100" : "#555", fontWeight: 700, textAlign: "center" })} value={r.ach || ""} onChange={(e) => updCOL(i, "ach", e.target.value)}><option value=""></option><option>Da</option><option>Nu</option></select></td><td style={td({ background: r.ach_de ? "#ffe0b2" : "#fff" })}><AC value={r.ach_de || ""} options={achitatOptions} onChange={(v) => updCOL(i, "ach_de", v)} placeholder="—" /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delCOL(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
                 <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={6} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(colFiltered.reduce((s, r) => s + (parseFloat(r.cant) || 0), 0))} kg</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(colFiltered.reduce((s, r) => s + (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0), 0))}</td><td colSpan={4}></td></tr></tfoot>
               </table>
             </div>
