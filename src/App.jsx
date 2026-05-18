@@ -1534,6 +1534,28 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
   return (
     <div style={{ fontFamily: "Segoe UI,sans-serif", background: "#f0f4f0", minHeight: "100vh", padding: 12 }}>
 
+      {/* Login Modal — appears if no user selected */}
+      {!currentUser && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999999 }}>
+          <div style={{ background: "#fff", borderRadius: 12, padding: 32, maxWidth: 380, width: "90%", boxShadow: "0 10px 40px rgba(0,0,0,0.3)", textAlign: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, marginBottom: 8 }}>
+              <span style={{ fontSize: 26, fontWeight: 900, color: G, letterSpacing: -0.5 }}>Green</span>
+              <span style={{ fontSize: 26, fontWeight: 900, color: "#4caf50", letterSpacing: -0.5 }}>kraft</span>
+            </div>
+            <div style={{ fontSize: 13, color: "#666", marginBottom: 24 }}>Cine ești?</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {["Catalin", "Alexandru", "Mihai"].map(u => (
+                <button key={u} onClick={() => { setCurrentUser(u); localStorage.setItem("currentUser", u); }} style={{ background: `linear-gradient(135deg,${G},#43a047)`, color: "#fff", border: "none", borderRadius: 8, padding: "12px 20px", cursor: "pointer", fontSize: 15, fontWeight: 700, transition: "transform .1s" }}
+                  onMouseEnter={(e) => e.currentTarget.style.transform = "scale(1.03)"}
+                  onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}
+                >👤 {u}</button>
+              ))}
+            </div>
+            <div style={{ marginTop: 16, fontSize: 10, color: "#aaa" }}>Modificările tale vor fi înregistrate în istoric</div>
+          </div>
+        </div>
+      )}
+
       {/* Hidden div for registru print */}
       <div ref={regPrintRef} style={{ display: "none" }}>
         {printBord && <BordPrint b={printBord} />}
@@ -1572,14 +1594,10 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <div style={{ display: "flex", gap: 6, fontSize: 11, opacity: 0.8 }}><span>📍 Afumați, Jud. Ilfov</span><span>📋 Aut. Mediu: 233/22.12.2021</span></div>
-          <div style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(255,255,255,0.15)", borderRadius: 6, padding: "3px 8px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(255,255,255,0.15)", borderRadius: 6, padding: "4px 10px" }}>
             <span style={{ fontSize: 11 }}>👤</span>
-            <select value={currentUser} onChange={(e) => { setCurrentUser(e.target.value); localStorage.setItem("currentUser", e.target.value); }} style={{ background: "transparent", border: "none", color: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer", outline: "none" }}>
-              <option value="" style={{ color: "#000" }}>— alege user —</option>
-              <option style={{ color: "#000" }}>Catalin</option>
-              <option style={{ color: "#000" }}>Alexandru</option>
-              <option style={{ color: "#000" }}>Mihai</option>
-            </select>
+            <span style={{ fontSize: 12, fontWeight: 700 }}>{currentUser || "—"}</span>
+            <button onClick={() => { if (window.confirm("Schimbi user-ul?")) { localStorage.removeItem("currentUser"); setCurrentUser(""); } }} title="Schimbă user" style={{ background: "transparent", border: "none", color: "#fff", cursor: "pointer", fontSize: 10, marginLeft: 4, opacity: 0.7 }}>🔄</button>
           </div>
           <button onClick={generateBackup} disabled={backupLoading} title="Descarcă backup JSON" style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.3)", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: backupLoading ? "wait" : "pointer", fontSize: 11, fontWeight: 600 }}>{backupLoading ? "⏳" : "💾 Backup"}</button>
         </div>
@@ -1610,9 +1628,11 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
           const colToday = colRows.filter(c => isToday(c.data));
           const chMonth = chRows.filter(c => isCurMonth(c.data));
 
-          const cantToday = bordToday.reduce((s, r) => s + (parseFloat(r.cantitate) || 0), 0) + colToday.reduce((s, c) => s + (parseFloat(c.cant) || 0), 0);
-          const cantMonth = bordMonth.reduce((s, r) => s + (parseFloat(r.cantitate) || 0), 0);
-          const cantPVMonth = pvMonth.reduce((s, p) => s + (p.materiale || []).reduce((ss, m) => ss + (parseFloat(m.cant) || 0), 0), 0);
+          const cantToday = bordToday.reduce((s, r) => s + (parseFloat(r.cantitate) || 0), 0) + colToday.reduce((s, c) => s + (parseFloat(c.cant) || 0), 0) + pvToday.reduce((s, p) => s + (p.materiale || []).reduce((ss, m) => ss + (parseFloat(m.cant) || 0), 0), 0);
+          const colMonth = colRows.filter(c => isCurMonth(c.data));
+          const cantMonthTotal = bordMonth.reduce((s, r) => s + (parseFloat(r.cantitate) || 0), 0)
+            + colMonth.reduce((s, c) => s + (parseFloat(c.cant) || 0), 0)
+            + pvMonth.reduce((s, p) => s + (p.materiale || []).reduce((ss, m) => ss + (parseFloat(m.cant) || 0), 0), 0);
           const chTotalMonth = chMonth.reduce((s, c) => s + (parseFloat(c.suma) || 0), 0);
 
           const totStocKg = stocAg.reduce((s, r) => s + Math.max(0, r.cant), 0);
@@ -1654,10 +1674,15 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   <div style={{ fontSize: 26, fontWeight: 800, color: "#e65100" }}>{pvToday.length}</div>
                   <div style={{ fontSize: 11, color: "#888" }}>azi • {pvMonth.length} luna asta</div>
                 </div>
+                <div style={{ background: "#fff", border: "2px solid #2e7d32", borderRadius: 10, padding: 14 }}>
+                  <div style={{ fontSize: 11, color: "#666", marginBottom: 4 }}>🚛 COLECTĂRI</div>
+                  <div style={{ fontSize: 26, fontWeight: 800, color: "#2e7d32" }}>{colToday.length}</div>
+                  <div style={{ fontSize: 11, color: "#888" }}>azi • {colMonth.length} luna asta</div>
+                </div>
                 <div style={{ background: "#fff", border: `2px solid ${G}`, borderRadius: 10, padding: 14 }}>
                   <div style={{ fontSize: 11, color: "#666", marginBottom: 4 }}>⚖️ CANTITATE COLECTATĂ</div>
                   <div style={{ fontSize: 26, fontWeight: 800, color: G }}>{fmt(cantToday)} kg</div>
-                  <div style={{ fontSize: 11, color: "#888" }}>azi • {fmt(cantMonth + cantPVMonth)} kg luna asta</div>
+                  <div style={{ fontSize: 11, color: "#888" }}>azi • {fmt(cantMonthTotal)} kg luna asta</div>
                 </div>
                 <div style={{ background: "#fff", border: "2px solid #6a1b9a", borderRadius: 10, padding: 14 }}>
                   <div style={{ fontSize: 11, color: "#666", marginBottom: 4 }}>📦 STOC TOTAL</div>
