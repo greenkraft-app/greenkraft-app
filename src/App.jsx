@@ -530,8 +530,10 @@ export default function App() {
   // ── Cantar (Dini Argeo via Web Serial) ────────────────────
   const [scalePort, setScalePort] = useState(null);
   const [scaleReading, setScaleReading] = useState(null);
+  const [scaleRawLine, setScaleRawLine] = useState("");
   const [scaleError, setScaleError] = useState("");
   const scaleReaderRef = useRef(null);
+  const scaleActiveRef = useRef(false);
 
   const parseScaleLine = (line) => {
     if (!line || !line.trim()) return null;
@@ -539,27 +541,38 @@ export default function App() {
     let stable = true;
     if (/\bUS\b/.test(upper)) stable = false;
     if (/\bOL\b/.test(upper)) return { value: 0, stable: false, overload: true, raw: line };
-    const m = line.match(/([+-]?)\s*(\d+(?:[.,]\d+)?)/);
+    // PRIORITY 1: number followed by "kg" (e.g., "0.000 kg" or "0.000kg")
+    let m = line.match(/([+-]?\s*\d+[.,]?\d*)\s*kg/i);
+    // PRIORITY 2: number followed by "g" (grams)
+    if (!m) m = line.match(/([+-]?\s*\d+[.,]?\d*)\s*g(?![a-z])/i);
+    // PRIORITY 3: number with decimal (likely weight)
+    if (!m) m = line.match(/([+-]?\d+[.,]\d+)/);
+    // LAST RESORT: any integer (least reliable)
     if (!m) return null;
-    const sign = m[1] === "-" ? -1 : 1;
-    const value = sign * parseFloat(m[2].replace(",", "."));
+    const numStr = m[1].replace(/\s+/g, "").replace(",", ".");
+    const value = parseFloat(numStr);
+    if (isNaN(value)) return null;
     return { value, stable, raw: line };
   };
 
   const startScaleReader = async (port) => {
     const decoder = new TextDecoder();
     let buffer = "";
-    while (port.readable) {
-      const reader = port.readable.getReader();
-      scaleReaderRef.current = reader;
+    scaleActiveRef.current = true;
+    while (port.readable && scaleActiveRef.current) {
+      let reader;
       try {
-        while (true) {
+        reader = port.readable.getReader();
+        scaleReaderRef.current = reader;
+        while (scaleActiveRef.current) {
           const { value, done } = await reader.read();
           if (done) break;
           buffer += decoder.decode(value);
           const lines = buffer.split(/[\r\n]+/);
           if (lines.length > 1) {
             for (let i = 0; i < lines.length - 1; i++) {
+              const raw = lines[i].trim();
+              if (raw) setScaleRawLine(raw);
               const parsed = parseScaleLine(lines[i]);
               if (parsed) setScaleReading(parsed);
             }
@@ -567,10 +580,11 @@ export default function App() {
           }
         }
       } catch (e) {
-        console.warn("Scale read error:", e.message);
+        if (e.name !== "AbortError" && !scaleActiveRef.current) break;
       } finally {
-        try { reader.releaseLock(); } catch (e) {}
+        try { if (reader) reader.releaseLock(); } catch (e) {}
       }
+      if (!scaleActiveRef.current) break;
     }
   };
 
@@ -579,6 +593,7 @@ export default function App() {
     try {
       if (!navigator.serial) {
         setScaleError("Browser-ul nu suportă cantar. Folosește Chrome sau Edge.");
+        alert("Browser-ul nu suportă cantar. Folosește Chrome sau Edge.");
         return;
       }
       const port = await navigator.serial.requestPort();
@@ -587,16 +602,28 @@ export default function App() {
       startScaleReader(port);
       localStorage.setItem("scaleAutoConnect", "1");
     } catch (e) {
-      if (e.name !== "NotFoundError") setScaleError("Eroare: " + e.message);
+      if (e.name !== "NotFoundError") {
+        setScaleError("Eroare: " + e.message);
+        alert("Eroare conectare cantar: " + e.message);
+      }
     }
   };
 
-  const disconnectScale = async () => {
-    try { if (scaleReaderRef.current) await scaleReaderRef.current.cancel(); } catch (e) {}
-    try { if (scalePort) await scalePort.close(); } catch (e) {}
+  // Non-blocking disconnect - UI updates immediately, cleanup happens async
+  const disconnectScale = () => {
+    const port = scalePort;
+    const reader = scaleReaderRef.current;
+    scaleActiveRef.current = false;
+    scaleReaderRef.current = null;
     setScalePort(null);
     setScaleReading(null);
+    setScaleRawLine("");
     localStorage.removeItem("scaleAutoConnect");
+    // Cleanup in background, don't await
+    (async () => {
+      try { if (reader) await reader.cancel(); } catch (e) {}
+      try { if (port) await port.close(); } catch (e) {}
+    })();
   };
 
   // Auto-reconnect on page load if previously connected
@@ -1698,7 +1725,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
           </div>
           <button onClick={generateBackup} disabled={backupLoading} title="Descarcă backup JSON" style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.3)", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: backupLoading ? "wait" : "pointer", fontSize: 11, fontWeight: 600 }}>{backupLoading ? "⏳" : "💾 Backup"}</button>
           {scalePort ? (
-            <button onClick={disconnectScale} title="Click pentru deconectare" style={{ background: scaleReading?.stable ? "rgba(76,175,80,0.4)" : "rgba(255,193,7,0.4)", border: "1px solid rgba(255,255,255,0.4)", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 12, fontWeight: 700, fontFamily: "monospace" }}>
+            <button onClick={disconnectScale} title={scaleRawLine ? `Raw: ${scaleRawLine}\nClick pentru deconectare` : "Click pentru deconectare"} style={{ background: scaleReading?.stable ? "rgba(76,175,80,0.4)" : "rgba(255,193,7,0.4)", border: "1px solid rgba(255,255,255,0.4)", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 12, fontWeight: 700, fontFamily: "monospace" }}>
               ⚖️ {scaleReading ? `${scaleReading.value.toFixed(scaleReading.value < 10 ? 3 : 1)} kg ${scaleReading.stable ? "✓" : "⚠"}` : "..."}
             </button>
           ) : (
