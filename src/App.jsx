@@ -814,17 +814,24 @@ export default function App() {
   const setB = (fn) => setBorderouri((p) => { const n = [...p]; n[activeBord] = fn(n[activeBord]); return n; });
   const updB = (f, v) => setB((b) => f === "serie" ? { ...b, serie: v, nr: getNextNr(v, registru) } : { ...b, [f]: v });
 
-  // Auto-update nr when registru changes (only for empty/fresh borderouri)
+  // Auto-update nr when registru loads (only for empty/fresh borderou at index 0)
+  const lastRegLen = useRef(0);
   useEffect(() => {
-    if (!registru.length) return;
-    setBorderouri(p => p.map(b => {
-      const isEmpty = !b.det && !b.cnp && (!b.produse || b.produse.every(pr => !pr.den && !pr.cant));
-      if (!isEmpty) return b;
-      const nextNr = getNextNr(b.serie, registru);
-      if (b.nr === nextNr) return b;
-      return { ...b, nr: nextNr };
-    }));
-  }, [registru]);
+    if (registru.length === lastRegLen.current) return;
+    lastRegLen.current = registru.length;
+    if (registru.length === 0) return;
+    setBorderouri(prev => {
+      const cur = prev[0];
+      if (!cur) return prev;
+      const isEmpty = !cur.det && !cur.cnp && (!cur.produse || cur.produse.every(pr => !pr.den && !pr.cant));
+      if (!isEmpty) return prev;
+      const nextNr = getNextNr(cur.serie, registru);
+      if (cur.nr === nextNr) return prev;
+      const n = [...prev];
+      n[0] = { ...cur, nr: nextNr };
+      return n;
+    });
+  }, [registru.length]);
   const updP = (i, f, v) => setB((b) => { const ps = [...b.produse]; ps[i] = { ...ps[i], [f]: v }; if (f === "den") { const fd = PRODUSE_LIST.find((p) => p.den === v); if (fd) { ps[i].cod = fd.cod; ps[i].cod_art = fd.cod_art; } } return { ...b, produse: ps }; });
   const bTot = b.produse.reduce((s, p) => s + (parseFloat(p.cant) || 0) * (parseFloat(p.pret) || 0), 0);
   const bImp = Math.round(bTot * 0.1), bTax = Math.round(bTot * 0.02), bRest = bTot - bImp - bTax;
