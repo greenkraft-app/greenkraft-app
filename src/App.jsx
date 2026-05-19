@@ -813,6 +813,18 @@ export default function App() {
   const b = borderouri[activeBord] || newBord();
   const setB = (fn) => setBorderouri((p) => { const n = [...p]; n[activeBord] = fn(n[activeBord]); return n; });
   const updB = (f, v) => setB((b) => f === "serie" ? { ...b, serie: v, nr: getNextNr(v, registru) } : { ...b, [f]: v });
+
+  // Auto-update nr when registru changes (only for empty/fresh borderouri)
+  useEffect(() => {
+    if (!registru.length) return;
+    setBorderouri(p => p.map(b => {
+      const isEmpty = !b.det && !b.cnp && (!b.produse || b.produse.every(pr => !pr.den && !pr.cant));
+      if (!isEmpty) return b;
+      const nextNr = getNextNr(b.serie, registru);
+      if (b.nr === nextNr) return b;
+      return { ...b, nr: nextNr };
+    }));
+  }, [registru]);
   const updP = (i, f, v) => setB((b) => { const ps = [...b.produse]; ps[i] = { ...ps[i], [f]: v }; if (f === "den") { const fd = PRODUSE_LIST.find((p) => p.den === v); if (fd) { ps[i].cod = fd.cod; ps[i].cod_art = fd.cod_art; } } return { ...b, produse: ps }; });
   const bTot = b.produse.reduce((s, p) => s + (parseFloat(p.cant) || 0) * (parseFloat(p.pret) || 0), 0);
   const bImp = Math.round(bTot * 0.1), bTax = Math.round(bTot * 0.02), bRest = bTot - bImp - bTax;
@@ -2004,8 +2016,8 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                         <div style={{ display: "flex", gap: 8 }}>
                           <div style={{ flex: "0 0 85px" }}><label style={LSt}>Seria</label><select style={{ ...IFS, fontWeight: 700, color: G }} value={b.serie} onChange={(e) => updB("serie", e.target.value)}>{SERII.map((s) => <option key={s}>{s}</option>)}</select></div>
                           <div style={{ flex: 1 }}><label style={LSt}>Nr.</label><input style={{ ...IFS, fontWeight: 700, color: "#1565c0" }} value={b.nr} onChange={(e) => updB("nr", e.target.value)} /></div>
-                          <div style={{ flex: 1 }}><label style={LSt}>Data</label><DateInput value={b.data || ""} onChange={(v) => updB("data", v)} style={IFS} /></div>
                         </div>
+                        <div style={{ marginTop: 8 }}><label style={LSt}>Data</label><DateInput value={b.data || ""} onChange={(v) => updB("data", v)} style={IFS} /></div>
                       </div>
                       <div style={{ background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 8, padding: 12 }}>
                         <div style={{ fontWeight: 700, color: "#1565c0", marginBottom: 8, fontSize: 12 }}>👤 Date Deținător</div>
