@@ -1816,12 +1816,26 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
           const pvMonth = pvList.filter(p => isCurMonth(p.data));
           const colToday = colRows.filter(c => isToday(c.data));
           const chMonth = chRows.filter(c => isCurMonth(c.data));
-
-          const cantToday = bordToday.reduce((s, r) => s + (parseFloat(r.cantitate) || 0), 0) + colToday.reduce((s, c) => s + (parseFloat(c.cant) || 0), 0) + pvToday.reduce((s, p) => s + (p.materiale || []).reduce((ss, m) => ss + (parseFloat(m.cant) || 0), 0), 0);
           const colMonth = colRows.filter(c => isCurMonth(c.data));
-          const cantMonthTotal = bordMonth.reduce((s, r) => s + (parseFloat(r.cantitate) || 0), 0)
-            + colMonth.reduce((s, c) => s + (parseFloat(c.cant) || 0), 0)
-            + pvMonth.reduce((s, p) => s + (p.materiale || []).reduce((ss, m) => ss + (parseFloat(m.cant) || 0), 0), 0);
+          const livMonth = livRows.filter(l => isCurMonth(l.data));
+
+          // BORDEROURI luna curentă
+          const bordCountMonth = new Set(bordMonth.map(r => `${r.serie}__${r.nr}`)).size; // unique borderouri
+          const bordKgMonth = bordMonth.reduce((s, r) => s + (parseFloat(r.cantitate) || 0), 0);
+          const bordValMonth = bordMonth.reduce((s, r) => s + (parseFloat(r.cantitate) || 0) * (parseFloat(r.pu) || 0), 0);
+
+          // PV luna curentă
+          const pvKgMonth = pvMonth.reduce((s, p) => s + (p.materiale || []).reduce((ss, m) => ss + (parseFloat(m.cant) || 0), 0), 0);
+
+          // COLECTARI luna curentă
+          const colValMonth = colMonth.reduce((s, r) => s + (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0), 0);
+          const colValAchitat = colMonth.filter(r => r.ach === "Da").reduce((s, r) => s + (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0), 0);
+          const colValNeachitat = colMonth.filter(r => r.ach === "Nu").reduce((s, r) => s + (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0), 0);
+
+          // LIVRARI luna curentă
+          const livValMonth = livMonth.reduce((s, r) => s + (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0), 0);
+
+          // CHELTUIELI luna curentă
           const chTotalMonth = chMonth.reduce((s, c) => s + (parseFloat(c.suma) || 0), 0);
 
           const totStocKg = stocAg.reduce((s, r) => s + Math.max(0, r.cant), 0);
@@ -1853,35 +1867,37 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
 
               {/* Stats Cards */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 12, marginBottom: 16 }}>
+                {/* BORDEROURI */}
                 <div style={{ background: "#fff", border: "2px solid #1565c0", borderRadius: 10, padding: 14 }}>
-                  <div style={{ fontSize: 11, color: "#666", marginBottom: 4 }}>📄 BORDEROURI</div>
-                  <div style={{ fontSize: 26, fontWeight: 800, color: "#1565c0" }}>{bordToday.length}</div>
-                  <div style={{ fontSize: 11, color: "#888" }}>azi • {bordMonth.length} luna asta</div>
+                  <div style={{ fontSize: 11, color: "#666", marginBottom: 6, fontWeight: 600 }}>📄 BORDEROURI — luna asta</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: "#1565c0", lineHeight: 1.2 }}>{bordCountMonth}</div>
+                  <div style={{ fontSize: 11, color: "#555", marginTop: 4 }}>📦 <strong>{fmt(bordKgMonth)} kg</strong></div>
+                  <div style={{ fontSize: 11, color: "#555" }}>💰 <strong>{fmt(bordValMonth)} lei</strong></div>
                 </div>
+                {/* PV-URI */}
                 <div style={{ background: "#fff", border: "2px solid #e65100", borderRadius: 10, padding: 14 }}>
-                  <div style={{ fontSize: 11, color: "#666", marginBottom: 4 }}>📋 PV-URI</div>
-                  <div style={{ fontSize: 26, fontWeight: 800, color: "#e65100" }}>{pvToday.length}</div>
-                  <div style={{ fontSize: 11, color: "#888" }}>azi • {pvMonth.length} luna asta</div>
+                  <div style={{ fontSize: 11, color: "#666", marginBottom: 6, fontWeight: 600 }}>📋 PV-URI — luna asta</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: "#e65100", lineHeight: 1.2 }}>{pvMonth.length}</div>
+                  <div style={{ fontSize: 11, color: "#555", marginTop: 4 }}>📦 <strong>{fmt(pvKgMonth)} kg</strong></div>
                 </div>
+                {/* COLECTARI */}
                 <div style={{ background: "#fff", border: "2px solid #2e7d32", borderRadius: 10, padding: 14 }}>
-                  <div style={{ fontSize: 11, color: "#666", marginBottom: 4 }}>🚛 COLECTĂRI</div>
-                  <div style={{ fontSize: 26, fontWeight: 800, color: "#2e7d32" }}>{colToday.length}</div>
-                  <div style={{ fontSize: 11, color: "#888" }}>azi • {colMonth.length} luna asta</div>
+                  <div style={{ fontSize: 11, color: "#666", marginBottom: 6, fontWeight: 600 }}>🚛 COLECTĂRI — luna asta</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: "#2e7d32", lineHeight: 1.2 }}>{fmt(colValMonth)} lei</div>
+                  <div style={{ fontSize: 11, color: G, marginTop: 4 }}>✅ Achitat: <strong>{fmt(colValAchitat)} lei</strong></div>
+                  <div style={{ fontSize: 11, color: "#c62828" }}>⏳ Neachitat: <strong>{fmt(colValNeachitat)} lei</strong></div>
                 </div>
-                <div style={{ background: "#fff", border: `2px solid ${G}`, borderRadius: 10, padding: 14 }}>
-                  <div style={{ fontSize: 11, color: "#666", marginBottom: 4 }}>⚖️ CANTITATE COLECTATĂ</div>
-                  <div style={{ fontSize: 26, fontWeight: 800, color: G }}>{fmt(cantToday)} kg</div>
-                  <div style={{ fontSize: 11, color: "#888" }}>azi • {fmt(cantMonthTotal)} kg luna asta</div>
-                </div>
+                {/* LIVRARI */}
                 <div style={{ background: "#fff", border: "2px solid #6a1b9a", borderRadius: 10, padding: 14 }}>
-                  <div style={{ fontSize: 11, color: "#666", marginBottom: 4 }}>📦 STOC TOTAL</div>
-                  <div style={{ fontSize: 26, fontWeight: 800, color: "#6a1b9a" }}>{fmt(totStocKg)} kg</div>
-                  <div style={{ fontSize: 11, color: stocNegativ > 0 ? "#c62828" : "#888", fontWeight: stocNegativ > 0 ? 700 : 400 }}>{stocNegativ > 0 ? `⚠️ ${stocNegativ} stoc negativ` : `${stocAg.length} produse`}</div>
+                  <div style={{ fontSize: 11, color: "#666", marginBottom: 6, fontWeight: 600 }}>📤 LIVRĂRI — luna asta</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: "#6a1b9a", lineHeight: 1.2 }}>{fmt(livValMonth)} lei</div>
+                  <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>{livMonth.length} livrări</div>
                 </div>
+                {/* CHELTUIELI */}
                 <div style={{ background: "#fff", border: "2px solid #c62828", borderRadius: 10, padding: 14 }}>
-                  <div style={{ fontSize: 11, color: "#666", marginBottom: 4 }}>💸 CHELTUIELI LUNA</div>
-                  <div style={{ fontSize: 26, fontWeight: 800, color: "#c62828" }}>{fmt(chTotalMonth)} lei</div>
-                  <div style={{ fontSize: 11, color: "#888" }}>{chMonth.length} înregistrări</div>
+                  <div style={{ fontSize: 11, color: "#666", marginBottom: 6, fontWeight: 600 }}>💸 CHELTUIELI — luna asta</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: "#c62828", lineHeight: 1.2 }}>{fmt(chTotalMonth)} lei</div>
+                  <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>{chMonth.length} înregistrări</div>
                 </div>
               </div>
 
@@ -2385,7 +2401,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   <th style={th({})}></th>
                   <th style={th({ textAlign: "center" })}>Data</th>
                   <th style={th({ textAlign: "center" })}>GK/Deee</th>
-                  <th style={th({ textAlign: "center" })}>Suma(lei)</th>
+                  <th style={th({ textAlign: "center" })}>Total (lei)</th>
                   <th style={th({ textAlign: "center" })}>Categorie</th>
                   <th style={th({ textAlign: "left" })}>Detalii</th>
                   <th style={th({ textAlign: "center" })}>Achitat</th>
@@ -2467,7 +2483,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   <th style={th({ textAlign: "left" })}>Produs</th>
                   <th style={th({ textAlign: "center" })}>Cant.(kg)</th>
                   <th style={th({ textAlign: "center" })}>Preț</th>
-                  <th style={th({ textAlign: "center" })}>Total</th>
+                  <th style={th({ textAlign: "center" })}>Total (lei)</th>
                   <th style={th({ textAlign: "center" })}>Fără Imp.12%</th>
                   <th style={th({ textAlign: "center" })}>Achitat</th>
                   <th style={th({ textAlign: "center" })}>Achitat De</th>
@@ -2522,7 +2538,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   <th style={th({ textAlign: "left" })}>Produs</th>
                   <th style={th({ textAlign: "center" })}>Cant.(kg)</th>
                   <th style={th({ textAlign: "center" })}>Preț</th>
-                  <th style={th({ textAlign: "center" })}>Total(lei)</th>
+                  <th style={th({ textAlign: "center" })}>Total (lei)</th>
                   <th style={th({ textAlign: "center" })}>Facturat</th>
                   <th style={th({ textAlign: "center" })}>Încasat</th>
                   <th style={th({ textAlign: "left" })}>Detalii</th>
@@ -2654,7 +2670,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
             <div style={{ overflowX: "auto" }}>
               <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 480 }}>
                 <colgroup><col style={{ width: 28 }} /><col style={{ width: 130 }} /><col style={{ width: 130 }} /><col style={{ width: 100 }} /><col /><col style={{ width: 30 }} /></colgroup>
-                <thead><tr style={{ background: "#c62828" }}><th style={th({ background: "#b71c1c" })}></th><th style={th({ background: "#c62828", textAlign: "center" })}>Data</th><th style={th({ background: "#c62828", textAlign: "center" })}>Nume</th><th style={th({ background: "#c62828", textAlign: "center" })}>Suma (lei)</th><th style={th({ background: "#c62828", textAlign: "center" })}>Detalii</th><th style={th({ background: "#c62828" })}></th></tr></thead>
+                <thead><tr style={{ background: "#c62828" }}><th style={th({ background: "#b71c1c" })}></th><th style={th({ background: "#c62828", textAlign: "center" })}>Data</th><th style={th({ background: "#c62828", textAlign: "center" })}>Nume</th><th style={th({ background: "#c62828", textAlign: "center" })}>Total (lei)</th><th style={th({ background: "#c62828", textAlign: "center" })}>Detalii</th><th style={th({ background: "#c62828" })}></th></tr></thead>
                 <tbody>{filtDat.map((r, i) => { const oi = datRows.indexOf(r); const rowBg = i % 2 === 0 ? "#fff" : "#fff5f5"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 2}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updDAT(oi, "data", v)} /></td><td style={td({ background: "#fff8e1", fontWeight: 600 })}><input style={inp({ textAlign: "center", fontWeight: 600 })} value={r.nume || ""} onChange={(e) => updDAT(oi, "nume", e.target.value)} placeholder="Nume..." /></td><td style={td({ background: "#ffebee", textAlign: "right", fontWeight: 700, color: "#c62828" })}><input style={inp({ textAlign: "right", fontWeight: 700, color: "#c62828" })} value={r.suma || ""} onChange={(e) => updDAT(oi, "suma", e.target.value)} placeholder="0" /></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.det}><input style={inp({ textAlign: "center" })} value={r.det || ""} onChange={(e) => updDAT(oi, "det", e.target.value)} placeholder="Descriere..." /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delDAT(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 14 }}>✕</button></td></tr>); })}</tbody>
                 <tfoot><tr style={{ background: "#c62828", color: "#fff" }}><td colSpan={3} style={{ padding: "7px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL {datFilter ? "— " + datFilter : ""}</td><td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700, fontSize: 13 }}>{fmt(totDat)} lei</td><td colSpan={2}></td></tr></tfoot>
               </table>
@@ -2685,7 +2701,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
             <div style={{ overflowX: "auto" }}>
               <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 480 }}>
                 <colgroup><col style={{ width: 28 }} /><col style={{ width: 130 }} /><col style={{ width: 140 }} /><col style={{ width: 110 }} /><col style={{ width: 110 }} /><col /><col style={{ width: 30 }} /></colgroup>
-                <thead><tr style={{ background: G }}><th style={th({ background: "#155a35" })}></th><th style={th({ textAlign: "center" })}>Data</th><th style={th({ textAlign: "center" })}>Către</th><th style={th({ textAlign: "center" })}>Suma (lei)</th><th style={th({ textAlign: "center" })}>Tip</th><th style={th({ textAlign: "center" })}>Detalii</th><th style={th({})}></th></tr></thead>
+                <thead><tr style={{ background: G }}><th style={th({ background: "#155a35" })}></th><th style={th({ textAlign: "center" })}>Data</th><th style={th({ textAlign: "center" })}>Către</th><th style={th({ textAlign: "center" })}>Total (lei)</th><th style={th({ textAlign: "center" })}>Tip</th><th style={th({ textAlign: "center" })}>Detalii</th><th style={th({})}></th></tr></thead>
                 <tbody>
                   {filtAv.length === 0 && <tr><td colSpan={7} style={{ textAlign: "center", padding: 20, color: "#aaa" }}>Nicio înregistrare.</td></tr>}
                   {filtAv.map((r, i) => { const oi = avRows.indexOf(r); const isDiv = r.tip === "dividend"; const rowBg = isDiv ? (i % 2 === 0 ? "#eff6ff" : "#dbeafe") : (i % 2 === 0 ? "#fff" : "#f9f9f9"); return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 2}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updAV(oi, "data", v)} /></td><td style={td({ background: rowBg, fontWeight: 600 })}><input style={inp({ textAlign: "center", fontWeight: 600 })} value={r.catre || ""} onChange={(e) => updAV(oi, "catre", e.target.value)} placeholder="—" /></td><td style={td({ background: rowBg, textAlign: "right", fontWeight: 700, color: isDiv ? "#1565c0" : "#e65100" })}><input style={inp({ textAlign: "right", fontWeight: 700, color: isDiv ? "#1565c0" : "#e65100" })} value={r.suma || ""} onChange={(e) => updAV(oi, "suma", e.target.value)} placeholder="0" /></td><td style={td({ background: isDiv ? "#dbeafe" : "#fff3e0", textAlign: "center" })}><select style={sel({ color: isDiv ? "#1565c0" : "#e65100", fontWeight: 700, textAlign: "center" })} value={r.tip || ""} onChange={(e) => updAV(oi, "tip", e.target.value)}><option value="avans">avans</option><option value="dividend">dividende</option></select></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "center" })} value={r.det || ""} onChange={(e) => updAV(oi, "det", e.target.value)} placeholder="..." /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delAV(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 14 }}>✕</button></td></tr>); })}
