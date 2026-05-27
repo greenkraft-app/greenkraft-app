@@ -1239,7 +1239,6 @@ export default function App() {
         { excel: "Denumire", field: "denumire" },
         { excel: "Cantitate (kg)", field: "cantitate", type: "number" },
         { excel: "Pret Unitar", field: "pu", type: "number" },
-        { excel: "Valoare (lei)", field: "valoare", type: "number" },
         { excel: "Trasabilitate", field: "trasabilitate" },
       ],
     },
@@ -1342,15 +1341,72 @@ export default function App() {
     try {
       const XLSX = await loadXLSX();
       const buffer = await file.arrayBuffer();
-      const wb = XLSX.read(buffer, { type: "array" });
+      const wb = XLSX.read(buffer, { type: "array", cellDates: true });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: "", raw: true });
       if (rows.length === 0) {
         setImpResult({ success: false, message: "Fișierul e gol sau nu are header valid." });
         setImpLoading(false);
         return;
       }
 
+      // Helper: convert various date formats to DD.MM.YYYY
+      const toDateRO = (val) => {
+        if (val instanceof Date) {
+          return `${String(val.getDate()).padStart(2,"0")}.${String(val.getMonth()+1).padStart(2,"0")}.${val.getFullYear()}`;
+        }
+        if (typeof val === "number" && val > 25000 && val < 100000) {
+          // Excel serial number
+          const d = new Date(Math.round((val - 25569) * 86400 * 1000));
+          return `${String(d.getDate()).padStart(2,"0")}.${String(d.getMonth()+1).padStart(2,"0")}.${d.getFullYear()}`;
+        }
+        return String(val).trim();
+      };
+
+      const dateRe = /^\d{2}\.\d{2}\.\d{4}$/;
+      const produseSet = new Set(PRODUSE_LIST.map(p => p.den.toUpperCase()));
+
+      // ── VALIDATION PASS ──
+      const validationErrors = [];
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        // Skip totally empty rows
+        const hasAny = Object.values(row).some(v => v !== "" && v !== null && v !== undefined);
+        if (!hasAny) continue;
+
+        for (const col of schema.columns) {
+          let val = row[col.excel];
+          if (val === undefined || val === "") continue;
+
+          // Date validation
+          if (col.field === "data") {
+            const dStr = toDateRO(val);
+            if (!dateRe.test(dStr)) {
+              validationErrors.push(`Rândul ${i + 2} — coloana "${col.excel}": format invalid "${val}". Necesar: DD.MM.YYYY (ex: 15.05.2026)`);
+            }
+          }
+
+          // Denumire validation (PF, PJ materiale, Colectari produs, Livrari produs)
+          if ((col.field === "denumire" || col.field === "_mat_den" || col.field === "produs") && val) {
+            const upper = String(val).toUpperCase().trim();
+            if (!produseSet.has(upper)) {
+              validationErrors.push(`Rândul ${i + 2} — denumire "${val}" nu există în lista de produse SAGA. Verifică ortografia.`);
+            }
+          }
+        }
+      }
+
+      if (validationErrors.length > 0) {
+        setImpResult({
+          success: false,
+          message: `❌ Import RESPINS — ${validationErrors.length} erori de validare. Corectează fișierul și încearcă din nou.`,
+          errors: validationErrors.slice(0, 30)
+        });
+        setImpLoading(false);
+        return;
+      }
+
+      // ── INSERT PASS ──
       let inserted = 0;
       let errors = [];
 
@@ -1366,31 +1422,33 @@ export default function App() {
             pvMap[key2] = {
               serie, nr_pv: nr,
               nr_anexa: String(row["Nr Anexa"] || nr).trim(),
-              data: row["Data"] || today(),
-              client_denumire: row["Client Denumire"] || "",
-              client_cui: row["Client CUI"] || "",
-              client_adresa: row["Client Adresa"] || "",
-              client_reg_com: row["Client Reg Com"] || "",
-              client_reprezentant: row["Client Reprezentant"] || "",
-              delegat: row["Delegat"] || "",
-              nr_masina: row["Nr Masina"] || "",
-              licenta: row["Licenta"] || "",
-              destinatie: row["Destinatie"] || "Valorificare",
-              trasabilitate: row["Trasabilitate"] || "",
+              data: toDateRO(row["Data"]) || today(),
+              client_denumire: String(row["Client Denumire"] || "").trim(),
+              client_cui: String(row["Client CUI"] || "").trim(),
+              client_adresa: String(row["Client Adresa"] || "").trim(),
+              client_reg_com: String(row["Client Reg Com"] || "").trim(),
+              client_reprezentant: String(row["Client Reprezentant"] || "").trim(),
+              delegat: String(row["Delegat"] || "").trim(),
+              nr_masina: String(row["Nr Masina"] || "").trim(),
+              licenta: String(row["Licenta"] || "").trim(),
+              destinatie: String(row["Destinatie"] || "Valorificare").trim(),
+              trasabilitate: String(row["Trasabilitate"] || "").trim(),
               materiale: [],
             };
           }
           const matDen = row["Material Denumire"];
           if (matDen) {
+            const denStr = String(matDen).trim();
+            // Auto-fill Cod HG and Cod SAGA from PRODUSE_LIST
+            const fd = PRODUSE_LIST.find(p => p.den.toUpperCase() === denStr.toUpperCase());
             pvMap[key2].materiale.push({
-              den: matDen,
-              cod: row["Material Cod HG"] || "",
-              cod_art: row["Material Cod SAGA"] || "",
-              cant: parseFloat(row["Material Cantitate (kg)"]) || 0,
+              den: fd?.den || denStr,
+              cod: row["Material Cod HG"] || fd?.cod || "",
+              cod_art: row["Material Cod SAGA"] || fd?.cod_art || "",
+              cant: parseFloat(String(row["Material Cantitate (kg)"]).replace(/,/g, ".")) || 0,
             });
           }
         }
-        // Insert each PV
         for (const pv of Object.values(pvMap)) {
           try {
             const { error } = await sb.from(schema.table).insert(pv);
@@ -1407,7 +1465,9 @@ export default function App() {
           for (const col of schema.columns) {
             let val = row[col.excel];
             if (val === undefined || val === "") { record[col.field] = col.type === "number" ? 0 : ""; continue; }
-            if (col.type === "number") {
+            if (col.field === "data") {
+              val = toDateRO(val);
+            } else if (col.type === "number") {
               val = parseFloat(String(val).replace(/,/g, ".")) || 0;
             } else {
               val = String(val).trim();
@@ -1416,6 +1476,17 @@ export default function App() {
             if (val !== "" && val !== 0) hasData = true;
           }
           if (!hasData) continue;
+
+          // ── AUTO-CALCULATE VALOARE for Registru PF ──
+          if (key === "registru_pf") {
+            const cant = parseFloat(record.cantitate) || 0;
+            const pu = parseFloat(record.pu) || 0;
+            const v = cant * pu;
+            const imp = Math.round(v * 0.1);
+            const tx = Math.round(v * 0.02);
+            record.valoare = Math.round(v - imp - tx);
+          }
+
           try {
             const { error } = await sb.from(schema.table).insert(record);
             if (error) errors.push(`Rândul ${i + 2}: ${error.message}`);
@@ -1427,7 +1498,7 @@ export default function App() {
       await logAction("import", schema.table, "", { count: inserted });
       setImpResult({
         success: errors.length === 0,
-        message: `Import finalizat: ${inserted} înregistrări adăugate.${errors.length ? ` ${errors.length} erori.` : ""}`,
+        message: `${errors.length === 0 ? "✅" : "⚠️"} Import finalizat: ${inserted} înregistrări adăugate.${errors.length ? ` ${errors.length} erori la inserare.` : ""}`,
         errors: errors.slice(0, 10)
       });
     } catch (e) {
