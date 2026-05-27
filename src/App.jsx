@@ -788,6 +788,11 @@ export default function App() {
   const [trasFactura, setTrasFactura] = useState("");
   const [pdfBundle, setPdfBundle] = useState({ borderouri: [], pvuri: [] });
   const pdfBundleRef = useRef();
+  // ── Import/Export state ──
+  const [impTarget, setImpTarget] = useState("");
+  const [impLoading, setImpLoading] = useState(false);
+  const [impResult, setImpResult] = useState(null);
+  const impFileRef = useRef();
   const [cuiSearch, setCuiSearch] = useState("");
   const [cuiLoading, setCuiLoading] = useState(false);
   const [cuiResult, setCuiResult] = useState(null);
@@ -1216,6 +1221,219 @@ export default function App() {
       XLSX.writeFile(wb, fileName);
     } catch (e) { alert("Eroare export: " + e.message); }
     setRapLoading(false);
+  };
+
+  // ── Import/Export Schemas ────────────────────────────────
+  const IMPORT_SCHEMAS = {
+    registru_pf: {
+      label: "📄 Registru PF (Borderouri)",
+      table: "registru",
+      color: "#1565c0",
+      columns: [
+        { excel: "Serie", field: "serie" },
+        { excel: "Nr", field: "nr" },
+        { excel: "Data", field: "data" },
+        { excel: "Furnizor", field: "furnizor" },
+        { excel: "Adresa", field: "adresa" },
+        { excel: "CNP", field: "cnp" },
+        { excel: "Denumire", field: "denumire" },
+        { excel: "Cantitate (kg)", field: "cantitate", type: "number" },
+        { excel: "Pret Unitar", field: "pu", type: "number" },
+        { excel: "Valoare (lei)", field: "valoare", type: "number" },
+        { excel: "Trasabilitate", field: "trasabilitate" },
+      ],
+    },
+    registru_pj: {
+      label: "📋 Registru PJ (PV-uri)",
+      table: "procese_verbale",
+      color: "#e65100",
+      isPV: true, // special handling - group by serie+nr
+      columns: [
+        { excel: "Serie", field: "serie" },
+        { excel: "Nr PV", field: "nr_pv" },
+        { excel: "Nr Anexa", field: "nr_anexa" },
+        { excel: "Data", field: "data" },
+        { excel: "Client Denumire", field: "client_denumire" },
+        { excel: "Client CUI", field: "client_cui" },
+        { excel: "Client Adresa", field: "client_adresa" },
+        { excel: "Client Reg Com", field: "client_reg_com" },
+        { excel: "Client Reprezentant", field: "client_reprezentant" },
+        { excel: "Delegat", field: "delegat" },
+        { excel: "Nr Masina", field: "nr_masina" },
+        { excel: "Licenta", field: "licenta" },
+        { excel: "Destinatie", field: "destinatie" },
+        { excel: "Material Denumire", field: "_mat_den" },
+        { excel: "Material Cod HG", field: "_mat_cod" },
+        { excel: "Material Cod SAGA", field: "_mat_cod_art" },
+        { excel: "Material Cantitate (kg)", field: "_mat_cant", type: "number" },
+        { excel: "Trasabilitate", field: "trasabilitate" },
+      ],
+    },
+    cheltuieli: {
+      label: "💸 Cheltuieli",
+      table: "cheltuieli",
+      color: "#c62828",
+      columns: [
+        { excel: "Data", field: "data" },
+        { excel: "GK/Deee", field: "gk" },
+        { excel: "Total (lei)", field: "suma", type: "number" },
+        { excel: "Categorie", field: "cat" },
+        { excel: "Detalii", field: "det" },
+        { excel: "Achitat", field: "ach" },
+        { excel: "Achitat De", field: "ach_de" },
+        { excel: "Note", field: "note" },
+      ],
+    },
+    colectari: {
+      label: "🚛 Colectări",
+      table: "colectari",
+      color: "#2e7d32",
+      columns: [
+        { excel: "Data", field: "data" },
+        { excel: "Agent", field: "agent" },
+        { excel: "Furnizor", field: "furn" },
+        { excel: "Categorie", field: "cat" },
+        { excel: "Produs", field: "produs" },
+        { excel: "Cantitate (kg)", field: "cant", type: "number" },
+        { excel: "Pret", field: "pret", type: "number" },
+        { excel: "Achitat", field: "ach" },
+        { excel: "Achitat De", field: "ach_de" },
+      ],
+    },
+    livrari: {
+      label: "📤 Livrări",
+      table: "livrari",
+      color: "#6a1b9a",
+      columns: [
+        { excel: "Data", field: "data" },
+        { excel: "Nr", field: "nr" },
+        { excel: "Client", field: "client" },
+        { excel: "Produs", field: "produs" },
+        { excel: "Cantitate (kg)", field: "cant", type: "number" },
+        { excel: "Pret", field: "pret", type: "number" },
+        { excel: "Facturat", field: "fact" },
+        { excel: "Incasat", field: "inc" },
+        { excel: "Detalii", field: "det" },
+      ],
+    },
+  };
+
+  // Export template (empty Excel with headers)
+  const exportTemplate = async (key) => {
+    const schema = IMPORT_SCHEMAS[key];
+    if (!schema) return;
+    try {
+      const XLSX = await loadXLSX();
+      const headers = schema.columns.map(c => c.excel);
+      const ws = XLSX.utils.aoa_to_sheet([headers]);
+      ws["!cols"] = headers.map(h => ({ wch: Math.max(12, h.length + 4) }));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, schema.label.replace(/[^a-zA-Z0-9 ]/g, "").trim().slice(0, 30));
+      XLSX.writeFile(wb, `Template_${key}_${today().replace(/\./g, "-")}.xlsx`);
+    } catch (e) { alert("Eroare: " + e.message); }
+  };
+
+  // Import from Excel
+  const importFromExcel = async (file, key) => {
+    const schema = IMPORT_SCHEMAS[key];
+    if (!schema) return;
+    setImpLoading(true);
+    setImpResult(null);
+    try {
+      const XLSX = await loadXLSX();
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
+      if (rows.length === 0) {
+        setImpResult({ success: false, message: "Fișierul e gol sau nu are header valid." });
+        setImpLoading(false);
+        return;
+      }
+
+      let inserted = 0;
+      let errors = [];
+
+      if (schema.isPV) {
+        // Special handling for PV - group rows by serie+nr_pv
+        const pvMap = {};
+        for (const row of rows) {
+          const serie = row["Serie"] || "A";
+          const nr = String(row["Nr PV"] || "").trim();
+          if (!nr) continue;
+          const key2 = `${serie}__${nr}`;
+          if (!pvMap[key2]) {
+            pvMap[key2] = {
+              serie, nr_pv: nr,
+              nr_anexa: String(row["Nr Anexa"] || nr).trim(),
+              data: row["Data"] || today(),
+              client_denumire: row["Client Denumire"] || "",
+              client_cui: row["Client CUI"] || "",
+              client_adresa: row["Client Adresa"] || "",
+              client_reg_com: row["Client Reg Com"] || "",
+              client_reprezentant: row["Client Reprezentant"] || "",
+              delegat: row["Delegat"] || "",
+              nr_masina: row["Nr Masina"] || "",
+              licenta: row["Licenta"] || "",
+              destinatie: row["Destinatie"] || "Valorificare",
+              trasabilitate: row["Trasabilitate"] || "",
+              materiale: [],
+            };
+          }
+          const matDen = row["Material Denumire"];
+          if (matDen) {
+            pvMap[key2].materiale.push({
+              den: matDen,
+              cod: row["Material Cod HG"] || "",
+              cod_art: row["Material Cod SAGA"] || "",
+              cant: parseFloat(row["Material Cantitate (kg)"]) || 0,
+            });
+          }
+        }
+        // Insert each PV
+        for (const pv of Object.values(pvMap)) {
+          try {
+            const { error } = await sb.from(schema.table).insert(pv);
+            if (error) errors.push(`PV ${pv.serie} #${pv.nr_pv}: ${error.message}`);
+            else inserted++;
+          } catch (e) { errors.push(`PV ${pv.serie} #${pv.nr_pv}: ${e.message}`); }
+        }
+      } else {
+        // Standard row-by-row insert
+        for (let i = 0; i < rows.length; i++) {
+          const row = rows[i];
+          const record = {};
+          let hasData = false;
+          for (const col of schema.columns) {
+            let val = row[col.excel];
+            if (val === undefined || val === "") { record[col.field] = col.type === "number" ? 0 : ""; continue; }
+            if (col.type === "number") {
+              val = parseFloat(String(val).replace(/,/g, ".")) || 0;
+            } else {
+              val = String(val).trim();
+            }
+            record[col.field] = val;
+            if (val !== "" && val !== 0) hasData = true;
+          }
+          if (!hasData) continue;
+          try {
+            const { error } = await sb.from(schema.table).insert(record);
+            if (error) errors.push(`Rândul ${i + 2}: ${error.message}`);
+            else inserted++;
+          } catch (e) { errors.push(`Rândul ${i + 2}: ${e.message}`); }
+        }
+      }
+
+      await logAction("import", schema.table, "", { count: inserted });
+      setImpResult({
+        success: errors.length === 0,
+        message: `Import finalizat: ${inserted} înregistrări adăugate.${errors.length ? ` ${errors.length} erori.` : ""}`,
+        errors: errors.slice(0, 10)
+      });
+    } catch (e) {
+      setImpResult({ success: false, message: "Eroare la citire fișier: " + e.message });
+    }
+    setImpLoading(false);
   };
 
   // ── Trasabilitate functions ──────────────────────────────
@@ -3009,6 +3227,65 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
             <div style={{ marginTop: 16, background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#666" }}>
               <strong style={{ color: "#e65100" }}>ℹ️ Structură Excel:</strong> Serie • Nr • Data • Furnizor • Adresa • CNP/CUI • Denumire • CodSAGA • Cantitate • PU • CodFSaga • Trasabilitate • Nr NIR • Denumire Deseu • Impozit 10% • Taxa Mediu 2% • Valoare
               <br/><span style={{ fontSize: 11 }}>Câmpurile lipsă (CodSAGA, CodFSaga, Trasabilitate, NIR) rămân goale pentru completare manuală.</span>
+            </div>
+
+            {/* ═══ IMPORT / EXPORT TEMPLATES ═══ */}
+            <div style={{ marginTop: 24, background: "linear-gradient(135deg,#f5f5f5,#fff)", border: "2px solid #ccc", borderRadius: 10, padding: 16 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#333", marginBottom: 6 }}>📂 Import / Export Date</div>
+              <div style={{ fontSize: 12, color: "#666", marginBottom: 14 }}>
+                Descarcă template Excel cu antetul corect, completează-l offline, apoi importă datele.
+                Înregistrările deja existente NU sunt afectate — doar se adaugă cele noi.
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 12 }}>
+                {Object.entries(IMPORT_SCHEMAS).map(([key, schema]) => (
+                  <div key={key} style={{ background: "#fff", border: `2px solid ${schema.color}`, borderRadius: 8, padding: 12 }}>
+                    <div style={{ fontWeight: 700, color: schema.color, marginBottom: 8, fontSize: 13 }}>{schema.label}</div>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button onClick={() => exportTemplate(key)} style={{ flex: 1, background: "#fff", color: schema.color, border: `1px solid ${schema.color}`, borderRadius: 5, padding: "6px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>📥 Template</button>
+                      <button onClick={() => { setImpTarget(key); impFileRef.current?.click(); }} disabled={impLoading} style={{ flex: 1, background: schema.color, color: "#fff", border: "none", borderRadius: 5, padding: "6px 10px", cursor: impLoading ? "wait" : "pointer", fontSize: 11, fontWeight: 600 }}>📤 Import</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <input
+                ref={impFileRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                style={{ display: "none" }}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file || !impTarget) return;
+                  const schema = IMPORT_SCHEMAS[impTarget];
+                  if (!window.confirm(`Importi datele din "${file.name}" în ${schema.label}?\n\nÎnregistrările existente NU sunt afectate.`)) {
+                    e.target.value = "";
+                    return;
+                  }
+                  await importFromExcel(file, impTarget);
+                  e.target.value = "";
+                }}
+              />
+
+              {impLoading && (
+                <div style={{ marginTop: 12, padding: 10, background: "#e3f2fd", borderRadius: 6, color: "#1565c0", fontSize: 12, textAlign: "center", fontWeight: 600 }}>
+                  ⏳ Se importă datele... așteaptă...
+                </div>
+              )}
+
+              {impResult && (
+                <div style={{ marginTop: 12, padding: 12, background: impResult.success ? "#e8f5e9" : "#ffebee", border: `1px solid ${impResult.success ? G : "#c62828"}`, borderRadius: 6, fontSize: 12 }}>
+                  <div style={{ fontWeight: 700, color: impResult.success ? G : "#c62828", marginBottom: 4 }}>
+                    {impResult.success ? "✅" : "⚠️"} {impResult.message}
+                  </div>
+                  {impResult.errors && impResult.errors.length > 0 && (
+                    <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 11, color: "#666" }}>
+                      {impResult.errors.map((err, i) => <li key={i}>{err}</li>)}
+                    </ul>
+                  )}
+                  <button onClick={() => setImpResult(null)} style={{ marginTop: 6, background: "none", border: "none", color: "#888", cursor: "pointer", fontSize: 11, textDecoration: "underline" }}>✕ Închide</button>
+                </div>
+              )}
             </div>
           </div>
         )}
