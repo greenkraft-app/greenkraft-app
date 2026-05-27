@@ -819,7 +819,7 @@ export default function App() {
   const setB = (fn) => setBorderouri((p) => { const n = [...p]; n[activeBord] = fn(n[activeBord]); return n; });
   const updB = (f, v) => setB((b) => f === "serie" ? { ...b, serie: v, nr: getNextNr(v, registru) } : { ...b, [f]: v });
   const lastRegLen = useRef(0);
-  const updP = (i, f, v) => setB((b) => { const ps = [...b.produse]; ps[i] = { ...ps[i], [f]: v }; if (f === "den") { const fd = PRODUSE_LIST.find((p) => p.den === v); if (fd) { ps[i].cod = fd.cod; ps[i].cod_art = fd.cod_art; } } return { ...b, produse: ps }; });
+  const updP = (i, f, v) => setB((b) => { const ps = [...b.produse]; ps[i] = { ...ps[i], [f]: v }; if (f === "den") { const fd = produseList.find((p) => p.den === v); if (fd) { ps[i].cod = fd.cod; ps[i].cod_art = fd.cod_art; } } return { ...b, produse: ps }; });
   const bTot = b.produse.reduce((s, p) => s + (parseFloat(p.cant) || 0) * (parseFloat(p.pret) || 0), 0);
   const bImp = Math.round(bTot * 0.1), bTax = Math.round(bTot * 0.02), bRest = bTot - bImp - bTax;
 
@@ -855,6 +855,7 @@ export default function App() {
   const [salRows, setSalRows] = useState([]);
   const [manMisc, setManMisc] = useState([]);
   const [pvList, setPvList] = useState([]);
+  const [produseLista, setProduseLista] = useState([]);
 
   useSupaTable("registru", setRegistru);
   useSupaTable("cheltuieli", setChRows);
@@ -868,6 +869,11 @@ export default function App() {
   useSupaTable("salariati", setSalRows);
   useSupaTable("stoc_manual", setManMisc);
   useSupaTable("procese_verbale", setPvList);
+  useSupaTable("produse", setProduseLista);
+
+  // Effective produse list: from DB if loaded, else fallback to hardcoded constant
+  const produseList = produseLista.length > 0 ? produseLista : PRODUSE_LIST;
+  const PRODUSE_DYN = produseList.map(p => p.den);
 
   // Parole — map utilizator → user
   useEffect(() => {
@@ -1012,7 +1018,7 @@ export default function App() {
   const delManMisc = mkDel(setManMisc, "stoc_manual", "această mișcare manuală");
   const addManMisc = async () => {
     if (!newM.produs || !newM.cant) return;
-    const fd = PRODUSE_LIST.find((p) => p.den === newM.produs);
+    const fd = produseList.find((p) => p.den === newM.produs);
     const row = { ...newM, cod: newM.cod || fd?.cod || "" };
     const { data } = await sb.from("stoc_manual").insert(row).select();
     if (data) setManMisc((p) => [...p, data[0]]);
@@ -1077,7 +1083,7 @@ export default function App() {
   const updPVMat = (i, f, v) => setPV((p) => {
     const ms = [...p.materiale];
     ms[i] = { ...ms[i], [f]: v };
-    if (f === "den") { const fd = PRODUSE_LIST.find((x) => x.den === v); if (fd) { ms[i].cod = fd.cod; ms[i].cod_art = fd.cod_art; } }
+    if (f === "den") { const fd = produseList.find((x) => x.den === v); if (fd) { ms[i].cod = fd.cod; ms[i].cod_art = fd.cod_art; } }
     return { ...p, materiale: ms };
   });
 
@@ -1170,7 +1176,7 @@ export default function App() {
     const v = cant * pu;
     const imp = Math.round(v * 0.1);
     const tax = Math.round(v * 0.02);
-    const fd = PRODUSE_LIST.find(p => p.den === r.denumire || p.den.toUpperCase() === r.denumire);
+    const fd = produseList.find(p => p.den === r.denumire || p.den.toUpperCase() === r.denumire);
     const codSaga = fd?.cod_art || "";
     const denSaga = fd?.den || r.denumire || "";
     return [r.serie || "", r.nr || "", r.data || "", r.furnizor || "", r.adresa || "", r.cnp || "", denSaga, codSaga, cant, pu, "", "", "", r.denumire || "", imp, tax, parseFloat(r.valoare) || 0];
@@ -1179,7 +1185,7 @@ export default function App() {
   const buildPJRows = () => pvList.filter(p => inRange(p.data)).flatMap(p => {
     const mats = (p.materiale || []).filter(m => m.den);
     return mats.map(m => {
-      const fd = PRODUSE_LIST.find(x => x.den === m.den);
+      const fd = produseList.find(x => x.den === m.den);
       const codSaga = m.cod_art || fd?.cod_art || "";
       const denSaga = fd?.den || m.den || "";
       return [p.serie || "", p.nr_pv || "", p.data || "", p.client_denumire || "", p.client_adresa || "", p.client_cui || "", denSaga, codSaga, parseFloat(m.cant) || 0, "", "", "", "", m.den || "", "", "", ""];
@@ -1364,7 +1370,7 @@ export default function App() {
       };
 
       const dateRe = /^\d{2}\.\d{2}\.\d{4}$/;
-      const produseSet = new Set(PRODUSE_LIST.map(p => p.den.toUpperCase()));
+      const produseSet = new Set(produseList.map(p => p.den.toUpperCase()));
 
       // ── VALIDATION PASS ──
       const validationErrors = [];
@@ -1439,8 +1445,8 @@ export default function App() {
           const matDen = row["Material Denumire"];
           if (matDen) {
             const denStr = String(matDen).trim();
-            // Auto-fill Cod HG and Cod SAGA from PRODUSE_LIST
-            const fd = PRODUSE_LIST.find(p => p.den.toUpperCase() === denStr.toUpperCase());
+            // Auto-fill Cod HG and Cod SAGA from produseList
+            const fd = produseList.find(p => p.den.toUpperCase() === denStr.toUpperCase());
             pvMap[key2].materiale.push({
               den: fd?.den || denStr,
               cod: row["Material Cod HG"] || fd?.cod || "",
@@ -1773,7 +1779,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
         trans: "Auto",
         sursa: "alte",
         produse: rows.map(r => {
-          const fd = PRODUSE_LIST.find(p => p.den === r.denumire || p.den.toUpperCase() === r.denumire);
+          const fd = produseList.find(p => p.den === r.denumire || p.den.toUpperCase() === r.denumire);
           return { den: r.denumire || "", cod: fd?.cod || "", cant: r.cantitate || "", pret: r.pu || "" };
         }),
       });
@@ -1811,7 +1817,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
       trans: "Auto",
       sursa: "alte",
       produse: rows.map((r) => {
-        const fd = PRODUSE_LIST.find((p) => p.den === r.denumire || p.den.toUpperCase() === r.denumire);
+        const fd = produseList.find((p) => p.den === r.denumire || p.den.toUpperCase() === r.denumire);
         return {
           den: r.denumire || "",
           cod: fd?.cod || "",
@@ -1941,9 +1947,9 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
   // Stoc computed
   const getMiscari = () => {
     const r = [];
-    colRows.forEach((x, i) => { if (!x.produs || !x.cant) return; const fd = PRODUSE_LIST.find((p) => p.den === x.produs); r.push({ id: `col-${i}`, data: x.data, tip: "intrare", produs: x.produs, cod: fd?.cod || "", cod_art: fd?.cod_art || "", cant: parseFloat(x.cant) || 0, pu: parseFloat(x.pret) || 0, sursa: `Colectare${x.agent ? " - " + x.agent : ""}` }); });
-    registru.forEach((x, i) => { if (!x.denumire || !x.cantitate) return; const fd = PRODUSE_LIST.find((p) => p.den === x.denumire || p.den.toUpperCase() === x.denumire); r.push({ id: `bord-${i}`, data: x.data, tip: "intrare", produs: x.denumire, cod: fd?.cod || "", cod_art: fd?.cod_art || "", cant: parseFloat(x.cantitate) || 0, pu: parseFloat(x.pu) || 0, sursa: `Borderou ${x.serie} ${x.nr} - ${x.furnizor}` }); });
-    livRows.forEach((x, i) => { if (!x.produs || !x.cant) return; const fd = PRODUSE_LIST.find((p) => p.den === x.produs); r.push({ id: `liv-${i}`, data: x.data, tip: "iesire", produs: x.produs, cod: fd?.cod || "", cod_art: fd?.cod_art || "", cant: parseFloat(x.cant) || 0, pu: parseFloat(x.pret) || 0, sursa: `Livrare ${x.client || ""} ${x.nr ? "nr." + x.nr : ""}`.trim() }); });
+    colRows.forEach((x, i) => { if (!x.produs || !x.cant) return; const fd = produseList.find((p) => p.den === x.produs); r.push({ id: `col-${i}`, data: x.data, tip: "intrare", produs: x.produs, cod: fd?.cod || "", cod_art: fd?.cod_art || "", cant: parseFloat(x.cant) || 0, pu: parseFloat(x.pret) || 0, sursa: `Colectare${x.agent ? " - " + x.agent : ""}` }); });
+    registru.forEach((x, i) => { if (!x.denumire || !x.cantitate) return; const fd = produseList.find((p) => p.den === x.denumire || p.den.toUpperCase() === x.denumire); r.push({ id: `bord-${i}`, data: x.data, tip: "intrare", produs: x.denumire, cod: fd?.cod || "", cod_art: fd?.cod_art || "", cant: parseFloat(x.cantitate) || 0, pu: parseFloat(x.pu) || 0, sursa: `Borderou ${x.serie} ${x.nr} - ${x.furnizor}` }); });
+    livRows.forEach((x, i) => { if (!x.produs || !x.cant) return; const fd = produseList.find((p) => p.den === x.produs); r.push({ id: `liv-${i}`, data: x.data, tip: "iesire", produs: x.produs, cod: fd?.cod || "", cod_art: fd?.cod_art || "", cant: parseFloat(x.cant) || 0, pu: parseFloat(x.pret) || 0, sursa: `Livrare ${x.client || ""} ${x.nr ? "nr." + x.nr : ""}`.trim() }); });
     manMisc.forEach((m) => r.push(m));
     return r;
   };
@@ -2083,7 +2089,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
 
       {/* Tabs */}
       <div style={{ display: "flex", background: "#e8f0eb", borderLeft: "1px solid #ccc", borderRight: "1px solid #ccc", overflowX: "auto" }}>
-        {[["dashboard","🏠 Acasă"],["borderou","📄 Borderouri"],["pv","📋 PV & Anexa 3"],["cheltuieli","💸 Cheltuieli"],["colectari","🚛 Colectări"],["livrari","📤 Livrări"],["stoc","📦 Stocuri"],["salariati","👷 Salariați"],["datorii","💳 Datorii"],["avansuri","💵 Avansuri & Dividende"],["contracte","📃 Contracte"],["parole","🔐 Parole"],["rapoarte","📊 Rapoarte"],["trasabilitate","🔄 Trasabilitate"],["calculator","🧮 Calculator"],["audit","🕘 Istoric"]].map(([k, l]) => (
+        {[["dashboard","🏠 Acasă"],["borderou","📄 Borderouri"],["pv","📋 PV & Anexa 3"],["cheltuieli","💸 Cheltuieli"],["colectari","🚛 Colectări"],["livrari","📤 Livrări"],["stoc","📦 Stocuri"],["produse","🏷️ Produse"],["salariati","👷 Salariați"],["datorii","💳 Datorii"],["avansuri","💵 Avansuri & Dividende"],["contracte","📃 Contracte"],["parole","🔐 Parole"],["rapoarte","📊 Rapoarte"],["trasabilitate","🔄 Trasabilitate"],["calculator","🧮 Calculator"],["audit","🕘 Istoric"]].map(([k, l]) => (
           <button key={k} style={tabSt(k)} onClick={() => setTab(k)}>{l}</button>
         ))}
       </div>
@@ -2390,7 +2396,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                         <div style={{ fontWeight: 700, color: "#e65100", marginBottom: 8, fontSize: 12 }}>📦 Produse / Deșeuri</div>
                         <table style={{ borderCollapse: "collapse", width: "100%" }}>
                           <thead><tr><th style={th({ textAlign: "left", background: "#e65100", minWidth: 170 })}>Denumire</th><th style={th({ width: 85, background: "#e65100" })}>CodSAGA</th><th style={th({ width: 80, background: "#e65100" })}>Cant.(kg)</th><th style={th({ width: 68, background: "#e65100" })}>Preț</th><th style={th({ width: 72, background: "#e65100" })}>Valoare</th><th style={th({ width: 26, background: "#e65100" })}></th></tr></thead>
-                          <tbody>{b.produse.map((p, i) => { const v = (parseFloat(p.cant) || 0) * (parseFloat(p.pret) || 0); return (<tr key={i} style={{ background: i % 2 === 0 ? "#fff" : "#fffde7" }}><td style={td()}><AC value={p.den} options={PRODUSE} placeholder="Selectează..." onChange={(v) => updP(i, "den", v)} /></td><td style={td()}><input style={inp({ textAlign: "center" })} value={p.cod_art || ""} onChange={(e) => updP(i, "cod_art", e.target.value)} /></td><td style={td()}><div style={{ display: "flex", gap: 2, alignItems: "center" }}><input style={inp({ textAlign: "right" })} type="number" value={p.cant} onChange={(e) => updP(i, "cant", e.target.value)} />{scalePort && <button onClick={() => useScaleWeight(v => updP(i, "cant", v))} title="Citește din cantar" style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 3, padding: "1px 4px", cursor: "pointer", fontSize: 11 }}>⚖️</button>}</div></td><td style={td()}><input style={inp({ textAlign: "right" })} type="number" value={p.pret} onChange={(e) => updP(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", fontWeight: 600, background: "#fff8e1" })}>{v > 0 ? fmt(v) : "—"}</td><td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => setB((b) => ({ ...b, produse: b.produse.filter((_, j) => j !== i) }))} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                          <tbody>{b.produse.map((p, i) => { const v = (parseFloat(p.cant) || 0) * (parseFloat(p.pret) || 0); return (<tr key={i} style={{ background: i % 2 === 0 ? "#fff" : "#fffde7" }}><td style={td()}><AC value={p.den} options={PRODUSE_DYN} placeholder="Selectează..." onChange={(v) => updP(i, "den", v)} /></td><td style={td()}><input style={inp({ textAlign: "center" })} value={p.cod_art || ""} onChange={(e) => updP(i, "cod_art", e.target.value)} /></td><td style={td()}><div style={{ display: "flex", gap: 2, alignItems: "center" }}><input style={inp({ textAlign: "right" })} type="number" value={p.cant} onChange={(e) => updP(i, "cant", e.target.value)} />{scalePort && <button onClick={() => useScaleWeight(v => updP(i, "cant", v))} title="Citește din cantar" style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 3, padding: "1px 4px", cursor: "pointer", fontSize: 11 }}>⚖️</button>}</div></td><td style={td()}><input style={inp({ textAlign: "right" })} type="number" value={p.pret} onChange={(e) => updP(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", fontWeight: 600, background: "#fff8e1" })}>{v > 0 ? fmt(v) : "—"}</td><td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => setB((b) => ({ ...b, produse: b.produse.filter((_, j) => j !== i) }))} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
                         </table>
                         <button onClick={() => setB((b) => ({ ...b, produse: [...b.produse, { den: "", cod: "", cod_art: "", cant: "", pret: "" }] }))} style={{ marginTop: 6, background: "#e65100", color: "#fff", border: "none", borderRadius: 4, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Adaugă produs</button>
                       </div>
@@ -2549,7 +2555,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                           <thead><tr><th style={th({ textAlign: "left", background: "#e65100", minWidth: 200 })}>Denumire</th><th style={th({ width: 85, background: "#e65100" })}>CodSAGA</th><th style={th({ width: 85, background: "#e65100" })}>Cant.(kg)</th><th style={th({ width: 26, background: "#e65100" })}></th></tr></thead>
                           <tbody>{pv.materiale.map((m, i) => (
                             <tr key={i} style={{ background: i % 2 === 0 ? "#fff" : "#fffde7" }}>
-                              <td style={td()}><AC value={m.den} options={PRODUSE} placeholder="Selectează..." onChange={(v) => updPVMat(i, "den", v)} /></td>
+                              <td style={td()}><AC value={m.den} options={PRODUSE_DYN} placeholder="Selectează..." onChange={(v) => updPVMat(i, "den", v)} /></td>
                               <td style={td()}><input style={inp({ textAlign: "center" })} value={m.cod_art || ""} onChange={(e) => updPVMat(i, "cod_art", e.target.value)} /></td>
                               <td style={td()}><div style={{ display: "flex", gap: 2, alignItems: "center" }}><input style={inp({ textAlign: "right" })} type="number" value={m.cant} onChange={(e) => updPVMat(i, "cant", e.target.value)} />{scalePort && <button onClick={() => useScaleWeight(v => updPVMat(i, "cant", v))} title="Citește din cantar" style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 3, padding: "1px 4px", cursor: "pointer", fontSize: 11 }}>⚖️</button>}</div></td>
                               <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => setPV((p) => ({ ...p, materiale: p.materiale.filter((_, j) => j !== i) }))} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
@@ -2808,7 +2814,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   <th style={th({ textAlign: "center" })}>Achitat De</th>
                   <th style={th({})}></th>
                 </tr></thead>
-                <tbody>{colFiltered.map((r, idx) => { const i = colRows.indexOf(r); const tot = (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0); const faraImp = tot ? +(tot * 0.88).toFixed(2) : 0; const rowBg = idx % 2 === 0 ? "#fff" : "#f8fbf9"; const achBg = r.ach === "Da" ? "#e8f5e9" : r.ach === "Nu" ? "#ffebee" : "#fff"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 2}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updCOL(i, "data", v)} /></td><td style={td({ background: rowBg })}><AC value={r.agent || ""} options={agentOptions} onChange={(v) => updCOL(i, "agent", v)} placeholder="—" /></td><td style={td({ background: rowBg })}><AC value={r.furn || ""} options={furnOptions} onChange={(v) => updCOL(i, "furn", v)} placeholder="—" /></td><td style={td({ background: COL_COLORS[r.cat] || "#eee", textAlign: "center" })}><select style={sel({ fontWeight: 600, textAlign: "center" })} value={r.cat || ""} onChange={(e) => updCOL(i, "cat", e.target.value)}>{CATEGORIE_COL.map((o) => <option key={o}>{o}</option>)}</select></td><td style={td({ background: rowBg })}><AC value={r.produs || ""} options={PRODUSE} onChange={(v) => updCOL(i, "produs", v)} /></td><td style={td({ background: rowBg })}><div style={{ display: "flex", gap: 2, alignItems: "center" }}><input style={inp({ textAlign: "right" })} type="number" value={r.cant || ""} onChange={(e) => updCOL(i, "cant", e.target.value)} />{scalePort && <button onClick={() => useScaleWeight(v => updCOL(i, "cant", v))} title="Citește din cantar" style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 3, padding: "1px 4px", cursor: "pointer", fontSize: 11 }}>⚖️</button>}</div></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "right" })} type="number" value={r.pret || ""} onChange={(e) => updCOL(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 600 })}>{tot > 0 ? fmt(tot) : "0,00"}</td><td style={td({ textAlign: "right", background: "#fce4d6", fontWeight: 600, color: "#bf360c" })}>{faraImp > 0 ? fmt(faraImp) : "0,00"}</td><td style={td({ background: achBg })}><select style={sel({ color: r.ach === "Da" ? G : r.ach === "Nu" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.ach || ""} onChange={(e) => updCOL(i, "ach", e.target.value)}><option value=""></option><option>Da</option><option>Nu</option></select></td><td style={td({ background: r.ach_de ? "#ffe0b2" : "#fff" })}><AC value={r.ach_de || ""} options={achitatOptions} onChange={(v) => updCOL(i, "ach_de", v)} placeholder="—" /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delCOL(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                <tbody>{colFiltered.map((r, idx) => { const i = colRows.indexOf(r); const tot = (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0); const faraImp = tot ? +(tot * 0.88).toFixed(2) : 0; const rowBg = idx % 2 === 0 ? "#fff" : "#f8fbf9"; const achBg = r.ach === "Da" ? "#e8f5e9" : r.ach === "Nu" ? "#ffebee" : "#fff"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 2}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updCOL(i, "data", v)} /></td><td style={td({ background: rowBg })}><AC value={r.agent || ""} options={agentOptions} onChange={(v) => updCOL(i, "agent", v)} placeholder="—" /></td><td style={td({ background: rowBg })}><AC value={r.furn || ""} options={furnOptions} onChange={(v) => updCOL(i, "furn", v)} placeholder="—" /></td><td style={td({ background: COL_COLORS[r.cat] || "#eee", textAlign: "center" })}><select style={sel({ fontWeight: 600, textAlign: "center" })} value={r.cat || ""} onChange={(e) => updCOL(i, "cat", e.target.value)}>{CATEGORIE_COL.map((o) => <option key={o}>{o}</option>)}</select></td><td style={td({ background: rowBg })}><AC value={r.produs || ""} options={PRODUSE_DYN} onChange={(v) => updCOL(i, "produs", v)} /></td><td style={td({ background: rowBg })}><div style={{ display: "flex", gap: 2, alignItems: "center" }}><input style={inp({ textAlign: "right" })} type="number" value={r.cant || ""} onChange={(e) => updCOL(i, "cant", e.target.value)} />{scalePort && <button onClick={() => useScaleWeight(v => updCOL(i, "cant", v))} title="Citește din cantar" style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 3, padding: "1px 4px", cursor: "pointer", fontSize: 11 }}>⚖️</button>}</div></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "right" })} type="number" value={r.pret || ""} onChange={(e) => updCOL(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 600 })}>{tot > 0 ? fmt(tot) : "0,00"}</td><td style={td({ textAlign: "right", background: "#fce4d6", fontWeight: 600, color: "#bf360c" })}>{faraImp > 0 ? fmt(faraImp) : "0,00"}</td><td style={td({ background: achBg })}><select style={sel({ color: r.ach === "Da" ? G : r.ach === "Nu" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.ach || ""} onChange={(e) => updCOL(i, "ach", e.target.value)}><option value=""></option><option>Da</option><option>Nu</option></select></td><td style={td({ background: r.ach_de ? "#ffe0b2" : "#fff" })}><AC value={r.ach_de || ""} options={achitatOptions} onChange={(v) => updCOL(i, "ach_de", v)} placeholder="—" /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delCOL(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
                 <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={6} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(colFiltered.reduce((s, r) => s + (parseFloat(r.cant) || 0), 0))} kg</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(colFiltered.reduce((s, r) => s + (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0), 0))}</td><td colSpan={4}></td></tr></tfoot>
               </table>
             </div>
@@ -2863,12 +2869,102 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   <th style={th({ textAlign: "left" })}>Detalii</th>
                   <th style={th({})}></th>
                 </tr></thead>
-                <tbody>{livFiltered.map((r, idx) => { const i = livRows.indexOf(r); const tot = (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0); const rowBg = idx % 2 === 0 ? "#fff" : "#f8fbf9"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 2}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updLIV(i, "data", v)} /></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "center" })} value={r.nr || ""} onChange={(e) => updLIV(i, "nr", e.target.value)} /></td><td style={td({ background: "#fffde7" })}><AC value={r.client || ""} options={clientOptions} onChange={(v) => updLIV(i, "client", v)} placeholder="—" /></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.produs}><AC value={r.produs || ""} options={PRODUSE} onChange={(v) => updLIV(i, "produs", v)} /></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "right" })} type="number" value={r.cant || ""} onChange={(e) => updLIV(i, "cant", e.target.value)} /></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "right" })} type="number" value={r.pret || ""} onChange={(e) => updLIV(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 600 })}>{tot > 0 ? fmt(tot) : "0,00"}</td><td style={td({ background: r.fact === "DA" ? "#e8f5e9" : r.fact === "NU" ? "#ffebee" : "#fff", textAlign: "center" })}><select style={sel({ color: r.fact === "DA" ? G : r.fact === "NU" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.fact || ""} onChange={(e) => updLIV(i, "fact", e.target.value)}><option value=""></option><option>DA</option><option>NU</option></select></td><td style={td({ background: r.inc === "DA" ? "#c8e6c9" : r.inc === "NU" ? "#ffebee" : "#fff", textAlign: "center" })}><select style={sel({ color: r.inc === "DA" ? G : r.inc === "NU" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.inc || ""} onChange={(e) => updLIV(i, "inc", e.target.value)}><option value=""></option><option>DA</option><option>NU</option></select></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.det}><input style={inp()} value={r.det || ""} onChange={(e) => updLIV(i, "det", e.target.value)} placeholder="..." /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delLIV(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                <tbody>{livFiltered.map((r, idx) => { const i = livRows.indexOf(r); const tot = (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0); const rowBg = idx % 2 === 0 ? "#fff" : "#f8fbf9"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 2}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updLIV(i, "data", v)} /></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "center" })} value={r.nr || ""} onChange={(e) => updLIV(i, "nr", e.target.value)} /></td><td style={td({ background: "#fffde7" })}><AC value={r.client || ""} options={clientOptions} onChange={(v) => updLIV(i, "client", v)} placeholder="—" /></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.produs}><AC value={r.produs || ""} options={PRODUSE_DYN} onChange={(v) => updLIV(i, "produs", v)} /></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "right" })} type="number" value={r.cant || ""} onChange={(e) => updLIV(i, "cant", e.target.value)} /></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "right" })} type="number" value={r.pret || ""} onChange={(e) => updLIV(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 600 })}>{tot > 0 ? fmt(tot) : "0,00"}</td><td style={td({ background: r.fact === "DA" ? "#e8f5e9" : r.fact === "NU" ? "#ffebee" : "#fff", textAlign: "center" })}><select style={sel({ color: r.fact === "DA" ? G : r.fact === "NU" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.fact || ""} onChange={(e) => updLIV(i, "fact", e.target.value)}><option value=""></option><option>DA</option><option>NU</option></select></td><td style={td({ background: r.inc === "DA" ? "#c8e6c9" : r.inc === "NU" ? "#ffebee" : "#fff", textAlign: "center" })}><select style={sel({ color: r.inc === "DA" ? G : r.inc === "NU" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.inc || ""} onChange={(e) => updLIV(i, "inc", e.target.value)}><option value=""></option><option>DA</option><option>NU</option></select></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.det}><input style={inp()} value={r.det || ""} onChange={(e) => updLIV(i, "det", e.target.value)} placeholder="..." /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delLIV(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
                 <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={5} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(livFiltered.reduce((s, r) => s + (parseFloat(r.cant) || 0), 0))} kg</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(livFiltered.reduce((s, r) => s + (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0), 0))}</td><td colSpan={4}></td></tr></tfoot>
               </table>
             </div>
             <AddBtn onClick={addLIV} label="+ Adaugă livrare" />
           </div>
+          );
+        })()}
+
+        {/* ══ PRODUSE ══ */}
+        {tab === "produse" && (() => {
+          const [prodSearch, setProdSearch] = [null, null]; // placeholder for hooks if needed
+          const addProdus = async () => {
+            const den = window.prompt("Denumire produs nou:");
+            if (!den || !den.trim()) return;
+            const cod = window.prompt("Cod HG 856 (ex: 15 01 01):") || "";
+            const cod_art = window.prompt("Cod SAGA (ex: 000123):") || "";
+            try {
+              const { error } = await sb.from("produse").insert({ den: den.trim(), cod: cod.trim(), cod_art: cod_art.trim() });
+              if (error) alert("Eroare: " + error.message);
+              else await logAction("add", "produse", "", { den });
+            } catch (e) { alert("Eroare: " + e.message); }
+          };
+          const updProdus = async (id, field, value) => {
+            try {
+              const { error } = await sb.from("produse").update({ [field]: value }).eq("id", id);
+              if (error) alert("Eroare: " + error.message);
+            } catch (e) { alert("Eroare: " + e.message); }
+          };
+          const delProdus = async (id, den) => {
+            if (!confirmDel(`produsul "${den}"`)) return;
+            try {
+              const { error } = await sb.from("produse").delete().eq("id", id);
+              if (error) alert("Eroare: " + error.message);
+              else await logAction("delete", "produse", id, { den });
+            } catch (e) { alert("Eroare: " + e.message); }
+          };
+          return (
+            <div style={{ padding: 16 }}>
+              <div style={{ background: "linear-gradient(135deg,#e3f2fd,#bbdefb)", border: "2px solid #1565c0", borderRadius: 10, padding: 14, marginBottom: 14 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#0d47a1", marginBottom: 4 }}>🏷️ Gestiune Produse SAGA</div>
+                <div style={{ fontSize: 12, color: "#444" }}>
+                  Aici editezi <strong>denumirea</strong> și <strong>codul SAGA</strong> al produselor.
+                  Modificările apar automat în <strong>Borderouri, PV & Anexa 3, Colectări, Livrări</strong>.
+                </div>
+                {produseLista.length === 0 && (
+                  <div style={{ marginTop: 10, padding: 10, background: "#fff3e0", border: "1px solid #ffb74d", borderRadius: 6, fontSize: 12, color: "#bf360c" }}>
+                    ⚠️ Tabela <code>produse</code> e goală în Supabase. Rulează scriptul <strong>setup_produse.sql</strong> în SQL Editor să o populezi cu cele 169 produse SAGA inițiale.
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <div style={{ fontSize: 13, color: "#555" }}>
+                  📊 Total: <strong style={{ color: "#1565c0" }}>{produseLista.length} produse</strong>
+                </div>
+                <button onClick={addProdus} style={{ background: G, color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Adaugă Produs</button>
+              </div>
+
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ borderCollapse: "collapse", width: "100%" }}>
+                  <colgroup><col style={{ width: 48 }} /><col /><col style={{ width: 110 }} /><col style={{ width: 110 }} /><col style={{ width: 30 }} /></colgroup>
+                  <thead><tr style={{ background: "#1565c0" }}>
+                    <th style={th({ background: "#0d47a1", textAlign: "center" })}>#</th>
+                    <th style={th({ background: "#1565c0", textAlign: "center" })}>Denumire</th>
+                    <th style={th({ background: "#1565c0", textAlign: "center" })}>Cod HG 856</th>
+                    <th style={th({ background: "#1565c0", textAlign: "center" })}>Cod SAGA</th>
+                    <th style={th({ background: "#0d47a1" })}></th>
+                  </tr></thead>
+                  <tbody>
+                    {produseLista.length === 0 && <tr><td colSpan={5} style={{ textAlign: "center", padding: 30, color: "#888" }}>Nicio înregistrare în baza de date.</td></tr>}
+                    {produseLista.map((p, i) => (
+                      <tr key={p.id || i} style={{ background: i % 2 === 0 ? "#fff" : "#f0f7fc" }}>
+                        <td style={td({ textAlign: "center", color: "#888", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td>
+                        <td style={td()}>
+                          <input style={inp({ textAlign: "center", fontWeight: 600 })} defaultValue={p.den || ""} onBlur={(e) => { if (e.target.value !== p.den) updProdus(p.id, "den", e.target.value); }} />
+                        </td>
+                        <td style={td({ background: "#fff8e1" })}>
+                          <input style={inp({ textAlign: "center", fontFamily: "monospace" })} defaultValue={p.cod || ""} onBlur={(e) => { if (e.target.value !== p.cod) updProdus(p.id, "cod", e.target.value); }} />
+                        </td>
+                        <td style={td({ background: "#e3f2fd" })}>
+                          <input style={inp({ textAlign: "center", fontFamily: "monospace", fontWeight: 700, color: "#1565c0" })} defaultValue={p.cod_art || ""} onBlur={(e) => { if (e.target.value !== p.cod_art) updProdus(p.id, "cod_art", e.target.value); }} />
+                        </td>
+                        <td style={td({ textAlign: "center", padding: 3 })}>
+                          <button onClick={() => delProdus(p.id, p.den)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div style={{ marginTop: 12, padding: 10, background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 6, fontSize: 11, color: "#666" }}>
+                💡 <strong>Cum funcționează:</strong> Click pe orice celulă pentru a edita. Modificările se salvează automat când ieși din celulă (click în altă parte). Schimbările se reflectă instant în Borderouri, PV, Colectări și Livrări.
+              </div>
+            </div>
           );
         })()}
 
@@ -2904,7 +3000,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
                     <div><label style={LSt}>Data</label><input value={newM.data} onChange={(e) => setNewM((p) => ({ ...p, data: e.target.value }))} style={{ ...IFS, width: 90 }} /></div>
                     <div><label style={LSt}>Tip</label><select value={newM.tip} onChange={(e) => setNewM((p) => ({ ...p, tip: e.target.value }))} style={{ ...IFS, width: 90, color: newM.tip === "intrare" ? G : "#c62828", fontWeight: 700 }}><option value="intrare">⬆ Intrare</option><option value="iesire">⬇ Ieșire</option></select></div>
-                    <div style={{ flex: "0 0 180px" }}><label style={LSt}>Produs</label><select value={newM.produs} onChange={(e) => { const fd = PRODUSE_LIST.find((p) => p.den === e.target.value); setNewM((p) => ({ ...p, produs: e.target.value, cod: fd?.cod || "" })); }} style={IFS}><option value=""></option>{PRODUSE.map((p) => <option key={p}>{p}</option>)}</select></div>
+                    <div style={{ flex: "0 0 180px" }}><label style={LSt}>Produs</label><select value={newM.produs} onChange={(e) => { const fd = produseList.find((p) => p.den === e.target.value); setNewM((p) => ({ ...p, produs: e.target.value, cod: fd?.cod || "" })); }} style={IFS}><option value=""></option>{PRODUSE_DYN.map((p) => <option key={p}>{p}</option>)}</select></div>
                     <div><label style={LSt}>Cant.(kg)</label><input type="number" value={newM.cant} onChange={(e) => setNewM((p) => ({ ...p, cant: e.target.value }))} style={{ ...IFS, width: 80, textAlign: "right" }} /></div>
                     <div><label style={LSt}>Preț/kg</label><input type="number" value={newM.pu} onChange={(e) => setNewM((p) => ({ ...p, pu: e.target.value }))} style={{ ...IFS, width: 72, textAlign: "right" }} /></div>
                     <div style={{ flex: 1, minWidth: 120 }}><label style={LSt}>Sursă</label><input value={newM.sursa} onChange={(e) => setNewM((p) => ({ ...p, sursa: e.target.value }))} style={IFS} placeholder="Ajustare stoc..." /></div>
