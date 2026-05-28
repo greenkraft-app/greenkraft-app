@@ -704,6 +704,21 @@ export default function App() {
     } catch (e) { console.warn("Audit log failed:", e); }
   };
   // ── Helper: backup all data ───────────────────────────────
+  // ── Task-uri functions ──
+  const addTask = async (text, scadenta = "", prioritate = "normal") => {
+    if (!text || !text.trim()) return;
+    try {
+      const { error } = await sb.from("taskuri").insert({ text: text.trim(), scadenta, prioritate, done: false, creat_de: currentUser });
+      if (error) alert("Eroare: " + error.message);
+    } catch (e) { alert("Eroare: " + e.message); }
+  };
+  const toggleTask = async (id, done) => {
+    try { await sb.from("taskuri").update({ done: !done }).eq("id", id); } catch (e) {}
+  };
+  const delTask = async (id) => {
+    try { await sb.from("taskuri").delete().eq("id", id); } catch (e) {}
+  };
+
   const generateBackup = async () => {
     setBackupLoading(true);
     try {
@@ -856,6 +871,7 @@ export default function App() {
   const [manMisc, setManMisc] = useState([]);
   const [pvList, setPvList] = useState([]);
   const [produseLista, setProduseLista] = useState([]);
+  const [taskuri, setTaskuri] = useState([]);
 
   useSupaTable("registru", setRegistru);
   useSupaTable("cheltuieli", setChRows);
@@ -870,6 +886,7 @@ export default function App() {
   useSupaTable("stoc_manual", setManMisc);
   useSupaTable("procese_verbale", setPvList);
   useSupaTable("produse", setProduseLista);
+  useSupaTable("taskuri", setTaskuri);
 
   // Effective produse list: from DB if loaded, else fallback to hardcoded constant
   const produseList = produseLista.length > 0 ? produseLista : PRODUSE_LIST;
@@ -2145,6 +2162,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
           const trasNealocate = allTrasEntries.filter(e => !e.trasabilitate);
           const cheltNeach = chRows.filter(c => c.ach !== "Da").length;
           const datUnpaid = datRows.filter(d => d.stat !== "Achitată").length;
+          const taskuriPending = taskuri.filter(t => !t.done);
 
           // Recent activity
           const recentActivity = auditLog.slice(0, 10);
@@ -2226,15 +2244,60 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                 </div>
               </div>
 
+              {/* Task-uri */}
+              <div style={{ background: "#fff", border: "2px solid #1565c0", borderRadius: 10, padding: 14, marginBottom: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#1565c0", marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>✅ Task-uri / De făcut</span>
+                  <span style={{ fontSize: 11, color: "#888", fontWeight: 400 }}>{taskuri.filter(t => !t.done).length} active • {taskuri.filter(t => t.done).length} terminate</span>
+                </div>
+                <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+                  <input id="newTaskInput" type="text" placeholder="Scrie un task nou..." style={{ flex: "1 1 200px", border: "1px solid #ccc", borderRadius: 6, padding: "7px 10px", fontSize: 13 }} onKeyDown={(e) => { if (e.key === "Enter" && e.target.value.trim()) { const scad = document.getElementById("newTaskScad")?.value || ""; const prio = document.getElementById("newTaskPrio")?.value || "normal"; addTask(e.target.value, scad, prio); e.target.value = ""; if (document.getElementById("newTaskScad")) document.getElementById("newTaskScad").value = ""; } }} />
+                  <input id="newTaskScad" type="date" title="Scadență (opțional)" style={{ border: "1px solid #ccc", borderRadius: 6, padding: "7px 10px", fontSize: 13 }} />
+                  <select id="newTaskPrio" style={{ border: "1px solid #ccc", borderRadius: 6, padding: "7px 10px", fontSize: 13 }}>
+                    <option value="normal">Normal</option>
+                    <option value="urgent">🔴 Urgent</option>
+                  </select>
+                  <button onClick={() => { const inp = document.getElementById("newTaskInput"); if (inp?.value.trim()) { const scadEl = document.getElementById("newTaskScad"); const prioEl = document.getElementById("newTaskPrio"); const scad = scadEl?.value ? scadEl.value.split("-").reverse().join(".") : ""; addTask(inp.value, scad, prioEl?.value || "normal"); inp.value = ""; if (scadEl) scadEl.value = ""; } }} style={{ background: G, color: "#fff", border: "none", borderRadius: 6, padding: "7px 16px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Adaugă</button>
+                </div>
+                {taskuri.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: 16, color: "#aaa", fontSize: 13 }}>Niciun task încă. Adaugă unul mai sus 👆</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                    {[...taskuri].sort((a, b) => (a.done === b.done ? 0 : a.done ? 1 : -1)).map((t) => (
+                      <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: t.done ? "#f5f5f5" : t.prioritate === "urgent" ? "#fff5f5" : "#f8fbff", border: `1px solid ${t.done ? "#e0e0e0" : t.prioritate === "urgent" ? "#ffcdd2" : "#bbdefb"}`, borderRadius: 6 }}>
+                        <input type="checkbox" checked={t.done} onChange={() => toggleTask(t.id, t.done)} style={{ cursor: "pointer", width: 16, height: 16 }} />
+                        <div style={{ flex: 1, fontSize: 13, textDecoration: t.done ? "line-through" : "none", color: t.done ? "#aaa" : "#333" }}>
+                          {!t.done && t.prioritate === "urgent" && <span style={{ color: "#c62828", fontWeight: 700 }}>🔴 </span>}
+                          {t.text}
+                          {t.scadenta && <span style={{ fontSize: 11, color: "#888", marginLeft: 8 }}>📅 {t.scadenta}</span>}
+                          {t.creat_de && <span style={{ fontSize: 10, color: "#bbb", marginLeft: 8 }}>— {t.creat_de}</span>}
+                        </div>
+                        <button onClick={() => delTask(t.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Alerts + Recent Activity */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))", gap: 16 }}>
                 {/* Alerts */}
                 <div style={{ background: "#fff", border: "1px solid #ffcdd2", borderRadius: 10, padding: 14 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: "#c62828", marginBottom: 10 }}>🔔 Necesită atenție</div>
-                  {trasNealocate.length === 0 && cheltNeach === 0 && datUnpaid === 0 && stocNegativ === 0 ? (
+                  {trasNealocate.length === 0 && cheltNeach === 0 && datUnpaid === 0 && stocNegativ === 0 && taskuriPending.length === 0 ? (
                     <div style={{ textAlign: "center", padding: 20, color: G, fontSize: 13 }}>✅ Totul e în ordine!</div>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {taskuriPending.map((t) => (
+                        <div key={t.id} style={{ background: t.prioritate === "urgent" ? "#ffebee" : "#e8f5e9", border: `1px solid ${t.prioritate === "urgent" ? "#ef9a9a" : "#a5d6a7"}`, borderRadius: 6, padding: "8px 10px", fontSize: 12, display: "flex", alignItems: "flex-start", gap: 8 }}>
+                          <input type="checkbox" checked={false} onChange={() => toggleTask(t.id, t.done)} style={{ marginTop: 2, cursor: "pointer" }} />
+                          <div style={{ flex: 1 }}>
+                            <strong style={{ color: t.prioritate === "urgent" ? "#c62828" : G }}>{t.prioritate === "urgent" ? "🔴" : "📌"} {t.text}</strong>
+                            {t.scadenta && <div style={{ fontSize: 11, color: "#888", marginTop: 2 }}>📅 Scadență: {t.scadenta}</div>}
+                          </div>
+                          <button onClick={() => delTask(t.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#aaa", fontSize: 13 }}>✕</button>
+                        </div>
+                      ))}
                       {trasNealocate.length > 0 && (
                         <div onClick={() => setTab("trasabilitate")} style={{ background: "#fff3e0", border: "1px solid #ffcc80", borderRadius: 6, padding: "8px 10px", cursor: "pointer", fontSize: 12 }}>
                           <strong style={{ color: "#e65100" }}>🔄 {trasNealocate.length} intrări fără trasabilitate</strong>
