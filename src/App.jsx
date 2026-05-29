@@ -495,7 +495,7 @@ function PVPrint({ pv }) {
                 <div style={{ textAlign: "center", fontWeight: "bold" }}><u>ÎNCĂRCAREA</u></div>
                 <div style={{ marginTop: 4 }}><u>Date de identificare expeditor:</u></div>
                 <div style={{ fontWeight: "bold", fontStyle: "italic" }}>{pv.client_denumire?.toUpperCase()}</div>
-                <div>{pv.client_adresa}</div>
+                <div>{pv.adresa_incarcare || pv.client_adresa}</div>
                 <div style={{ marginTop: 8 }}><u>Autorizație de mediu nr:</u></div>
                 <div>{pv.client_autorizatie || ""}</div>
                 <div><u>Dată expirare Autorizație Mediu:</u></div>
@@ -779,15 +779,15 @@ export default function App() {
   const [chCat, setChCat] = useState("");
   const [chAchitat, setChAchitat] = useState("");
   const [chAchDe, setChAchDe] = useState("");
-  const [chMonth, setChMonth] = useState("");
+  const [chMonth, setChMonth] = useState(() => { const d = new Date(); return `${String(d.getMonth()+1).padStart(2,"0")}.${d.getFullYear()}`; });
   const [colSearch, setColSearch] = useState("");
   const [colCat, setColCat] = useState("");
   const [colAgent, setColAgent] = useState("");
   const [colAchitat, setColAchitat] = useState("");
-  const [colMonth, setColMonth] = useState("");
+  const [colMonth, setColMonth] = useState(() => { const d = new Date(); return `${String(d.getMonth()+1).padStart(2,"0")}.${d.getFullYear()}`; });
   const [livSearch, setLivSearch] = useState("");
   const [livClient, setLivClient] = useState("");
-  const [livMonth, setLivMonth] = useState("");
+  const [livMonth, setLivMonth] = useState(() => { const d = new Date(); return `${String(d.getMonth()+1).padStart(2,"0")}.${d.getFullYear()}`; });
   // ── Rapoarte state ────────────────────────────────────────
   const [rapDateStart, setRapDateStart] = useState("");
   const [rapDateEnd, setRapDateEnd] = useState("");
@@ -872,6 +872,8 @@ export default function App() {
   const [pvList, setPvList] = useState([]);
   const [produseLista, setProduseLista] = useState([]);
   const [taskuri, setTaskuri] = useState([]);
+  const [delegatiList, setDelegatiList] = useState([]);
+  const [varSubTab, setVarSubTab] = useState("produse"); // produse | delegati
 
   useSupaTable("registru", setRegistru);
   useSupaTable("cheltuieli", setChRows);
@@ -887,6 +889,7 @@ export default function App() {
   useSupaTable("procese_verbale", setPvList);
   useSupaTable("produse", setProduseLista);
   useSupaTable("taskuri", setTaskuri);
+  useSupaTable("delegati", setDelegatiList);
 
   // Effective produse list: from DB if loaded, else fallback to hardcoded constant
   const produseList = produseLista.length > 0 ? produseLista : PRODUSE_LIST;
@@ -1114,6 +1117,8 @@ export default function App() {
       client_cui: f.cod_fiscal || "",
       client_reg_com: f.reg_com || "",
       client_judet: f.judet || "",
+      adresa_incarcare: f.adresa || "", // default = sediu social
+      _puncte_lucru_client: f.puncte_lucru || [], // available pickup addresses
     }));
     setPjSearchPV(f.denumire);
     setPjOpenPV(false);
@@ -1176,6 +1181,15 @@ export default function App() {
     const d = parseInt(m[1]), mo = parseInt(m[2]), y = parseInt(m[3]) < 100 ? 2000 + parseInt(m[3]) : parseInt(m[3]);
     return new Date(y, mo - 1, d);
   };
+  // Sort an array by 'data' field ascending (oldest first → newest last)
+  const sortByDateAsc = (arr) => [...arr].sort((a, b) => {
+    const da = parseDateRO(a.data);
+    const db = parseDateRO(b.data);
+    if (!da && !db) return 0;
+    if (!da) return 1;
+    if (!db) return -1;
+    return da - db;
+  });
   const inRange = (dateStr) => {
     if (!rapDateStart && !rapDateEnd) return true;
     const d = parseDateRO(dateStr);
@@ -1982,18 +1996,18 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
 
   // Datorii computed
   const numeUnici = [...new Set(datRows.map((r) => r.nume))];
-  const filtDat = datRows.filter((r) => !datFilter || r.nume === datFilter);
+  const filtDat = sortByDateAsc(datRows.filter((r) => !datFilter || r.nume === datFilter));
   const totDat = filtDat.reduce((s, r) => s + (parseSuma(r.suma) || 0), 0);
   const totDatAll = datRows.reduce((s, r) => s + (parseSuma(r.suma) || 0), 0);
 
   // Avansuri computed
-  const filtAv = avRows.filter((r) => (avTip === "toate" || r.tip === avTip) && (!avPers || r.catre === avPers));
+  const filtAv = sortByDateAsc(avRows.filter((r) => (avTip === "toate" || r.tip === avTip) && (!avPers || r.catre === avPers)));
   const totAvans = avRows.filter((r) => r.tip === "avans").reduce((s, r) => s + (parseSuma(r.suma) || 0), 0);
   const totDiv = avRows.filter((r) => r.tip === "dividend").reduce((s, r) => s + (parseSuma(r.suma) || 0), 0);
   const persList = [...new Set(avRows.map((r) => r.catre).filter(Boolean))];
 
   // Contracte computed
-  const filtCT = contracte.filter((r) => !ctSearch || r.companie?.toLowerCase().includes(ctSearch.toLowerCase()) || r.nr?.includes(ctSearch) || r.detalii?.toLowerCase().includes(ctSearch.toLowerCase()));
+  const filtCT = sortByDateAsc(contracte.filter((r) => !ctSearch || r.companie?.toLowerCase().includes(ctSearch.toLowerCase()) || r.nr?.includes(ctSearch) || r.detalii?.toLowerCase().includes(ctSearch.toLowerCase())));
 
   // Parole computed
   const filtParole = parole.filter((r) => {
@@ -2106,7 +2120,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
 
       {/* Tabs */}
       <div style={{ display: "flex", background: "#e8f0eb", borderLeft: "1px solid #ccc", borderRight: "1px solid #ccc", overflowX: "auto" }}>
-        {[["dashboard","🏠 Acasă"],["borderou","📄 Borderouri"],["pv","📋 PV & Anexa 3"],["cheltuieli","💸 Cheltuieli"],["colectari","🚛 Colectări"],["livrari","📤 Livrări"],["stoc","📦 Stocuri"],["produse","🏷️ Produse"],["salariati","👷 Salariați"],["datorii","💳 Datorii"],["avansuri","💵 Avansuri & Dividende"],["contracte","📃 Contracte"],["parole","🔐 Parole"],["rapoarte","📊 Rapoarte"],["trasabilitate","🔄 Trasabilitate"],["calculator","🧮 Calculator"],["audit","🕘 Istoric"]].map(([k, l]) => (
+        {[["dashboard","🏠 Acasă"],["borderou","📄 Borderouri"],["pv","📋 PV & Anexa 3"],["cheltuieli","💸 Cheltuieli"],["colectari","🚛 Colectări"],["livrari","📤 Livrări"],["stoc","📦 Stocuri"],["produse","🛠️ Variabile"],["salariati","👷 Salariați"],["datorii","💳 Datorii"],["avansuri","💵 Avansuri & Dividende"],["contracte","📃 Contracte"],["parole","🔐 Parole"],["rapoarte","📊 Rapoarte"],["trasabilitate","🔄 Trasabilitate"],["calculator","🧮 Calculator"],["audit","🕘 Istoric"]].map(([k, l]) => (
           <button key={k} style={tabSt(k)} onClick={() => setTab(k)}>{l}</button>
         ))}
       </div>
@@ -2284,20 +2298,10 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                 {/* Alerts */}
                 <div style={{ background: "#fff", border: "1px solid #ffcdd2", borderRadius: 10, padding: 14 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: "#c62828", marginBottom: 10 }}>🔔 Necesită atenție</div>
-                  {trasNealocate.length === 0 && cheltNeach === 0 && datUnpaid === 0 && stocNegativ === 0 && taskuriPending.length === 0 ? (
+                  {trasNealocate.length === 0 && cheltNeach === 0 && datUnpaid === 0 && stocNegativ === 0 ? (
                     <div style={{ textAlign: "center", padding: 20, color: G, fontSize: 13 }}>✅ Totul e în ordine!</div>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      {taskuriPending.map((t) => (
-                        <div key={t.id} style={{ background: t.prioritate === "urgent" ? "#ffebee" : "#e8f5e9", border: `1px solid ${t.prioritate === "urgent" ? "#ef9a9a" : "#a5d6a7"}`, borderRadius: 6, padding: "8px 10px", fontSize: 12, display: "flex", alignItems: "flex-start", gap: 8 }}>
-                          <input type="checkbox" checked={false} onChange={() => toggleTask(t.id, t.done)} style={{ marginTop: 2, cursor: "pointer" }} />
-                          <div style={{ flex: 1 }}>
-                            <strong style={{ color: t.prioritate === "urgent" ? "#c62828" : G }}>{t.prioritate === "urgent" ? "🔴" : "📌"} {t.text}</strong>
-                            {t.scadenta && <div style={{ fontSize: 11, color: "#888", marginTop: 2 }}>📅 Scadență: {t.scadenta}</div>}
-                          </div>
-                          <button onClick={() => delTask(t.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#aaa", fontSize: 13 }}>✕</button>
-                        </div>
-                      ))}
                       {trasNealocate.length > 0 && (
                         <div onClick={() => setTab("trasabilitate")} style={{ background: "#fff3e0", border: "1px solid #ffcc80", borderRadius: 6, padding: "8px 10px", cursor: "pointer", fontSize: 12 }}>
                           <strong style={{ color: "#e65100" }}>🔄 {trasNealocate.length} intrări fără trasabilitate</strong>
@@ -2486,12 +2490,12 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 800 }}>
                     <thead><tr>{[{ l: "", w: 28 }, ...regCols, { l: "🖨️ Print", w: 70 }, { l: "", w: 30 }].map((c, i) => <th key={i} style={{ ...th({ background: G }), width: c.w }}>{c.l}</th>)}</tr></thead>
-                    <tbody>{registru.map((r, i) => {
+                    <tbody>{sortByDateAsc(registru).map((r, i, sortedReg) => {
                       const rowBg = i % 2 === 0 ? "#fff" : "#f7faf8";
                       // Show print button only on first row of each serie+nr group
                       const key = `${r.serie}__${r.nr}`;
-                      const isFirstInGroup = registru.findIndex((x) => x.serie === r.serie && String(x.nr) === String(r.nr)) === i;
-                      const groupSize = registru.filter((x) => x.serie === r.serie && String(x.nr) === String(r.nr)).length;
+                      const isFirstInGroup = sortedReg.findIndex((x) => x.serie === r.serie && String(x.nr) === String(r.nr)) === i;
+                      const groupSize = sortedReg.filter((x) => x.serie === r.serie && String(x.nr) === String(r.nr)).length;
                       return (
                         <tr key={r.id || i} style={{ background: rowBg }}>
                           <td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 133}</td>
@@ -2567,7 +2571,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                       <div style={{ background: "#fff3e0", border: "1px solid #ffcc80", borderRadius: 8, padding: 12, marginBottom: 10 }}>
                         <div style={{ fontWeight: 700, color: "#e65100", marginBottom: 8, fontSize: 12 }}>📋 Date PV</div>
                         <div style={{ display: "flex", gap: 8, marginBottom: 7 }}>
-                          <div style={{ flex: "0 0 60px" }}><label style={LSt}>Serie</label><input style={{ ...IFS, fontWeight: 700, color: "#e65100", textAlign: "center" }} value={pv.serie} onChange={(e) => updPV("serie", e.target.value)} /></div>
+                          <div style={{ flex: "0 0 80px" }}><label style={LSt}>Serie</label><select style={{ ...IFS, fontWeight: 700, color: "#e65100", textAlign: "center" }} value={pv.serie} onChange={(e) => updPV("serie", e.target.value)}><option value="A">A</option><option value="GK">GK</option></select></div>
                           <div style={{ flex: 1 }}><label style={LSt}>Nr. PV</label><input style={{ ...IFS, fontWeight: 700, color: "#1565c0" }} value={pv.nr_pv} onChange={(e) => updPV("nr_pv", e.target.value)} /></div>
                           <div style={{ flex: 1 }}><label style={LSt}>Nr. Anexa 3</label><input style={{ ...IFS, fontWeight: 700, color: "#1565c0" }} value={pv.nr_anexa} onChange={(e) => updPV("nr_anexa", e.target.value)} /></div>
                         </div>
@@ -2589,6 +2593,22 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                         <div style={{ marginBottom: 7 }}><label style={LSt}>Reprezentant</label><input style={IFS} value={pv.client_reprezentant || ""} onChange={(e) => updPV("client_reprezentant", e.target.value)} placeholder="Nume reprezentant..." /></div>
                         <div style={{ marginBottom: 7 }}><label style={LSt}>Autorizație Mediu nr.</label><input style={IFS} value={pv.client_autorizatie || ""} onChange={(e) => updPV("client_autorizatie", e.target.value)} /></div>
                         <div><label style={LSt}>Autorizație Mediu — valabilă până</label><input style={IFS} value={pv.client_autorizatie_exp || ""} onChange={(e) => updPV("client_autorizatie_exp", e.target.value)} placeholder="DD.MM.YYYY" /></div>
+                        {(() => {
+                          // Find selected client and check for puncte_lucru
+                          const selClient = pjList.find(f => f.denumire === pv.client_denumire);
+                          const punctele = selClient?.puncte_lucru || [];
+                          if (punctele.length === 0) return null;
+                          const opts = [selClient.adresa || pv.client_adresa, ...punctele];
+                          return (
+                            <div style={{ marginTop: 7 }}>
+                              <label style={LSt}>📍 Adresa Încărcare (Anexa 3)</label>
+                              <select style={{ ...IFS, fontWeight: 600, color: "#1565c0" }} value={pv.adresa_incarcare || (selClient.adresa || pv.client_adresa)} onChange={(e) => updPV("adresa_incarcare", e.target.value)}>
+                                {opts.map((adr, ai) => <option key={ai} value={adr}>{ai === 0 ? "🏢 Sediu social — " : `📍 Punct ${ai} — `}{adr}</option>)}
+                              </select>
+                              <div style={{ fontSize: 10, color: "#888", marginTop: 2 }}>Clientul are {punctele.length} {punctele.length === 1 ? "punct" : "puncte"} de lucru suplimentare. Alege de unde s-a făcut încărcarea.</div>
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       <div style={{ background: "#f3e5f5", border: "1px solid #ce93d8", borderRadius: 8, padding: 12 }}>
@@ -2596,8 +2616,10 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                         <div style={{ marginBottom: 7 }}><label style={LSt}>Delegat (Șofer)</label>
                           <select style={IFS} value={pv.delegat || ""} onChange={(e) => updPV("delegat", e.target.value)}>
                             <option value="">— alege —</option>
-                            {DELEGATI.map((d) => <option key={d}>{d}</option>)}
+                            {delegatiList.map((d) => <option key={d.id} value={d.nume}>{d.nume}</option>)}
+                            {delegatiList.length === 0 && DELEGATI.map((d) => <option key={d}>{d}</option>)}
                           </select>
+                          {delegatiList.length === 0 && <div style={{ fontSize: 10, color: "#888", marginTop: 2 }}>💡 Adaugă delegați în Variabile → Delegați</div>}
                         </div>
                         <div style={{ marginBottom: 7 }}><label style={LSt}>Nr. înmatriculare mijloc transport</label><input style={IFS} value={pv.nr_masina || ""} onChange={(e) => updPV("nr_masina", e.target.value)} placeholder="ex: IF55KFT" /></div>
                         <div style={{ marginBottom: 7 }}><label style={LSt}>Licență transport</label><input style={IFS} value={pv.licenta || ""} onChange={(e) => updPV("licenta", e.target.value)} /></div>
@@ -2662,7 +2684,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                     </tr></thead>
                     <tbody>
                       {pvList.length === 0 && <tr><td colSpan={10} style={{ textAlign: "center", padding: 20, color: "#aaa" }}>Niciun PV salvat. Creează unul în Editor.</td></tr>}
-                      {pvList.flatMap((r, pi) => {
+                      {sortByDateAsc(pvList).flatMap((r, pi) => {
                         const mats = (r.materiale || []).filter(m => m.den);
                         if (!mats.length) return [];
                         return mats.map((m, mi) => {
@@ -2723,7 +2745,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 900 }}>
                     <thead><tr><th style={th({ background: "#b71c1c", width: 28 })}></th>{[{ l: "Cod", w: 55 }, { l: "Denumire", w: 185 }, { l: "CUI", w: 105 }, { l: "Analitic", w: 82 }, { l: "Jud.", w: 45 }, { l: "Adresa", w: 180 }, { l: "Cont Bancă", w: 165 }, { l: "Bancă", w: 130 }, { l: "Reg.Com.", w: 100 }, { l: "Tel.", w: 90 }].map((c) => <th key={c.l} style={{ ...th({ background: "#e65100" }), width: c.w, textAlign: "left" }}>{c.l}</th>)}<th style={th({ background: "#e65100", width: 30 })}></th></tr></thead>
-                    <tbody>{pjList.filter((r) => !pjFilter || r.denumire?.toLowerCase().includes(pjFilter.toLowerCase()) || r.cod?.includes(pjFilter) || r.cod_fiscal?.toLowerCase().includes(pjFilter.toLowerCase())).map((r, i) => { const rowBg = i % 2 === 0 ? "#fff" : "#fff8f5"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 2}</td><td style={td({ background: "#fff3e0", fontWeight: 700, color: "#e65100", textAlign: "center" })}><input style={inp({ textAlign: "center", fontWeight: 700, color: "#e65100" })} value={r.cod || ""} onChange={(e) => updPJ(i, "cod", e.target.value)} /></td><td style={td({ fontWeight: 600 })}><input style={inp({ fontWeight: 600, fontSize: 11 })} value={r.denumire || ""} onChange={(e) => updPJ(i, "denumire", e.target.value)} /></td><td style={td({ background: "#fff8e1" })}><input style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.cod_fiscal || ""} onChange={(e) => updPJ(i, "cod_fiscal", e.target.value)} /></td><td style={td()}><input style={inp({ fontSize: 11 })} value={r.analitic || ""} onChange={(e) => updPJ(i, "analitic", e.target.value)} /></td><td style={td({ background: "#e8f5e9", textAlign: "center", fontWeight: 600, color: G })}><input style={inp({ textAlign: "center", fontWeight: 600, color: G })} value={r.judet || ""} onChange={(e) => updPJ(i, "judet", e.target.value)} /></td><td style={td({ fontSize: 11 })}><input style={inp({ fontSize: 11 })} value={r.adresa || ""} onChange={(e) => updPJ(i, "adresa", e.target.value)} /></td><td style={td({ background: r.cont_banca ? "#e8f5e9" : "#fff", fontFamily: "monospace", fontSize: 10 })}><input style={inp({ fontFamily: "monospace", fontSize: 10 })} value={r.cont_banca || ""} onChange={(e) => updPJ(i, "cont_banca", e.target.value)} /></td><td style={td({ fontSize: 11 })}><input style={inp({ fontSize: 11 })} value={r.banca || ""} onChange={(e) => updPJ(i, "banca", e.target.value)} /></td><td style={td({ fontFamily: "monospace", fontSize: 11 })}><input style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.reg_com || ""} onChange={(e) => updPJ(i, "reg_com", e.target.value)} /></td><td style={td({ fontSize: 11 })}><input style={inp({ fontSize: 11 })} value={r.tel || ""} onChange={(e) => updPJ(i, "tel", e.target.value)} /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delPJ(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                    <tbody>{pjList.filter((r) => !pjFilter || r.denumire?.toLowerCase().includes(pjFilter.toLowerCase()) || r.cod?.includes(pjFilter) || r.cod_fiscal?.toLowerCase().includes(pjFilter.toLowerCase())).map((r, i) => { const rowBg = i % 2 === 0 ? "#fff" : "#fff8f5"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 2}</td><td style={td({ background: "#fff3e0", fontWeight: 700, color: "#e65100", textAlign: "center" })}><input style={inp({ textAlign: "center", fontWeight: 700, color: "#e65100" })} value={r.cod || ""} onChange={(e) => updPJ(i, "cod", e.target.value)} /></td><td style={td({ fontWeight: 600 })}><input style={inp({ fontWeight: 600, fontSize: 11 })} value={r.denumire || ""} onChange={(e) => updPJ(i, "denumire", e.target.value)} /></td><td style={td({ background: "#fff8e1" })}><input style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.cod_fiscal || ""} onChange={(e) => updPJ(i, "cod_fiscal", e.target.value)} /></td><td style={td()}><input style={inp({ fontSize: 11 })} value={r.analitic || ""} onChange={(e) => updPJ(i, "analitic", e.target.value)} /></td><td style={td({ background: "#e8f5e9", textAlign: "center", fontWeight: 600, color: G })}><input style={inp({ textAlign: "center", fontWeight: 600, color: G })} value={r.judet || ""} onChange={(e) => updPJ(i, "judet", e.target.value)} /></td><td style={td({ fontSize: 11 })}><div style={{ display: "flex", gap: 4 }}><input style={inp({ fontSize: 11 })} value={r.adresa || ""} onChange={(e) => updPJ(i, "adresa", e.target.value)} /><button onClick={() => { const cur = (r.puncte_lucru || []).join("\n"); const nv = window.prompt(`Puncte de lucru (adrese suplimentare de ridicare)\nO adresă pe rând, lăsa gol pentru a șterge toate:`, cur); if (nv === null) return; const arr = nv.split("\n").map(s => s.trim()).filter(Boolean); updPJ(i, "puncte_lucru", arr); }} style={{ background: (r.puncte_lucru?.length || 0) > 0 ? "#e3f2fd" : "#fff", border: "1px solid #1565c0", borderRadius: 3, padding: "2px 6px", cursor: "pointer", fontSize: 10, color: "#1565c0", whiteSpace: "nowrap" }} title="Puncte de lucru (adrese suplimentare ridicare)">📍 {r.puncte_lucru?.length || 0}</button></div></td><td style={td({ background: r.cont_banca ? "#e8f5e9" : "#fff", fontFamily: "monospace", fontSize: 10 })}><input style={inp({ fontFamily: "monospace", fontSize: 10 })} value={r.cont_banca || ""} onChange={(e) => updPJ(i, "cont_banca", e.target.value)} /></td><td style={td({ fontSize: 11 })}><input style={inp({ fontSize: 11 })} value={r.banca || ""} onChange={(e) => updPJ(i, "banca", e.target.value)} /></td><td style={td({ fontFamily: "monospace", fontSize: 11 })}><input style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.reg_com || ""} onChange={(e) => updPJ(i, "reg_com", e.target.value)} /></td><td style={td({ fontSize: 11 })}><input style={inp({ fontSize: 11 })} value={r.tel || ""} onChange={(e) => updPJ(i, "tel", e.target.value)} /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delPJ(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
                   </table>
                 </div>
               </div>
@@ -2733,14 +2755,14 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
 
         {/* ══ CHELTUIELI ══ */}
         {tab === "cheltuieli" && (() => {
-          const chFiltered = chRows.filter(r => {
+          const chFiltered = sortByDateAsc(chRows.filter(r => {
             if (chMonth && monthOf(r.data) !== chMonth) return false;
             if (chCat && r.cat !== chCat) return false;
             if (chAchitat && r.ach !== chAchitat) return false;
             if (chAchDe && r.ach_de !== chAchDe) return false;
             if (chSearch) { const q = chSearch.toLowerCase(); if (!(r.det?.toLowerCase().includes(q) || r.note?.toLowerCase().includes(q) || String(r.suma).includes(q))) return false; }
             return true;
-          });
+          }));
           const chMonthOpts = [...new Set(chRows.map(r => monthOf(r.data)).filter(Boolean))].sort();
           return (
           <div>
@@ -2808,14 +2830,14 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
 
         {/* ══ COLECTARI ══ */}
         {tab === "colectari" && (() => {
-          const colFiltered = colRows.filter(r => {
+          const colFiltered = sortByDateAsc(colRows.filter(r => {
             if (colMonth && monthOf(r.data) !== colMonth) return false;
             if (colCat && r.cat !== colCat) return false;
             if (colAgent && r.agent !== colAgent) return false;
             if (colAchitat && r.ach !== colAchitat) return false;
             if (colSearch) { const q = colSearch.toLowerCase(); if (!(r.furn?.toLowerCase().includes(q) || r.produs?.toLowerCase().includes(q) || r.ach_de?.toLowerCase().includes(q))) return false; }
             return true;
-          });
+          }));
           const colMonthOpts = [...new Set(colRows.map(r => monthOf(r.data)).filter(Boolean))].sort();
           return (
           <div>
@@ -2888,12 +2910,12 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
 
         {/* ══ LIVRARI ══ */}
         {tab === "livrari" && (() => {
-          const livFiltered = livRows.filter(r => {
+          const livFiltered = sortByDateAsc(livRows.filter(r => {
             if (livMonth && monthOf(r.data) !== livMonth) return false;
             if (livClient && r.client !== livClient) return false;
             if (livSearch) { const q = livSearch.toLowerCase(); if (!(r.client?.toLowerCase().includes(q) || r.produs?.toLowerCase().includes(q) || r.det?.toLowerCase().includes(q) || String(r.nr).includes(q))) return false; }
             return true;
-          });
+          }));
           const livMonthOpts = [...new Set(livRows.map(r => monthOf(r.data)).filter(Boolean))].sort();
           return (
           <div>
@@ -2941,9 +2963,8 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
           );
         })()}
 
-        {/* ══ PRODUSE ══ */}
+        {/* ══ VARIABILE (Produse + Delegati) ══ */}
         {tab === "produse" && (() => {
-          const [prodSearch, setProdSearch] = [null, null]; // placeholder for hooks if needed
           const addProdus = async () => {
             const den = window.prompt("Denumire produs nou:");
             if (!den || !den.trim()) return;
@@ -2969,64 +2990,118 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
               else await logAction("delete", "produse", id, { den });
             } catch (e) { alert("Eroare: " + e.message); }
           };
+
+          const addDelegat = async () => {
+            const nume = window.prompt("Nume complet șofer/delegat:");
+            if (!nume || !nume.trim()) return;
+            const ci_serie = window.prompt("Serie CI (opțional, ex: AB):") || "";
+            const ci_numar = window.prompt("Număr CI (opțional, ex: 123456):") || "";
+            const cnp = window.prompt("CNP (opțional):") || "";
+            try {
+              const { error } = await sb.from("delegati").insert({ nume: nume.trim(), ci_serie: ci_serie.trim(), ci_numar: ci_numar.trim(), cnp: cnp.trim() });
+              if (error) alert("Eroare: " + error.message);
+              else await logAction("add", "delegati", "", { nume });
+            } catch (e) { alert("Eroare: " + e.message); }
+          };
+          const updDelegat = async (id, field, value) => {
+            try { await sb.from("delegati").update({ [field]: value }).eq("id", id); } catch (e) { alert("Eroare: " + e.message); }
+          };
+          const delDelegat = async (id, nume) => {
+            if (!confirmDel(`delegatul "${nume}"`)) return;
+            try {
+              await sb.from("delegati").delete().eq("id", id);
+              await logAction("delete", "delegati", id, { nume });
+            } catch (e) { alert("Eroare: " + e.message); }
+          };
+
+          const subTabSt = (k) => ({ padding: "8px 16px", borderRadius: "8px 8px 0 0", cursor: "pointer", fontSize: 13, fontWeight: 600, border: "1px solid #ccc", borderBottom: varSubTab === k ? "1px solid #fff" : "1px solid #ccc", background: varSubTab === k ? "#fff" : "#f0f0f0", color: varSubTab === k ? G : "#666", marginRight: 4, position: "relative", top: 1 });
+
           return (
             <div style={{ padding: 16 }}>
               <div style={{ background: "linear-gradient(135deg,#e3f2fd,#bbdefb)", border: "2px solid #1565c0", borderRadius: 10, padding: 14, marginBottom: 14 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "#0d47a1", marginBottom: 4 }}>🏷️ Gestiune Produse SAGA</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#0d47a1", marginBottom: 4 }}>🛠️ Variabile aplicație</div>
                 <div style={{ fontSize: 12, color: "#444" }}>
-                  Aici editezi <strong>denumirea</strong> și <strong>codul SAGA</strong> al produselor.
-                  Modificările apar automat în <strong>Borderouri, PV & Anexa 3, Colectări, Livrări</strong>.
+                  Editezi <strong>denumiri produse SAGA</strong> și <strong>listă delegați (șoferi)</strong>.
+                  Modificările apar automat în Borderouri, PV & Anexa 3, Colectări, Livrări.
                 </div>
-                {produseLista.length === 0 && (
-                  <div style={{ marginTop: 10, padding: 10, background: "#fff3e0", border: "1px solid #ffb74d", borderRadius: 6, fontSize: 12, color: "#bf360c" }}>
-                    ⚠️ Tabela <code>produse</code> e goală în Supabase. Rulează scriptul <strong>setup_produse.sql</strong> în SQL Editor să o populezi cu cele 169 produse SAGA inițiale.
+              </div>
+
+              <div style={{ borderBottom: "1px solid #ccc", marginBottom: 0 }}>
+                <button style={subTabSt("produse")} onClick={() => setVarSubTab("produse")}>🏷️ Produse <span style={{ marginLeft: 4, background: "#1565c0", color: "#fff", borderRadius: 10, padding: "1px 5px", fontSize: 10, fontWeight: 700 }}>{produseLista.length}</span></button>
+                <button style={subTabSt("delegati")} onClick={() => setVarSubTab("delegati")}>🚚 Delegați (Șoferi) <span style={{ marginLeft: 4, background: "#e65100", color: "#fff", borderRadius: 10, padding: "1px 5px", fontSize: 10, fontWeight: 700 }}>{delegatiList.length}</span></button>
+              </div>
+
+              {varSubTab === "produse" && (
+                <div style={{ background: "#fff", border: "1px solid #ccc", borderTop: "none", padding: 14 }}>
+                  {produseLista.length === 0 && (
+                    <div style={{ padding: 10, background: "#fff3e0", border: "1px solid #ffb74d", borderRadius: 6, fontSize: 12, color: "#bf360c", marginBottom: 10 }}>
+                      ⚠️ Tabela <code>produse</code> e goală. Rulează scriptul <strong>setup_produse.sql</strong>.
+                    </div>
+                  )}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                    <div style={{ fontSize: 13, color: "#555" }}>📊 Total: <strong style={{ color: "#1565c0" }}>{produseLista.length} produse</strong></div>
+                    <button onClick={addProdus} style={{ background: G, color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Adaugă Produs</button>
                   </div>
-                )}
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <div style={{ fontSize: 13, color: "#555" }}>
-                  📊 Total: <strong style={{ color: "#1565c0" }}>{produseLista.length} produse</strong>
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ borderCollapse: "collapse", width: "100%" }}>
+                      <colgroup><col style={{ width: 48 }} /><col /><col style={{ width: 110 }} /><col style={{ width: 110 }} /><col style={{ width: 30 }} /></colgroup>
+                      <thead><tr style={{ background: "#1565c0" }}>
+                        <th style={th({ background: "#0d47a1", textAlign: "center" })}>#</th>
+                        <th style={th({ background: "#1565c0", textAlign: "center" })}>Denumire</th>
+                        <th style={th({ background: "#1565c0", textAlign: "center" })}>Cod HG 856</th>
+                        <th style={th({ background: "#1565c0", textAlign: "center" })}>Cod SAGA</th>
+                        <th style={th({ background: "#0d47a1" })}></th>
+                      </tr></thead>
+                      <tbody>
+                        {produseLista.map((p, i) => (
+                          <tr key={p.id || i} style={{ background: i % 2 === 0 ? "#fff" : "#f0f7fc" }}>
+                            <td style={td({ textAlign: "center", color: "#888", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td>
+                            <td style={td()}><input style={inp({ textAlign: "center", fontWeight: 600 })} defaultValue={p.den || ""} onBlur={(e) => { if (e.target.value !== p.den) updProdus(p.id, "den", e.target.value); }} /></td>
+                            <td style={td({ background: "#fff8e1" })}><input style={inp({ textAlign: "center", fontFamily: "monospace" })} defaultValue={p.cod || ""} onBlur={(e) => { if (e.target.value !== p.cod) updProdus(p.id, "cod", e.target.value); }} /></td>
+                            <td style={td({ background: "#e3f2fd" })}><input style={inp({ textAlign: "center", fontFamily: "monospace", fontWeight: 700, color: "#1565c0" })} defaultValue={p.cod_art || ""} onBlur={(e) => { if (e.target.value !== p.cod_art) updProdus(p.id, "cod_art", e.target.value); }} /></td>
+                            <td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delProdus(p.id, p.den)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-                <button onClick={addProdus} style={{ background: G, color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Adaugă Produs</button>
-              </div>
+              )}
 
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ borderCollapse: "collapse", width: "100%" }}>
-                  <colgroup><col style={{ width: 48 }} /><col /><col style={{ width: 110 }} /><col style={{ width: 110 }} /><col style={{ width: 30 }} /></colgroup>
-                  <thead><tr style={{ background: "#1565c0" }}>
-                    <th style={th({ background: "#0d47a1", textAlign: "center" })}>#</th>
-                    <th style={th({ background: "#1565c0", textAlign: "center" })}>Denumire</th>
-                    <th style={th({ background: "#1565c0", textAlign: "center" })}>Cod HG 856</th>
-                    <th style={th({ background: "#1565c0", textAlign: "center" })}>Cod SAGA</th>
-                    <th style={th({ background: "#0d47a1" })}></th>
-                  </tr></thead>
-                  <tbody>
-                    {produseLista.length === 0 && <tr><td colSpan={5} style={{ textAlign: "center", padding: 30, color: "#888" }}>Nicio înregistrare în baza de date.</td></tr>}
-                    {produseLista.map((p, i) => (
-                      <tr key={p.id || i} style={{ background: i % 2 === 0 ? "#fff" : "#f0f7fc" }}>
-                        <td style={td({ textAlign: "center", color: "#888", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td>
-                        <td style={td()}>
-                          <input style={inp({ textAlign: "center", fontWeight: 600 })} defaultValue={p.den || ""} onBlur={(e) => { if (e.target.value !== p.den) updProdus(p.id, "den", e.target.value); }} />
-                        </td>
-                        <td style={td({ background: "#fff8e1" })}>
-                          <input style={inp({ textAlign: "center", fontFamily: "monospace" })} defaultValue={p.cod || ""} onBlur={(e) => { if (e.target.value !== p.cod) updProdus(p.id, "cod", e.target.value); }} />
-                        </td>
-                        <td style={td({ background: "#e3f2fd" })}>
-                          <input style={inp({ textAlign: "center", fontFamily: "monospace", fontWeight: 700, color: "#1565c0" })} defaultValue={p.cod_art || ""} onBlur={(e) => { if (e.target.value !== p.cod_art) updProdus(p.id, "cod_art", e.target.value); }} />
-                        </td>
-                        <td style={td({ textAlign: "center", padding: 3 })}>
-                          <button onClick={() => delProdus(p.id, p.den)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div style={{ marginTop: 12, padding: 10, background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 6, fontSize: 11, color: "#666" }}>
-                💡 <strong>Cum funcționează:</strong> Click pe orice celulă pentru a edita. Modificările se salvează automat când ieși din celulă (click în altă parte). Schimbările se reflectă instant în Borderouri, PV, Colectări și Livrări.
-              </div>
+              {varSubTab === "delegati" && (
+                <div style={{ background: "#fff", border: "1px solid #ccc", borderTop: "none", padding: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                    <div style={{ fontSize: 13, color: "#555" }}>🚚 Total: <strong style={{ color: "#e65100" }}>{delegatiList.length} delegați</strong></div>
+                    <button onClick={addDelegat} style={{ background: "#e65100", color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Adaugă Delegat</button>
+                  </div>
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ borderCollapse: "collapse", width: "100%" }}>
+                      <colgroup><col style={{ width: 48 }} /><col /><col style={{ width: 80 }} /><col style={{ width: 110 }} /><col style={{ width: 130 }} /><col style={{ width: 30 }} /></colgroup>
+                      <thead><tr style={{ background: "#e65100" }}>
+                        <th style={th({ background: "#bf360c", textAlign: "center" })}>#</th>
+                        <th style={th({ background: "#e65100", textAlign: "center" })}>Nume Complet</th>
+                        <th style={th({ background: "#e65100", textAlign: "center" })}>Serie CI</th>
+                        <th style={th({ background: "#e65100", textAlign: "center" })}>Număr CI</th>
+                        <th style={th({ background: "#e65100", textAlign: "center" })}>CNP</th>
+                        <th style={th({ background: "#bf360c" })}></th>
+                      </tr></thead>
+                      <tbody>
+                        {delegatiList.length === 0 && <tr><td colSpan={6} style={{ textAlign: "center", padding: 30, color: "#888" }}>Niciun delegat încă. Adaugă unul cu butonul de mai sus.</td></tr>}
+                        {delegatiList.map((d, i) => (
+                          <tr key={d.id || i} style={{ background: i % 2 === 0 ? "#fff" : "#fff3e0" }}>
+                            <td style={td({ textAlign: "center", color: "#888", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td>
+                            <td style={td()}><input style={inp({ textAlign: "center", fontWeight: 600 })} defaultValue={d.nume || ""} onBlur={(e) => { if (e.target.value !== d.nume) updDelegat(d.id, "nume", e.target.value); }} /></td>
+                            <td style={td({ background: "#fff8e1" })}><input style={inp({ textAlign: "center", fontFamily: "monospace" })} defaultValue={d.ci_serie || ""} onBlur={(e) => { if (e.target.value !== d.ci_serie) updDelegat(d.id, "ci_serie", e.target.value); }} /></td>
+                            <td style={td({ background: "#fff8e1" })}><input style={inp({ textAlign: "center", fontFamily: "monospace" })} defaultValue={d.ci_numar || ""} onBlur={(e) => { if (e.target.value !== d.ci_numar) updDelegat(d.id, "ci_numar", e.target.value); }} /></td>
+                            <td style={td({ background: "#e3f2fd" })}><input style={inp({ textAlign: "center", fontFamily: "monospace" })} defaultValue={d.cnp || ""} onBlur={(e) => { if (e.target.value !== d.cnp) updDelegat(d.id, "cnp", e.target.value); }} /></td>
+                            <td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delDelegat(d.id, d.nume)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })()}
