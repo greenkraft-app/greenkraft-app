@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Fragment } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 // ── Supabase client ───────────────────────────────────────────
@@ -187,6 +187,7 @@ const CLIENTI = ["ROMRECYCLING","CRILELMAR SRL","GREENTECH","METALROM","RECYCLE 
 const CATEGORIE_COL = ["Curte","Deee","Diverse","Altele"];
 const COL_COLORS = { Curte: "#c6efce", Deee: "#bdd7ee", Diverse: "#fff2cc", Altele: "#fce4d6" };
 const CATEGORIE_CH = ["Diverse","Taxe","Salarii","Utilități","Transport","Combustibil","Altele"];
+const DECONT_CAT = ["Marfă","Salarii","Furnizor","Combustibil","Taxe","Comisioane","Altele"];
 const GREENKRAFT_OPT = ["Deee","Greenkraft"];
 const LUNI = ["Ian","Feb","Mar","Apr","Mai","Iun","Iul","Aug","Sep","Oct","Nov","Dec"];
 const SERII = ["GK","GKR"];
@@ -764,6 +765,7 @@ export default function App() {
   const [datFilter, setDatFilter] = useState("");
   const [avTip, setAvTip] = useState("toate");
   const [avPers, setAvPers] = useState("");
+  const [expandedAv, setExpandedAv] = useState(null); // id of expanded avans row
   const [ctSearch, setCtSearch] = useState("");
   const [pinUnlocked, setPinUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState("");
@@ -959,9 +961,40 @@ export default function App() {
   const updAV = mkUpd(avRows, setAvRows, "avansuri");
   const delAV = mkDel(setAvRows, "avansuri", "acest avans/dividend");
   const addAV = async (tip) => {
-    const row = { data: today(), catre: "", suma: "", tip, det: "" };
+    const row = { data: today(), catre: "", suma: "", tip, det: "", decont: [] };
     const { data } = await sb.from("avansuri").insert(row).select();
     if (data) setAvRows((p) => [...p, data[0]]);
+  };
+  // Decont items
+  const addDecontItem = async (avansId) => {
+    const av = avRows.find(a => a.id === avansId);
+    if (!av) return;
+    const newItem = { data: today(), suma: "", cat: "Marfă", det: "" };
+    const newDecont = [...(av.decont || []), newItem];
+    try {
+      await sb.from("avansuri").update({ decont: newDecont }).eq("id", avansId);
+      setAvRows(p => p.map(r => r.id === avansId ? { ...r, decont: newDecont } : r));
+    } catch (e) { alert("Eroare: " + e.message); }
+  };
+  const updDecontItem = async (avansId, idx, field, value) => {
+    const av = avRows.find(a => a.id === avansId);
+    if (!av) return;
+    const newDecont = [...(av.decont || [])];
+    newDecont[idx] = { ...newDecont[idx], [field]: value };
+    try {
+      await sb.from("avansuri").update({ decont: newDecont }).eq("id", avansId);
+      setAvRows(p => p.map(r => r.id === avansId ? { ...r, decont: newDecont } : r));
+    } catch (e) { alert("Eroare: " + e.message); }
+  };
+  const delDecontItem = async (avansId, idx) => {
+    if (!window.confirm("Ștergi această decontare?")) return;
+    const av = avRows.find(a => a.id === avansId);
+    if (!av) return;
+    const newDecont = (av.decont || []).filter((_, i) => i !== idx);
+    try {
+      await sb.from("avansuri").update({ decont: newDecont }).eq("id", avansId);
+      setAvRows(p => p.map(r => r.id === avansId ? { ...r, decont: newDecont } : r));
+    } catch (e) { alert("Eroare: " + e.message); }
   };
 
   // Contracte
@@ -3252,14 +3285,117 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
               </div>
             </div>
             <div style={{ overflowX: "auto" }}>
-              <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 480 }}>
-                <colgroup><col style={{ width: 28 }} /><col style={{ width: 130 }} /><col style={{ width: 140 }} /><col style={{ width: 110 }} /><col style={{ width: 110 }} /><col /><col style={{ width: 30 }} /></colgroup>
-                <thead><tr style={{ background: G }}><th style={th({ background: "#155a35" })}></th><th style={th({ textAlign: "center" })}>Data</th><th style={th({ textAlign: "center" })}>Către</th><th style={th({ textAlign: "center" })}>Total (lei)</th><th style={th({ textAlign: "center" })}>Tip</th><th style={th({ textAlign: "center" })}>Detalii</th><th style={th({})}></th></tr></thead>
+              <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 800 }}>
+                <colgroup><col style={{ width: 28 }} /><col style={{ width: 28 }} /><col style={{ width: 110 }} /><col style={{ width: 140 }} /><col style={{ width: 95 }} /><col style={{ width: 95 }} /><col style={{ width: 95 }} /><col style={{ width: 100 }} /><col style={{ width: 95 }} /><col /><col style={{ width: 30 }} /></colgroup>
+                <thead><tr style={{ background: G }}>
+                  <th style={th({ background: "#155a35" })}></th>
+                  <th style={th({ background: "#155a35" })}></th>
+                  <th style={th({ textAlign: "center" })}>Data</th>
+                  <th style={th({ textAlign: "center" })}>Către</th>
+                  <th style={th({ textAlign: "center" })}>Avans (lei)</th>
+                  <th style={th({ textAlign: "center" })}>Decontat</th>
+                  <th style={th({ textAlign: "center" })}>Rest</th>
+                  <th style={th({ textAlign: "center" })}>Status</th>
+                  <th style={th({ textAlign: "center" })}>Tip</th>
+                  <th style={th({ textAlign: "center" })}>Detalii</th>
+                  <th style={th({})}></th>
+                </tr></thead>
                 <tbody>
-                  {filtAv.length === 0 && <tr><td colSpan={7} style={{ textAlign: "center", padding: 20, color: "#aaa" }}>Nicio înregistrare.</td></tr>}
-                  {filtAv.map((r, i) => { const oi = avRows.indexOf(r); const isDiv = r.tip === "dividend"; const rowBg = isDiv ? (i % 2 === 0 ? "#eff6ff" : "#dbeafe") : (i % 2 === 0 ? "#fff" : "#f9f9f9"); return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 2}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updAV(oi, "data", v)} /></td><td style={td({ background: rowBg, fontWeight: 600 })}><input style={inp({ textAlign: "center", fontWeight: 600 })} value={r.catre || ""} onChange={(e) => updAV(oi, "catre", e.target.value)} placeholder="—" /></td><td style={td({ background: rowBg, textAlign: "right", fontWeight: 700, color: isDiv ? "#1565c0" : "#e65100" })}><input style={inp({ textAlign: "right", fontWeight: 700, color: isDiv ? "#1565c0" : "#e65100" })} value={r.suma || ""} onChange={(e) => updAV(oi, "suma", e.target.value)} placeholder="0" /></td><td style={td({ background: isDiv ? "#dbeafe" : "#fff3e0", textAlign: "center" })}><select style={sel({ color: isDiv ? "#1565c0" : "#e65100", fontWeight: 700, textAlign: "center" })} value={r.tip || ""} onChange={(e) => updAV(oi, "tip", e.target.value)}><option value="avans">avans</option><option value="dividend">dividende</option></select></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "center" })} value={r.det || ""} onChange={(e) => updAV(oi, "det", e.target.value)} placeholder="..." /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delAV(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 14 }}>✕</button></td></tr>); })}
+                  {filtAv.length === 0 && <tr><td colSpan={11} style={{ textAlign: "center", padding: 20, color: "#aaa" }}>Nicio înregistrare.</td></tr>}
+                  {filtAv.map((r, i) => {
+                    const oi = avRows.indexOf(r);
+                    const isDiv = r.tip === "dividend";
+                    const sumaTot = parseSuma(r.suma) || 0;
+                    const decont = r.decont || [];
+                    const decontatTot = decont.reduce((s, d) => s + (parseSuma(d.suma) || 0), 0);
+                    const rest = sumaTot - decontatTot;
+                    const isExpanded = expandedAv === r.id;
+                    let statusLbl, statusBg, statusColor;
+                    if (sumaTot === 0) { statusLbl = "—"; statusBg = "#f5f5f5"; statusColor = "#888"; }
+                    else if (rest === 0) { statusLbl = "✅ Închis"; statusBg = "#e8f5e9"; statusColor = G; }
+                    else if (rest < 0) { statusLbl = "⚠️ Supra"; statusBg = "#ffebee"; statusColor = "#c62828"; }
+                    else if (decontatTot === 0) { statusLbl = "⏳ Nedecontat"; statusBg = "#fff3e0"; statusColor = "#e65100"; }
+                    else { statusLbl = "🟡 În decont"; statusBg = "#fff8e1"; statusColor = "#f57c00"; }
+                    const rowBg = isDiv ? (i % 2 === 0 ? "#eff6ff" : "#dbeafe") : (i % 2 === 0 ? "#fff" : "#f9f9f9");
+                    return (
+                      <Fragment key={r.id || i}>
+                        <tr style={{ background: rowBg }}>
+                          <td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 2}</td>
+                          <td style={td({ textAlign: "center", padding: 2 })}>
+                            <button onClick={() => setExpandedAv(isExpanded ? null : r.id)} title={isExpanded ? "Ascunde deconturi" : "Vezi/Adaugă deconturi"} style={{ background: isExpanded ? G : "#e8f5e9", color: isExpanded ? "#fff" : G, border: `1px solid ${G}`, borderRadius: 4, padding: "2px 7px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>{isExpanded ? "▼" : "▶"} {decont.length}</button>
+                          </td>
+                          <td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updAV(oi, "data", v)} /></td>
+                          <td style={td({ background: rowBg, fontWeight: 600 })}><input style={inp({ textAlign: "center", fontWeight: 600 })} value={r.catre || ""} onChange={(e) => updAV(oi, "catre", e.target.value)} placeholder="—" /></td>
+                          <td style={td({ background: rowBg, textAlign: "right", fontWeight: 700, color: isDiv ? "#1565c0" : "#e65100" })}><input style={inp({ textAlign: "right", fontWeight: 700, color: isDiv ? "#1565c0" : "#e65100" })} value={r.suma || ""} onChange={(e) => updAV(oi, "suma", e.target.value)} placeholder="0" /></td>
+                          <td style={td({ background: decontatTot > 0 ? "#e8f5e9" : rowBg, textAlign: "right", fontWeight: 700, color: decontatTot > 0 ? G : "#888" })}>{fmt(decontatTot)}</td>
+                          <td style={td({ background: rest === 0 && sumaTot > 0 ? "#e8f5e9" : rest < 0 ? "#ffebee" : rest > 0 && sumaTot > 0 ? "#fff8e1" : rowBg, textAlign: "right", fontWeight: 700, color: rest === 0 && sumaTot > 0 ? G : rest < 0 ? "#c62828" : "#e65100" })}>{fmt(rest)}</td>
+                          <td style={td({ background: statusBg, textAlign: "center", fontWeight: 700, color: statusColor, fontSize: 11 })}>{statusLbl}</td>
+                          <td style={td({ background: isDiv ? "#dbeafe" : "#fff3e0", textAlign: "center" })}><select style={sel({ color: isDiv ? "#1565c0" : "#e65100", fontWeight: 700, textAlign: "center" })} value={r.tip || ""} onChange={(e) => updAV(oi, "tip", e.target.value)}><option value="avans">avans</option><option value="dividend">dividende</option></select></td>
+                          <td style={td({ background: rowBg })}><input style={inp({ textAlign: "center" })} value={r.det || ""} onChange={(e) => updAV(oi, "det", e.target.value)} placeholder="..." /></td>
+                          <td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delAV(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 14 }}>✕</button></td>
+                        </tr>
+                        {isExpanded && (
+                          <tr>
+                            <td colSpan={11} style={{ padding: 12, background: "#fafafa", borderTop: `2px solid ${G}`, borderBottom: `2px solid ${G}` }}>
+                              <div style={{ background: "#fff", border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                                  <div style={{ fontWeight: 700, color: G, fontSize: 13 }}>📋 Deconturi pentru avans {r.catre || "—"} ({fmt(sumaTot)} lei)</div>
+                                  <button onClick={() => addDecontItem(r.id)} style={{ background: G, color: "#fff", border: "none", borderRadius: 5, padding: "5px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Adaugă Decont</button>
+                                </div>
+                                {decont.length === 0 ? (
+                                  <div style={{ textAlign: "center", padding: 14, color: "#aaa", fontSize: 12 }}>Niciun decont încă. Click pe "+ Adaugă Decont" mai sus.</div>
+                                ) : (
+                                  <table style={{ borderCollapse: "collapse", width: "100%" }}>
+                                    <colgroup><col style={{ width: 28 }} /><col style={{ width: 120 }} /><col style={{ width: 110 }} /><col style={{ width: 110 }} /><col /><col style={{ width: 30 }} /></colgroup>
+                                    <thead><tr style={{ background: "#155a35" }}>
+                                      <th style={th({ background: "#0d4a2a", textAlign: "center" })}>#</th>
+                                      <th style={th({ background: "#155a35", textAlign: "center" })}>Data</th>
+                                      <th style={th({ background: "#155a35", textAlign: "center" })}>Categorie</th>
+                                      <th style={th({ background: "#155a35", textAlign: "center" })}>Sumă (lei)</th>
+                                      <th style={th({ background: "#155a35", textAlign: "center" })}>Descriere</th>
+                                      <th style={th({ background: "#0d4a2a" })}></th>
+                                    </tr></thead>
+                                    <tbody>
+                                      {decont.map((d, di) => (
+                                        <tr key={di} style={{ background: di % 2 === 0 ? "#fff" : "#f8fbf9" }}>
+                                          <td style={td({ textAlign: "center", color: "#888", fontSize: 10, background: "#f5f5f5" })}>{di + 1}</td>
+                                          <td style={td()}><DateInput value={d.data || ""} onChange={(v) => updDecontItem(r.id, di, "data", v)} /></td>
+                                          <td style={td({ background: "#e8f5e9" })}>
+                                            <select style={sel({ color: G, fontWeight: 600, textAlign: "center" })} value={d.cat || "Marfă"} onChange={(e) => updDecontItem(r.id, di, "cat", e.target.value)}>
+                                              {DECONT_CAT.map((c) => <option key={c}>{c}</option>)}
+                                            </select>
+                                          </td>
+                                          <td style={td({ textAlign: "right", background: "#fff8e1", fontWeight: 700, color: "#e65100" })}>
+                                            <input style={inp({ textAlign: "right", fontWeight: 700, color: "#e65100" })} value={d.suma || ""} onChange={(e) => updDecontItem(r.id, di, "suma", e.target.value)} placeholder="0" />
+                                          </td>
+                                          <td style={td()}><input style={inp({ textAlign: "center" })} value={d.det || ""} onChange={(e) => updDecontItem(r.id, di, "det", e.target.value)} placeholder="Descriere..." /></td>
+                                          <td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delDecontItem(r.id, di)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                    <tfoot>
+                                      <tr style={{ background: "#e8f5e9" }}>
+                                        <td colSpan={3} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12, color: G }}>TOTAL DECONTAT</td>
+                                        <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 700, color: G, fontSize: 12 }}>{fmt(decontatTot)} lei</td>
+                                        <td colSpan={2}></td>
+                                      </tr>
+                                      <tr style={{ background: rest === 0 ? "#e8f5e9" : rest < 0 ? "#ffebee" : "#fff8e1" }}>
+                                        <td colSpan={3} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12, color: rest === 0 ? G : rest < 0 ? "#c62828" : "#e65100" }}>REST DE DECONTAT</td>
+                                        <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 800, color: rest === 0 ? G : rest < 0 ? "#c62828" : "#e65100", fontSize: 13 }}>{fmt(rest)} lei</td>
+                                        <td colSpan={2}></td>
+                                      </tr>
+                                    </tfoot>
+                                  </table>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
-                <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={3} style={{ padding: "7px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700, fontSize: 13 }}>{fmt(filtAv.reduce((s, r) => s + (parseSuma(r.suma) || 0), 0))} lei</td><td colSpan={3}></td></tr></tfoot>
+                <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={4} style={{ padding: "7px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700, fontSize: 13 }}>{fmt(filtAv.reduce((s, r) => s + (parseSuma(r.suma) || 0), 0))} lei</td><td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700, fontSize: 13 }}>{fmt(filtAv.reduce((s, r) => s + (r.decont || []).reduce((ss, d) => ss + (parseSuma(d.suma) || 0), 0), 0))}</td><td colSpan={5}></td></tr></tfoot>
               </table>
             </div>
           </div>
