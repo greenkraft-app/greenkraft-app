@@ -748,6 +748,10 @@ export default function App() {
     })();
   }, [currentUser]);
   const [bordSubTab, setBordSubTab] = useState("editor");
+  const [regPfMonth, setRegPfMonth] = useState("");
+  const [regPfSearch, setRegPfSearch] = useState("");
+  const [regPjMonth, setRegPjMonth] = useState("");
+  const [regPjSearch, setRegPjSearch] = useState("");
   const [activeBord, setActiveBord] = useState(0);
   const [previewMode, setPreviewMode] = useState(false);
   const [detSearch, setDetSearch] = useState("");
@@ -1088,7 +1092,8 @@ export default function App() {
       const imp = Math.round(v * 0.1), tx = Math.round(v * 0.02);
       return { serie: b.serie, nr: b.nr, data: b.data, furnizor: b.det, adresa: b.dom, cnp: b.cnp, denumire: p.den.toUpperCase(), cantitate: parseFloat(p.cant) || 0, pu: parseFloat(p.pret) || 0, valoare: Math.round(v - imp - tx) };
     });
-    const { data: ins } = await sb.from("registru").insert(newEntries).select();
+    const { data: ins, error } = await sb.from("registru").insert(newEntries).select();
+    if (error) { alert("❌ Eroare salvare Borderou: " + error.message); return; }
     if (ins) setRegistru(p => [...p, ...ins]);
     alert(`✅ Borderou ${b.serie} ${b.nr} salvat!`);
     const updatedReg = [...registru, ...(ins || newEntries)];
@@ -1151,7 +1156,6 @@ export default function App() {
       client_reg_com: f.reg_com || "",
       client_judet: f.judet || "",
       adresa_incarcare: f.adresa || "", // default = sediu social
-      _puncte_lucru_client: f.puncte_lucru || [], // available pickup addresses
     }));
     setPjSearchPV(f.denumire);
     setPjOpenPV(false);
@@ -1164,8 +1168,10 @@ export default function App() {
     if (pvList.some(x => x.serie === pv.serie && String(x.nr_pv) === String(pv.nr_pv))) {
       alert(`⚠️ PV ${pv.serie} ${pv.nr_pv} există deja!`); return;
     }
-    const row = { ...pv, materiale: mats };
-    const { data: ins } = await sb.from("procese_verbale").insert(row).select();
+    // Strip any "_" prefixed fields (UI-only state)
+    const row = Object.fromEntries(Object.entries({ ...pv, materiale: mats }).filter(([k]) => !k.startsWith("_")));
+    const { data: ins, error } = await sb.from("procese_verbale").insert(row).select();
+    if (error) { alert("❌ Eroare salvare PV: " + error.message); return; }
     if (ins) setPvList(p => [...p, ins[0]]);
     alert(`✅ PV ${pv.serie} ${pv.nr_pv} salvat!`);
     setPvBorderouri(p => { const n = [...p]; n[activePV] = newPV([...pvList, ...(ins || [row])]); return n; });
@@ -2512,18 +2518,36 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
               </div>
             )}
 
-            {bordSubTab === "registru" && (
+            {bordSubTab === "registru" && (() => {
+              const regPfMonths = [...new Set(registru.map(r => monthOf(r.data)).filter(Boolean))].sort().reverse();
+              const filteredReg = registru.filter(r => {
+                if (regPfMonth && monthOf(r.data) !== regPfMonth) return false;
+                if (regPfSearch) {
+                  const q = regPfSearch.toLowerCase();
+                  if (!(r.furnizor?.toLowerCase().includes(q) || r.cnp?.includes(q) || r.denumire?.toLowerCase().includes(q) || String(r.nr).includes(q))) return false;
+                }
+                return true;
+              });
+              return (
               <div>
                 <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
-                  <SC label="Total" value={registru.length + " buc."} c={G} bg="#e8f5e9" />
-                  <SC label="Cant." value={fmt(registru.reduce((s, r) => s + (parseFloat(r.cantitate) || 0), 0)) + " kg"} c="#1565c0" bg="#e3f2fd" />
-                  <SC label="Valoare" value={fmt(registru.reduce((s, r) => s + (parseFloat(r.valoare) || 0), 0)) + " lei"} c="#6a1b9a" bg="#f3e5f5" />
+                  <SC label="Total" value={filteredReg.length + " / " + registru.length + " buc."} c={G} bg="#e8f5e9" />
+                  <SC label="Cant." value={fmt(filteredReg.reduce((s, r) => s + (parseFloat(r.cantitate) || 0), 0)) + " kg"} c="#1565c0" bg="#e3f2fd" />
+                  <SC label="Valoare" value={fmt(filteredReg.reduce((s, r) => s + (parseFloat(r.valoare) || 0), 0)) + " lei"} c="#6a1b9a" bg="#f3e5f5" />
                   <button onClick={() => setBordSubTab("editor")} style={{ marginLeft: "auto", padding: "6px 14px", background: G, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Borderou nou</button>
+                </div>
+                <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
+                  <select value={regPfMonth} onChange={(e) => setRegPfMonth(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 6, padding: "6px 10px", fontSize: 12, minWidth: 130 }}>
+                    <option value="">📅 Toate lunile</option>
+                    {regPfMonths.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                  <input type="text" placeholder="🔍 Caută furnizor, CNP, nr, denumire..." value={regPfSearch} onChange={(e) => setRegPfSearch(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 6, padding: "6px 10px", fontSize: 12, minWidth: 280, flex: 1 }} />
+                  {(regPfMonth || regPfSearch) && <button onClick={() => { setRegPfMonth(""); setRegPfSearch(""); }} style={{ background: "#fff", border: "1px solid #c62828", color: "#c62828", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontSize: 12 }}>✕ Resetează</button>}
                 </div>
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 800 }}>
                     <thead><tr>{[{ l: "", w: 28 }, ...regCols, { l: "🖨️ Print", w: 70 }, { l: "", w: 30 }].map((c, i) => <th key={i} style={{ ...th({ background: G }), width: c.w }}>{c.l}</th>)}</tr></thead>
-                    <tbody>{sortByDateAsc(registru).map((r, i, sortedReg) => {
+                    <tbody>{sortByDateAsc(filteredReg).map((r, i, sortedReg) => {
                       const rowBg = i % 2 === 0 ? "#fff" : "#f7faf8";
                       // Show print button only on first row of each serie+nr group
                       const key = `${r.serie}__${r.nr}`;
@@ -2548,11 +2572,12 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                         </tr>
                       );
                     })}</tbody>
-                    <tfoot><tr style={{ background: G, color: "#fff" }}><td></td><td colSpan={6} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(registru.reduce((s, r) => s + (parseFloat(r.cantitate) || 0), 0))}</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(registru.reduce((s, r) => s + (parseFloat(r.valoare) || 0), 0))}</td><td></td><td></td></tr></tfoot>
+                    <tfoot><tr style={{ background: G, color: "#fff" }}><td></td><td colSpan={6} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(filteredReg.reduce((s, r) => s + (parseFloat(r.cantitate) || 0), 0))}</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(filteredReg.reduce((s, r) => s + (parseFloat(r.valoare) || 0), 0))}</td><td></td><td></td></tr></tfoot>
                   </table>
                 </div>
               </div>
-            )}
+              );
+            })()}
 
             {bordSubTab === "pf" && (
               <div>
@@ -2694,12 +2719,32 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
               </div>
             )}
 
-            {pvSubTab === "registru" && (
+            {pvSubTab === "registru" && (() => {
+              const regPjMonths = [...new Set(pvList.map(p => monthOf(p.data)).filter(Boolean))].sort().reverse();
+              const filteredPV = pvList.filter(p => {
+                if (regPjMonth && monthOf(p.data) !== regPjMonth) return false;
+                if (regPjSearch) {
+                  const q = regPjSearch.toLowerCase();
+                  const matMatch = (p.materiale || []).some(m => m.den?.toLowerCase().includes(q));
+                  if (!(p.client_denumire?.toLowerCase().includes(q) || p.client_cui?.includes(q) || String(p.nr_pv).includes(q) || matMatch)) return false;
+                }
+                return true;
+              });
+              const totKgFilt = filteredPV.reduce((s, p) => s + (p.materiale || []).reduce((ss, m) => ss + (parseFloat(m.cant) || 0), 0), 0);
+              return (
               <div>
                 <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
-                  <SC label="Total PV-uri" value={pvList.length + " buc."} c="#e65100" bg="#fff3e0" />
-                  <SC label="Total Cant." value={fmt(pvList.reduce((s, p) => s + (p.materiale || []).reduce((ss, m) => ss + (parseFloat(m.cant) || 0), 0), 0)) + " kg"} c="#1565c0" bg="#e3f2fd" />
+                  <SC label="Total PV-uri" value={filteredPV.length + " / " + pvList.length + " buc."} c="#e65100" bg="#fff3e0" />
+                  <SC label="Total Cant." value={fmt(totKgFilt) + " kg"} c="#1565c0" bg="#e3f2fd" />
                   <button onClick={() => setPvSubTab("editor")} style={{ marginLeft: "auto", padding: "6px 14px", background: "#e65100", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ PV nou</button>
+                </div>
+                <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
+                  <select value={regPjMonth} onChange={(e) => setRegPjMonth(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 6, padding: "6px 10px", fontSize: 12, minWidth: 130 }}>
+                    <option value="">📅 Toate lunile</option>
+                    {regPjMonths.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                  <input type="text" placeholder="🔍 Caută client, CUI, nr PV, denumire material..." value={regPjSearch} onChange={(e) => setRegPjSearch(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 6, padding: "6px 10px", fontSize: 12, minWidth: 280, flex: 1 }} />
+                  {(regPjMonth || regPjSearch) && <button onClick={() => { setRegPjMonth(""); setRegPjSearch(""); }} style={{ background: "#fff", border: "1px solid #c62828", color: "#c62828", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontSize: 12 }}>✕ Resetează</button>}
                 </div>
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 800 }}>
@@ -2717,7 +2762,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                     </tr></thead>
                     <tbody>
                       {pvList.length === 0 && <tr><td colSpan={10} style={{ textAlign: "center", padding: 20, color: "#aaa" }}>Niciun PV salvat. Creează unul în Editor.</td></tr>}
-                      {sortByDateAsc(pvList).flatMap((r, pi) => {
+                      {sortByDateAsc(filteredPV).flatMap((r, pi) => {
                         const mats = (r.materiale || []).filter(m => m.den);
                         if (!mats.length) return [];
                         return mats.map((m, mi) => {
@@ -2747,11 +2792,12 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                         });
                       })}
                     </tbody>
-                    <tfoot><tr style={{ background: "#e65100", color: "#fff" }}><td colSpan={7} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(pvList.reduce((s, p) => s + (p.materiale || []).reduce((ss, m) => ss + (parseFloat(m.cant) || 0), 0), 0))} kg</td><td colSpan={2}></td></tr></tfoot>
+                    <tfoot><tr style={{ background: "#e65100", color: "#fff" }}><td colSpan={7} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(totKgFilt)} kg</td><td colSpan={2}></td></tr></tfoot>
                   </table>
                 </div>
               </div>
-            )}
+              );
+            })()}
 
             {pvSubTab === "pj" && (
               <div>
