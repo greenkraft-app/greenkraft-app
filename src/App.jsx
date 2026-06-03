@@ -1110,10 +1110,12 @@ export default function App() {
   };
 
   // ── PV (Proces Verbal) helpers ────────────────────────────
-  const newPV = (lst = []) => {
-    const maxNr = lst.length ? Math.max(...lst.map(p => parseInt(p.nr_pv) || 0)) : 809;
+  const newPV = (lst = [], serie = "A") => {
+    const filtered = lst.filter(p => p.serie === serie);
+    const defaults = { A: 837, PV: 6585, GK: 0 };
+    const maxNr = filtered.length ? Math.max(...filtered.map(p => parseInt(p.nr_pv) || 0)) : (defaults[serie] ?? 0);
     return {
-      serie: "A",
+      serie,
       nr_pv: String(maxNr + 1),
       nr_anexa: String(maxNr + 1),
       data: today(),
@@ -1137,7 +1139,17 @@ export default function App() {
   const [pvBorderouri, setPvBorderouri] = useState([newPV()]);
   const pv = pvBorderouri[activePV] || newPV();
   const setPV = (fn) => setPvBorderouri((p) => { const n = [...p]; n[activePV] = fn(n[activePV]); return n; });
-  const updPV = (f, v) => setPV((p) => f === "nr_pv" ? { ...p, nr_pv: v, nr_anexa: v } : { ...p, [f]: v });
+  const updPV = (f, v) => setPV((p) => {
+    if (f === "nr_pv") return { ...p, nr_pv: v, nr_anexa: v };
+    if (f === "serie") {
+      const filtered = pvList.filter(x => x.serie === v);
+      const defaults = { A: 837, PV: 6585, GK: 0 };
+      const maxNr = filtered.length ? Math.max(...filtered.map(x => parseInt(x.nr_pv) || 0)) : (defaults[v] ?? 0);
+      const nextNr = String(maxNr + 1);
+      return { ...p, serie: v, nr_pv: nextNr, nr_anexa: nextNr };
+    }
+    return { ...p, [f]: v };
+  });
   const updPVMat = (i, f, v) => setPV((p) => {
     const ms = [...p.materiale];
     ms[i] = { ...ms[i], [f]: v };
@@ -1174,7 +1186,7 @@ export default function App() {
     if (error) { alert("❌ Eroare salvare PV: " + error.message); return; }
     if (ins) setPvList(p => [...p, ins[0]]);
     alert(`✅ PV ${pv.serie} ${pv.nr_pv} salvat!`);
-    setPvBorderouri(p => { const n = [...p]; n[activePV] = newPV([...pvList, ...(ins || [row])]); return n; });
+    setPvBorderouri(p => { const n = [...p]; n[activePV] = newPV([...pvList, ...(ins || [row])], pv.serie); return n; });
     setPjSearchPV("");
     setPvSubTab("registru");
   };
