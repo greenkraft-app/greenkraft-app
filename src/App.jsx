@@ -2182,13 +2182,13 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
               <button onClick={() => setShowAutMediu(false)} style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.4)", color: "#fff", borderRadius: 6, padding: "4px 12px", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>✕</button>
             </div>
             <iframe
-              src="/Autorizatie_Mediu_GreenKraft_Revizuita_2025.pdf"
+              src="/autorizatie-mediu.pdf"
               title="Autorizatie Mediu"
               style={{ flex: 1, border: "none", width: "100%" }}
             />
             <div style={{ padding: "8px 18px", background: "#f5f5f5", borderTop: "1px solid #ddd", display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 11, color: "#666", flexShrink: 0 }}>
               <span>Directia Judeteana de Mediu Ilfov • Emisa: 22.12.2021</span>
-              <a href="/Autorizatie_Mediu_GreenKraft_Revizuita_2025.pdf" download="Autorizatie_Mediu_233_GreenKraft_2025.pdf" style={{ color: G, fontWeight: 600, textDecoration: "none", fontSize: 12 }}>⬇️ Descarcă PDF</a>
+              <a href="/autorizatie-mediu.pdf" download="Autorizatie_Mediu_233_GreenKraft_2025.pdf" style={{ color: G, fontWeight: 600, textDecoration: "none", fontSize: 12 }}>⬇️ Descarcă PDF</a>
             </div>
           </div>
         </div>
