@@ -2629,7 +2629,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                       <div style={{ background: "#fff3e0", border: "1px solid #ffcc80", borderRadius: 8, padding: 12, marginBottom: 10 }}>
                         <div style={{ fontWeight: 700, color: "#e65100", marginBottom: 8, fontSize: 12 }}>📋 Date PV</div>
                         <div style={{ display: "flex", gap: 8, marginBottom: 7 }}>
-                          <div style={{ flex: "0 0 80px" }}><label style={LSt}>Serie</label><select style={{ ...IFS, fontWeight: 700, color: "#e65100", textAlign: "center" }} value={pv.serie} onChange={(e) => updPV("serie", e.target.value)}><option value="A">A</option><option value="GK">GK</option></select></div>
+                          <div style={{ flex: "0 0 80px" }}><label style={LSt}>Serie</label><select style={{ ...IFS, fontWeight: 700, color: "#e65100", textAlign: "center" }} value={pv.serie} onChange={(e) => updPV("serie", e.target.value)}><option value="A">A</option><option value="GK">GK</option><option value="PV">PV</option></select></div>
                           <div style={{ flex: 1 }}><label style={LSt}>Nr. PV</label><input style={{ ...IFS, fontWeight: 700, color: "#1565c0" }} value={pv.nr_pv} onChange={(e) => updPV("nr_pv", e.target.value)} /></div>
                           <div style={{ flex: 1 }}><label style={LSt}>Nr. Anexa 3</label><input style={{ ...IFS, fontWeight: 700, color: "#1565c0" }} value={pv.nr_anexa} onChange={(e) => updPV("nr_anexa", e.target.value)} /></div>
                         </div>
