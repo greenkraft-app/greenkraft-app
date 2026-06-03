@@ -556,6 +556,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(() => localStorage.getItem("currentUser") || "");
   const [backupLoading, setBackupLoading] = useState(false);
   const [auditLog, setAuditLog] = useState([]);
+  const [showAutMediu, setShowAutMediu] = useState(false);
   // ── Cantar (Dini Argeo via Web Serial) ────────────────────
   const [scalePort, setScalePort] = useState(null);
   const [scaleReading, setScaleReading] = useState(null);
@@ -2152,7 +2153,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
           </div>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <div style={{ display: "flex", gap: 6, fontSize: 11, opacity: 0.8 }}><span>📍 Afumați, Jud. Ilfov</span><span>📋 Aut. Mediu: 233/22.12.2021</span></div>
+          <div style={{ display: "flex", gap: 6, fontSize: 11, opacity: 0.8 }}><span>📍 Afumați, Jud. Ilfov</span><span onClick={() => setShowAutMediu(true)} title="Deschide Autorizația de Mediu" style={{ cursor: "pointer", textDecoration: "underline dotted", textUnderlineOffset: 3 }}>📋 Aut. Mediu: 233/22.12.2021</span></div>
           <div style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(255,255,255,0.15)", borderRadius: 6, padding: "4px 10px" }}>
             <span style={{ fontSize: 11 }}>👤</span>
             <span style={{ fontSize: 12, fontWeight: 700 }}>{currentUser || "—"}</span>
@@ -2168,6 +2169,30 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
           )}
         </div>
       </div>
+
+      {/* Modal Autorizatie Mediu */}
+      {showAutMediu && (
+        <div onClick={() => setShowAutMediu(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 10, width: "min(96vw,900px)", height: "min(96vh,850px)", display: "flex", flexDirection: "column", boxShadow: "0 8px 40px rgba(0,0,0,0.4)", overflow: "hidden" }}>
+            <div style={{ background: `linear-gradient(135deg,#1b5e20,${G})`, color: "#fff", padding: "12px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>📋 Autorizație de Mediu nr. 233/22.12.2021</div>
+                <div style={{ fontSize: 11, opacity: 0.8, marginTop: 2 }}>GREEN KRAFT S.R.L. • Revizuire (3) la data de 27.11.2025</div>
+              </div>
+              <button onClick={() => setShowAutMediu(false)} style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.4)", color: "#fff", borderRadius: 6, padding: "4px 12px", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>✕</button>
+            </div>
+            <iframe
+              src="/Autorizatie_Mediu_GreenKraft_Revizuita_2025.pdf"
+              title="Autorizatie Mediu"
+              style={{ flex: 1, border: "none", width: "100%" }}
+            />
+            <div style={{ padding: "8px 18px", background: "#f5f5f5", borderTop: "1px solid #ddd", display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 11, color: "#666", flexShrink: 0 }}>
+              <span>Directia Judeteana de Mediu Ilfov • Emisa: 22.12.2021</span>
+              <a href="/Autorizatie_Mediu_GreenKraft_Revizuita_2025.pdf" download="Autorizatie_Mediu_233_GreenKraft_2025.pdf" style={{ color: G, fontWeight: 600, textDecoration: "none", fontSize: 12 }}>⬇️ Descarcă PDF</a>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div style={{ display: "flex", background: "#e8f0eb", borderLeft: "1px solid #ccc", borderRight: "1px solid #ccc", overflowX: "auto" }}>
