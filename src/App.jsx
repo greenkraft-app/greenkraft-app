@@ -1168,7 +1168,7 @@ export default function App() {
       ? tipice.map((t) => {
           const minV = parseFloat(t.min_kg) || 0;
           const maxV = parseFloat(t.max_kg) || 0;
-          const cant = minV >= maxV ? (minV || "") : Math.round((minV + Math.random() * (maxV - minV)) * 10) / 10;
+          const cant = minV >= maxV ? (minV || "") : Math.round(minV + Math.random() * (maxV - minV));
           return { den: t.den || "", cod: "", cod_art: t.cod_art || "", cant: cant ? String(cant) : "" };
         })
       : [{ den: "", cod: "", cod_art: "", cant: "" }];
@@ -2917,7 +2917,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                                 const materialeNoi = tipice.map((t) => {
                                   const minV = parseFloat(t.min_kg) || 0;
                                   const maxV = parseFloat(t.max_kg) || 0;
-                                  const cant = minV >= maxV ? (minV || "") : Math.round((minV + Math.random() * (maxV - minV)) * 10) / 10;
+                                  const cant = minV >= maxV ? (minV || "") : Math.round(minV + Math.random() * (maxV - minV));
                                   return { den: t.den || "", cod: "", cod_art: t.cod_art || "", cant: cant ? String(cant) : "" };
                                 });
                                 setPV(p => ({ ...p, materiale: materialeNoi }));
