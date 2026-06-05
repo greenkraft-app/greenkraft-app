@@ -782,6 +782,7 @@ export default function App() {
   const [pfFilter, setPfFilter] = useState("");
   const [pjFilter, setPjFilter] = useState("");
   const [puncteModal, setPuncteModal] = useState(null); // { idx, adrese: [...] }
+  const [matTipiceModal, setMatTipiceModal] = useState(null); // { idx, den, items: [{den,cod_art,min_kg,max_kg}] }
   // ── Filtre pentru Cheltuieli/Colectari/Livrari ───────────
   const [chSearch, setChSearch] = useState("");
   const [chCat, setChCat] = useState("");
@@ -1161,6 +1162,16 @@ export default function App() {
 
   const pjFiltPV = pjList.filter((f) => !pjSearchPV ? true : (f.denumire?.toLowerCase().includes(pjSearchPV.toLowerCase()) || f.cod_fiscal?.includes(pjSearchPV) || f.cod?.includes(pjSearchPV)));
   const fillPjPV = (f) => {
+    // Generare materiale automate din mat_tipice
+    const tipice = f.mat_tipice || [];
+    const materialeAuto = tipice.length > 0
+      ? tipice.map((t) => {
+          const minV = parseFloat(t.min_kg) || 0;
+          const maxV = parseFloat(t.max_kg) || 0;
+          const cant = minV >= maxV ? (minV || "") : Math.round((minV + Math.random() * (maxV - minV)) * 10) / 10;
+          return { den: t.den || "", cod: "", cod_art: t.cod_art || "", cant: cant ? String(cant) : "" };
+        })
+      : [{ den: "", cod: "", cod_art: "", cant: "" }];
     setPV((p) => ({
       ...p,
       client_id: f.cod || "",
@@ -1169,7 +1180,8 @@ export default function App() {
       client_cui: f.cod_fiscal || "",
       client_reg_com: f.reg_com || "",
       client_judet: f.judet || "",
-      adresa_incarcare: f.adresa || "", // default = sediu social
+      adresa_incarcare: f.adresa || "",
+      materiale: materialeAuto,
     }));
     setPjSearchPV(f.denumire);
     setPjOpenPV(false);
@@ -2255,6 +2267,109 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
         </div>
       )}
 
+      {/* Modal Materiale Tipice per firma PJ */}
+      {matTipiceModal && (
+        <div onClick={() => setMatTipiceModal(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 10, width: "min(96vw,640px)", display: "flex", flexDirection: "column", boxShadow: "0 8px 40px rgba(0,0,0,0.35)", overflow: "hidden" }}>
+            {/* Header */}
+            <div style={{ background: "linear-gradient(135deg,#bf360c,#e65100)", color: "#fff", padding: "12px 18px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>🗂️ Materiale Tipice</div>
+                <div style={{ fontSize: 11, opacity: 0.85, marginTop: 2 }}>{matTipiceModal.den} — auto-completare la selectare în Editor PV</div>
+              </div>
+              <button onClick={() => setMatTipiceModal(null)} style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.4)", color: "#fff", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 16 }}>✕</button>
+            </div>
+            {/* Explicatie */}
+            <div style={{ background: "#fff8e1", borderBottom: "1px solid #ffe082", padding: "8px 18px", fontSize: 11, color: "#795548" }}>
+              💡 Când selectezi această firmă în <strong>Editor PV</strong>, materialele de mai jos se vor completa automat cu cantități aleatoare între <strong>Min</strong> și <strong>Max</strong> kg.
+            </div>
+            {/* Tabel materiale */}
+            <div style={{ padding: "14px 18px", display: "flex", flexDirection: "column", gap: 0, maxHeight: 380, overflowY: "auto" }}>
+              {matTipiceModal.items.length === 0 && (
+                <div style={{ color: "#999", fontSize: 12, textAlign: "center", padding: "20px 0" }}>Niciun material tipic adăugat. Apasă „+ Adaugă material" mai jos.</div>
+              )}
+              {matTipiceModal.items.length > 0 && (
+                <table style={{ borderCollapse: "collapse", width: "100%", marginBottom: 8 }}>
+                  <thead>
+                    <tr style={{ background: "#e65100", color: "#fff" }}>
+                      <th style={{ padding: "6px 8px", textAlign: "left", fontSize: 11, fontWeight: 700, width: "40%" }}>Denumire Material</th>
+                      <th style={{ padding: "6px 8px", textAlign: "center", fontSize: 11, fontWeight: 700, width: "18%" }}>CodSAGA</th>
+                      <th style={{ padding: "6px 8px", textAlign: "center", fontSize: 11, fontWeight: 700, width: "14%" }}>Min (kg)</th>
+                      <th style={{ padding: "6px 8px", textAlign: "center", fontSize: 11, fontWeight: 700, width: "14%" }}>Max (kg)</th>
+                      <th style={{ padding: "6px 4px", textAlign: "center", fontSize: 11, fontWeight: 700, width: "14%" }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {matTipiceModal.items.map((it, ai) => (
+                      <tr key={ai} style={{ background: ai % 2 === 0 ? "#fff" : "#fff8f5" }}>
+                        <td style={{ padding: "4px 6px" }}>
+                          <AC
+                            value={it.den}
+                            options={PRODUSE_DYN}
+                            placeholder="Selectează material..."
+                            onChange={(v) => {
+                              const nou = [...matTipiceModal.items];
+                              // auto-fill cod_art din produseList
+                              const prod = (produseLista.length > 0 ? produseLista : PRODUSE_LIST).find(p => p.den === v);
+                              nou[ai] = { ...nou[ai], den: v, cod_art: prod?.cod_art || nou[ai].cod_art || "" };
+                              setMatTipiceModal(p => ({ ...p, items: nou }));
+                            }}
+                          />
+                        </td>
+                        <td style={{ padding: "4px 6px" }}>
+                          <input
+                            style={{ width: "100%", padding: "4px 6px", border: "1px solid #ddd", borderRadius: 4, fontSize: 12, textAlign: "center", boxSizing: "border-box" }}
+                            value={it.cod_art || ""}
+                            onChange={(e) => { const nou = [...matTipiceModal.items]; nou[ai] = { ...nou[ai], cod_art: e.target.value }; setMatTipiceModal(p => ({ ...p, items: nou })); }}
+                            placeholder="ex: 001"
+                          />
+                        </td>
+                        <td style={{ padding: "4px 6px" }}>
+                          <input
+                            style={{ width: "100%", padding: "4px 6px", border: "1px solid #a5d6a7", borderRadius: 4, fontSize: 12, textAlign: "center", background: "#f1f8e9", boxSizing: "border-box" }}
+                            type="number" min="0"
+                            value={it.min_kg || ""}
+                            onChange={(e) => { const nou = [...matTipiceModal.items]; nou[ai] = { ...nou[ai], min_kg: e.target.value }; setMatTipiceModal(p => ({ ...p, items: nou })); }}
+                            placeholder="0"
+                          />
+                        </td>
+                        <td style={{ padding: "4px 6px" }}>
+                          <input
+                            style={{ width: "100%", padding: "4px 6px", border: "1px solid #ef9a9a", borderRadius: 4, fontSize: 12, textAlign: "center", background: "#fce4ec", boxSizing: "border-box" }}
+                            type="number" min="0"
+                            value={it.max_kg || ""}
+                            onChange={(e) => { const nou = [...matTipiceModal.items]; nou[ai] = { ...nou[ai], max_kg: e.target.value }; setMatTipiceModal(p => ({ ...p, items: nou })); }}
+                            placeholder="0"
+                          />
+                        </td>
+                        <td style={{ padding: "4px 4px", textAlign: "center" }}>
+                          <button onClick={() => { const nou = matTipiceModal.items.filter((_, j) => j !== ai); setMatTipiceModal(p => ({ ...p, items: nou })); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 16 }} title="Șterge">✕</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              <button onClick={() => setMatTipiceModal(p => ({ ...p, items: [...p.items, { den: "", cod_art: "", min_kg: "", max_kg: "" }] }))} style={{ padding: "6px 14px", border: "2px dashed #ffcc80", borderRadius: 6, background: "#fff8e1", color: "#e65100", cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
+                + Adaugă material
+              </button>
+            </div>
+            {/* Footer */}
+            <div style={{ padding: "10px 18px", background: "#f5f5f5", borderTop: "1px solid #ddd", display: "flex", gap: 8, justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 11, color: "#888" }}>{matTipiceModal.items.filter(i => i.den).length} material(e) configurate</span>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => setMatTipiceModal(null)} style={{ padding: "6px 16px", border: "1px solid #ccc", borderRadius: 6, background: "#fff", cursor: "pointer", fontSize: 13 }}>Anulează</button>
+                <button onClick={() => {
+                  const curate = matTipiceModal.items.filter(i => i.den).map(i => ({ den: i.den, cod_art: i.cod_art || "", min_kg: parseFloat(i.min_kg) || 0, max_kg: parseFloat(i.max_kg) || 0 }));
+                  updPJ(matTipiceModal.idx, "mat_tipice", curate);
+                  setMatTipiceModal(null);
+                }} style={{ padding: "6px 20px", border: "none", borderRadius: 6, background: "#e65100", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 700 }}>✔ Salvează</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Tabs */}
       <div style={{ display: "flex", background: "#e8f0eb", borderLeft: "1px solid #ccc", borderRight: "1px solid #ccc", overflowX: "auto" }}>
         {[["dashboard","🏠 Acasă"],["borderou","📄 Borderouri"],["pv","📋 PV & Anexa 3"],["cheltuieli","💸 Cheltuieli"],["colectari","🚛 Colectări"],["livrari","📤 Livrări"],["stoc","📦 Stocuri"],["produse","🛠️ Variabile"],["salariati","👷 Salariați"],["datorii","💳 Datorii"],["avansuri","💵 Avansuri & Dividende"],["contracte","📃 Contracte"],["parole","🔐 Parole"],["rapoarte","📊 Rapoarte"],["trasabilitate","🔄 Trasabilitate"],["calculator","🧮 Calculator"],["audit","🕘 Istoric"]].map(([k, l]) => (
@@ -2791,7 +2906,25 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
 
                     <div style={{ flex: 1, minWidth: 320 }}>
                       <div style={{ background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 8, padding: 12 }}>
-                        <div style={{ fontWeight: 700, color: "#e65100", marginBottom: 8, fontSize: 12 }}>📦 Materiale / Deșeuri</div>
+                        <div style={{ fontWeight: 700, color: "#e65100", marginBottom: 8, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          <span>📦 Materiale / Deșeuri</span>
+                          {(() => {
+                            const selC = pjList.find(f => f.denumire === pv.client_denumire);
+                            if (!selC?.mat_tipice?.length) return null;
+                            return (
+                              <button onClick={() => {
+                                const tipice = selC.mat_tipice || [];
+                                const materialeNoi = tipice.map((t) => {
+                                  const minV = parseFloat(t.min_kg) || 0;
+                                  const maxV = parseFloat(t.max_kg) || 0;
+                                  const cant = minV >= maxV ? (minV || "") : Math.round((minV + Math.random() * (maxV - minV)) * 10) / 10;
+                                  return { den: t.den || "", cod: "", cod_art: t.cod_art || "", cant: cant ? String(cant) : "" };
+                                });
+                                setPV(p => ({ ...p, materiale: materialeNoi }));
+                              }} title="Regenerează cantități random din intervalele setate" style={{ background: "#fff8e1", border: "1px solid #ffa726", borderRadius: 5, padding: "2px 8px", cursor: "pointer", fontSize: 10, color: "#e65100", fontWeight: 600 }}>🎲 Regenerează kg</button>
+                            );
+                          })()}
+                        </div>
                         <table style={{ borderCollapse: "collapse", width: "100%" }}>
                           <thead><tr><th style={th({ textAlign: "left", background: "#e65100", minWidth: 200 })}>Denumire</th><th style={th({ width: 85, background: "#e65100" })}>CodSAGA</th><th style={th({ width: 85, background: "#e65100" })}>Cant.(kg)</th><th style={th({ width: 26, background: "#e65100" })}></th></tr></thead>
                           <tbody>{pv.materiale.map((m, i) => (
@@ -2922,7 +3055,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 900 }}>
                     <thead><tr><th style={th({ background: "#b71c1c", width: 28 })}></th>{[{ l: "Cod", w: 55 }, { l: "Denumire", w: 185 }, { l: "CUI", w: 105 }, { l: "Analitic", w: 82 }, { l: "Jud.", w: 45 }, { l: "Adresa", w: 180 }, { l: "Cont Bancă", w: 165 }, { l: "Bancă", w: 130 }, { l: "Reg.Com.", w: 100 }, { l: "Tel.", w: 90 }].map((c) => <th key={c.l} style={{ ...th({ background: "#e65100" }), width: c.w, textAlign: "left" }}>{c.l}</th>)}<th style={th({ background: "#e65100", width: 30 })}></th></tr></thead>
-                    <tbody>{pjList.filter((r) => !pjFilter || r.denumire?.toLowerCase().includes(pjFilter.toLowerCase()) || r.cod?.includes(pjFilter) || r.cod_fiscal?.toLowerCase().includes(pjFilter.toLowerCase())).map((r, i) => { const rowBg = i % 2 === 0 ? "#fff" : "#fff8f5"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 2}</td><td style={td({ background: "#fff3e0", fontWeight: 700, color: "#e65100", textAlign: "center" })}><input style={inp({ textAlign: "center", fontWeight: 700, color: "#e65100" })} value={r.cod || ""} onChange={(e) => updPJ(i, "cod", e.target.value)} /></td><td style={td({ fontWeight: 600 })}><input style={inp({ fontWeight: 600, fontSize: 11 })} value={r.denumire || ""} onChange={(e) => updPJ(i, "denumire", e.target.value)} /></td><td style={td({ background: "#fff8e1" })}><input style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.cod_fiscal || ""} onChange={(e) => updPJ(i, "cod_fiscal", e.target.value)} /></td><td style={td()}><input style={inp({ fontSize: 11 })} value={r.analitic || ""} onChange={(e) => updPJ(i, "analitic", e.target.value)} /></td><td style={td({ background: "#e8f5e9", textAlign: "center", fontWeight: 600, color: G })}><input style={inp({ textAlign: "center", fontWeight: 600, color: G })} value={r.judet || ""} onChange={(e) => updPJ(i, "judet", e.target.value)} /></td><td style={td({ fontSize: 11 })}><div style={{ display: "flex", gap: 4 }}><input style={inp({ fontSize: 11 })} value={r.adresa || ""} onChange={(e) => updPJ(i, "adresa", e.target.value)} /><button onClick={() => { setPuncteModal({ idx: i, adrese: [...(r.puncte_lucru || [])] }); }} style={{ background: (r.puncte_lucru?.length || 0) > 0 ? "#e3f2fd" : "#fff", border: "1px solid #1565c0", borderRadius: 3, padding: "2px 6px", cursor: "pointer", fontSize: 10, color: "#1565c0", whiteSpace: "nowrap" }} title="Puncte de lucru (adrese suplimentare ridicare)">📍 {r.puncte_lucru?.length || 0}</button></div></td><td style={td({ background: r.cont_banca ? "#e8f5e9" : "#fff", fontFamily: "monospace", fontSize: 10 })}><input style={inp({ fontFamily: "monospace", fontSize: 10 })} value={r.cont_banca || ""} onChange={(e) => updPJ(i, "cont_banca", e.target.value)} /></td><td style={td({ fontSize: 11 })}><input style={inp({ fontSize: 11 })} value={r.banca || ""} onChange={(e) => updPJ(i, "banca", e.target.value)} /></td><td style={td({ fontFamily: "monospace", fontSize: 11 })}><input style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.reg_com || ""} onChange={(e) => updPJ(i, "reg_com", e.target.value)} /></td><td style={td({ fontSize: 11 })}><input style={inp({ fontSize: 11 })} value={r.tel || ""} onChange={(e) => updPJ(i, "tel", e.target.value)} /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delPJ(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                    <tbody>{pjList.filter((r) => !pjFilter || r.denumire?.toLowerCase().includes(pjFilter.toLowerCase()) || r.cod?.includes(pjFilter) || r.cod_fiscal?.toLowerCase().includes(pjFilter.toLowerCase())).map((r, i) => { const rowBg = i % 2 === 0 ? "#fff" : "#fff8f5"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 2}</td><td style={td({ background: "#fff3e0", fontWeight: 700, color: "#e65100", textAlign: "center" })}><input style={inp({ textAlign: "center", fontWeight: 700, color: "#e65100" })} value={r.cod || ""} onChange={(e) => updPJ(i, "cod", e.target.value)} /></td><td style={td({ fontWeight: 600 })}><input style={inp({ fontWeight: 600, fontSize: 11 })} value={r.denumire || ""} onChange={(e) => updPJ(i, "denumire", e.target.value)} /></td><td style={td({ background: "#fff8e1" })}><input style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.cod_fiscal || ""} onChange={(e) => updPJ(i, "cod_fiscal", e.target.value)} /></td><td style={td()}><input style={inp({ fontSize: 11 })} value={r.analitic || ""} onChange={(e) => updPJ(i, "analitic", e.target.value)} /></td><td style={td({ background: "#e8f5e9", textAlign: "center", fontWeight: 600, color: G })}><input style={inp({ textAlign: "center", fontWeight: 600, color: G })} value={r.judet || ""} onChange={(e) => updPJ(i, "judet", e.target.value)} /></td><td style={td({ fontSize: 11 })}><div style={{ display: "flex", gap: 4 }}><input style={inp({ fontSize: 11 })} value={r.adresa || ""} onChange={(e) => updPJ(i, "adresa", e.target.value)} /><button onClick={() => { setPuncteModal({ idx: i, adrese: [...(r.puncte_lucru || [])] }); }} style={{ background: (r.puncte_lucru?.length || 0) > 0 ? "#e3f2fd" : "#fff", border: "1px solid #1565c0", borderRadius: 3, padding: "2px 6px", cursor: "pointer", fontSize: 10, color: "#1565c0", whiteSpace: "nowrap" }} title="Puncte de lucru (adrese suplimentare ridicare)">📍 {r.puncte_lucru?.length || 0}</button><button onClick={() => { setMatTipiceModal({ idx: i, den: r.denumire || "", items: JSON.parse(JSON.stringify(r.mat_tipice || [])) }); }} style={{ background: (r.mat_tipice?.length || 0) > 0 ? "#fff8e1" : "#fff", border: "1px solid #e65100", borderRadius: 3, padding: "2px 6px", cursor: "pointer", fontSize: 10, color: "#e65100", whiteSpace: "nowrap" }} title="Materiale tipice (auto-completare PV)">🗂️ {r.mat_tipice?.length || 0}</button></div></td><td style={td({ background: r.cont_banca ? "#e8f5e9" : "#fff", fontFamily: "monospace", fontSize: 10 })}><input style={inp({ fontFamily: "monospace", fontSize: 10 })} value={r.cont_banca || ""} onChange={(e) => updPJ(i, "cont_banca", e.target.value)} /></td><td style={td({ fontSize: 11 })}><input style={inp({ fontSize: 11 })} value={r.banca || ""} onChange={(e) => updPJ(i, "banca", e.target.value)} /></td><td style={td({ fontFamily: "monospace", fontSize: 11 })}><input style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.reg_com || ""} onChange={(e) => updPJ(i, "reg_com", e.target.value)} /></td><td style={td({ fontSize: 11 })}><input style={inp({ fontSize: 11 })} value={r.tel || ""} onChange={(e) => updPJ(i, "tel", e.target.value)} /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delPJ(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
                   </table>
                 </div>
               </div>
