@@ -781,6 +781,7 @@ export default function App() {
   const [parolaEdit, setParolaEdit] = useState(null);
   const [pfFilter, setPfFilter] = useState("");
   const [pjFilter, setPjFilter] = useState("");
+  const [puncteModal, setPuncteModal] = useState(null); // { idx, adrese: [...] }
   // ── Filtre pentru Cheltuieli/Colectari/Livrari ───────────
   const [chSearch, setChSearch] = useState("");
   const [chCat, setChCat] = useState("");
@@ -2194,6 +2195,66 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
         </div>
       )}
 
+      {/* Modal Puncte de Lucru */}
+      {puncteModal && (
+        <div onClick={() => setPuncteModal(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 10, width: "min(96vw,520px)", display: "flex", flexDirection: "column", boxShadow: "0 8px 40px rgba(0,0,0,0.35)", overflow: "hidden" }}>
+            {/* Header modal */}
+            <div style={{ background: "linear-gradient(135deg,#0d47a1,#1565c0)", color: "#fff", padding: "12px 18px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>📍 Puncte de Lucru</div>
+                <div style={{ fontSize: 11, opacity: 0.8, marginTop: 2 }}>Adrese suplimentare de ridicare</div>
+              </div>
+              <button onClick={() => setPuncteModal(null)} style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.4)", color: "#fff", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 16 }}>✕</button>
+            </div>
+            {/* Lista adrese */}
+            <div style={{ padding: "14px 18px", display: "flex", flexDirection: "column", gap: 8, maxHeight: 360, overflowY: "auto" }}>
+              {puncteModal.adrese.length === 0 && (
+                <div style={{ color: "#999", fontSize: 12, textAlign: "center", padding: "20px 0" }}>Nicio adresă adăugată încă.</div>
+              )}
+              {puncteModal.adrese.map((adresa, ai) => (
+                <div key={ai} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <span style={{ fontSize: 11, color: "#999", minWidth: 18, textAlign: "right" }}>{ai + 1}.</span>
+                  <input
+                    autoFocus={ai === puncteModal.adrese.length - 1}
+                    style={{ flex: 1, padding: "6px 8px", border: "1px solid #bbdefb", borderRadius: 5, fontSize: 13, outline: "none" }}
+                    value={adresa}
+                    onChange={(e) => {
+                      const nou = [...puncteModal.adrese];
+                      nou[ai] = e.target.value;
+                      setPuncteModal((p) => ({ ...p, adrese: nou }));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        const nou = [...puncteModal.adrese];
+                        nou.splice(ai + 1, 0, "");
+                        setPuncteModal((p) => ({ ...p, adrese: nou }));
+                      }
+                    }}
+                    placeholder={`Adresa ${ai + 1}...`}
+                  />
+                  <button onClick={() => { const nou = puncteModal.adrese.filter((_, j) => j !== ai); setPuncteModal((p) => ({ ...p, adrese: nou })); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 16, padding: "0 4px" }} title="Șterge">✕</button>
+                </div>
+              ))}
+              {/* Buton adaugare rand nou */}
+              <button onClick={() => setPuncteModal((p) => ({ ...p, adrese: [...p.adrese, ""] }))} style={{ marginTop: 4, padding: "6px 12px", border: "2px dashed #90caf9", borderRadius: 6, background: "#e3f2fd", color: "#1565c0", cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
+                + Adaugă adresă nouă
+              </button>
+            </div>
+            {/* Footer */}
+            <div style={{ padding: "10px 18px", background: "#f5f5f5", borderTop: "1px solid #ddd", display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button onClick={() => setPuncteModal(null)} style={{ padding: "6px 16px", border: "1px solid #ccc", borderRadius: 6, background: "#fff", cursor: "pointer", fontSize: 13 }}>Anulează</button>
+              <button onClick={() => {
+                const adreseCurate = puncteModal.adrese.map((s) => s.trim()).filter(Boolean);
+                updPJ(puncteModal.idx, "puncte_lucru", adreseCurate);
+                setPuncteModal(null);
+              }} style={{ padding: "6px 20px", border: "none", borderRadius: 6, background: "#1565c0", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 700 }}>✔ Salvează</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Tabs */}
       <div style={{ display: "flex", background: "#e8f0eb", borderLeft: "1px solid #ccc", borderRight: "1px solid #ccc", overflowX: "auto" }}>
         {[["dashboard","🏠 Acasă"],["borderou","📄 Borderouri"],["pv","📋 PV & Anexa 3"],["cheltuieli","💸 Cheltuieli"],["colectari","🚛 Colectări"],["livrari","📤 Livrări"],["stoc","📦 Stocuri"],["produse","🛠️ Variabile"],["salariati","👷 Salariați"],["datorii","💳 Datorii"],["avansuri","💵 Avansuri & Dividende"],["contracte","📃 Contracte"],["parole","🔐 Parole"],["rapoarte","📊 Rapoarte"],["trasabilitate","🔄 Trasabilitate"],["calculator","🧮 Calculator"],["audit","🕘 Istoric"]].map(([k, l]) => (
@@ -2861,7 +2922,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 900 }}>
                     <thead><tr><th style={th({ background: "#b71c1c", width: 28 })}></th>{[{ l: "Cod", w: 55 }, { l: "Denumire", w: 185 }, { l: "CUI", w: 105 }, { l: "Analitic", w: 82 }, { l: "Jud.", w: 45 }, { l: "Adresa", w: 180 }, { l: "Cont Bancă", w: 165 }, { l: "Bancă", w: 130 }, { l: "Reg.Com.", w: 100 }, { l: "Tel.", w: 90 }].map((c) => <th key={c.l} style={{ ...th({ background: "#e65100" }), width: c.w, textAlign: "left" }}>{c.l}</th>)}<th style={th({ background: "#e65100", width: 30 })}></th></tr></thead>
-                    <tbody>{pjList.filter((r) => !pjFilter || r.denumire?.toLowerCase().includes(pjFilter.toLowerCase()) || r.cod?.includes(pjFilter) || r.cod_fiscal?.toLowerCase().includes(pjFilter.toLowerCase())).map((r, i) => { const rowBg = i % 2 === 0 ? "#fff" : "#fff8f5"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 2}</td><td style={td({ background: "#fff3e0", fontWeight: 700, color: "#e65100", textAlign: "center" })}><input style={inp({ textAlign: "center", fontWeight: 700, color: "#e65100" })} value={r.cod || ""} onChange={(e) => updPJ(i, "cod", e.target.value)} /></td><td style={td({ fontWeight: 600 })}><input style={inp({ fontWeight: 600, fontSize: 11 })} value={r.denumire || ""} onChange={(e) => updPJ(i, "denumire", e.target.value)} /></td><td style={td({ background: "#fff8e1" })}><input style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.cod_fiscal || ""} onChange={(e) => updPJ(i, "cod_fiscal", e.target.value)} /></td><td style={td()}><input style={inp({ fontSize: 11 })} value={r.analitic || ""} onChange={(e) => updPJ(i, "analitic", e.target.value)} /></td><td style={td({ background: "#e8f5e9", textAlign: "center", fontWeight: 600, color: G })}><input style={inp({ textAlign: "center", fontWeight: 600, color: G })} value={r.judet || ""} onChange={(e) => updPJ(i, "judet", e.target.value)} /></td><td style={td({ fontSize: 11 })}><div style={{ display: "flex", gap: 4 }}><input style={inp({ fontSize: 11 })} value={r.adresa || ""} onChange={(e) => updPJ(i, "adresa", e.target.value)} /><button onClick={() => { const cur = (r.puncte_lucru || []).join("\n"); const nv = window.prompt(`Puncte de lucru (adrese suplimentare de ridicare)\nO adresă pe rând, lăsa gol pentru a șterge toate:`, cur); if (nv === null) return; const arr = nv.split("\n").map(s => s.trim()).filter(Boolean); updPJ(i, "puncte_lucru", arr); }} style={{ background: (r.puncte_lucru?.length || 0) > 0 ? "#e3f2fd" : "#fff", border: "1px solid #1565c0", borderRadius: 3, padding: "2px 6px", cursor: "pointer", fontSize: 10, color: "#1565c0", whiteSpace: "nowrap" }} title="Puncte de lucru (adrese suplimentare ridicare)">📍 {r.puncte_lucru?.length || 0}</button></div></td><td style={td({ background: r.cont_banca ? "#e8f5e9" : "#fff", fontFamily: "monospace", fontSize: 10 })}><input style={inp({ fontFamily: "monospace", fontSize: 10 })} value={r.cont_banca || ""} onChange={(e) => updPJ(i, "cont_banca", e.target.value)} /></td><td style={td({ fontSize: 11 })}><input style={inp({ fontSize: 11 })} value={r.banca || ""} onChange={(e) => updPJ(i, "banca", e.target.value)} /></td><td style={td({ fontFamily: "monospace", fontSize: 11 })}><input style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.reg_com || ""} onChange={(e) => updPJ(i, "reg_com", e.target.value)} /></td><td style={td({ fontSize: 11 })}><input style={inp({ fontSize: 11 })} value={r.tel || ""} onChange={(e) => updPJ(i, "tel", e.target.value)} /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delPJ(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                    <tbody>{pjList.filter((r) => !pjFilter || r.denumire?.toLowerCase().includes(pjFilter.toLowerCase()) || r.cod?.includes(pjFilter) || r.cod_fiscal?.toLowerCase().includes(pjFilter.toLowerCase())).map((r, i) => { const rowBg = i % 2 === 0 ? "#fff" : "#fff8f5"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 2}</td><td style={td({ background: "#fff3e0", fontWeight: 700, color: "#e65100", textAlign: "center" })}><input style={inp({ textAlign: "center", fontWeight: 700, color: "#e65100" })} value={r.cod || ""} onChange={(e) => updPJ(i, "cod", e.target.value)} /></td><td style={td({ fontWeight: 600 })}><input style={inp({ fontWeight: 600, fontSize: 11 })} value={r.denumire || ""} onChange={(e) => updPJ(i, "denumire", e.target.value)} /></td><td style={td({ background: "#fff8e1" })}><input style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.cod_fiscal || ""} onChange={(e) => updPJ(i, "cod_fiscal", e.target.value)} /></td><td style={td()}><input style={inp({ fontSize: 11 })} value={r.analitic || ""} onChange={(e) => updPJ(i, "analitic", e.target.value)} /></td><td style={td({ background: "#e8f5e9", textAlign: "center", fontWeight: 600, color: G })}><input style={inp({ textAlign: "center", fontWeight: 600, color: G })} value={r.judet || ""} onChange={(e) => updPJ(i, "judet", e.target.value)} /></td><td style={td({ fontSize: 11 })}><div style={{ display: "flex", gap: 4 }}><input style={inp({ fontSize: 11 })} value={r.adresa || ""} onChange={(e) => updPJ(i, "adresa", e.target.value)} /><button onClick={() => { setPuncteModal({ idx: i, adrese: [...(r.puncte_lucru || [])] }); }} style={{ background: (r.puncte_lucru?.length || 0) > 0 ? "#e3f2fd" : "#fff", border: "1px solid #1565c0", borderRadius: 3, padding: "2px 6px", cursor: "pointer", fontSize: 10, color: "#1565c0", whiteSpace: "nowrap" }} title="Puncte de lucru (adrese suplimentare ridicare)">📍 {r.puncte_lucru?.length || 0}</button></div></td><td style={td({ background: r.cont_banca ? "#e8f5e9" : "#fff", fontFamily: "monospace", fontSize: 10 })}><input style={inp({ fontFamily: "monospace", fontSize: 10 })} value={r.cont_banca || ""} onChange={(e) => updPJ(i, "cont_banca", e.target.value)} /></td><td style={td({ fontSize: 11 })}><input style={inp({ fontSize: 11 })} value={r.banca || ""} onChange={(e) => updPJ(i, "banca", e.target.value)} /></td><td style={td({ fontFamily: "monospace", fontSize: 11 })}><input style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.reg_com || ""} onChange={(e) => updPJ(i, "reg_com", e.target.value)} /></td><td style={td({ fontSize: 11 })}><input style={inp({ fontSize: 11 })} value={r.tel || ""} onChange={(e) => updPJ(i, "tel", e.target.value)} /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delPJ(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
                   </table>
                 </div>
               </div>
