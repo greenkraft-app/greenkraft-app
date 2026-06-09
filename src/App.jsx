@@ -888,7 +888,7 @@ export default function App() {
   const [ticFilter, setTicFilter] = useState("");
   const [ticLuna, setTicLuna] = useState("");
   const [ticTaraInput, setTicTaraInput] = useState({}); // { [id]: valoare }
-  const [ticNou, setTicNou] = useState({ tip: "Intrare", prima: "plin", partener: "", partener_cui: "", nr_masina: "", sofer: "", material: "", greutate: "", factura: "", aviz: "", obs: "" });
+  const [ticNou, setTicNou] = useState({ tip: "Intrare", prima: "plin", partener: "", partener_cui: "", client: "GREEN KRAFT SRL", transportator: "", nr_masina: "", sofer: "", material: "", greutate: "", factura: "", aviz: "", obs: "" });
   const [ticEdit, setTicEdit] = useState(null); // { id, nr_tichet, factura, aviz, brut_la, tara_la, ora_intrare, ora_iesire }
 
   useSupaTable("registru", setRegistru);
@@ -1128,7 +1128,7 @@ export default function App() {
     return String((nrs.length ? Math.max(...nrs) : 0) + 1);
   };
   const salveazaTichet1 = async () => {
-    if (!ticNou.partener) { alert("Completați partenerul (furnizor/client)!"); return; }
+    if (!ticNou.partener) { alert("Completați furnizorul (cine aduce marfa)!"); return; }
     if (!ticNou.nr_masina) { alert("Completați nr. de înmatriculare!"); return; }
     if (!ticNou.greutate || parseFloat(ticNou.greutate) <= 0) { alert("Completați greutatea primei cântăriri!"); return; }
     const g = parseFloat(ticNou.greutate) || 0;
@@ -1143,6 +1143,8 @@ export default function App() {
       tip: ticNou.tip,
       partener: ticNou.partener,
       partener_cui: ticNou.partener_cui || "",
+      client: ticNou.client || "GREEN KRAFT SRL",
+      transportator: ticNou.transportator || "",
       nr_masina: ticNou.nr_masina.toUpperCase(),
       sofer: ticNou.sofer || "",
       material: ticNou.material || "",
@@ -1160,8 +1162,13 @@ export default function App() {
     const { data, error } = await sb.from("tichete_cantar").insert(row).select();
     if (error) { alert("Eroare la salvare: " + error.message); return; }
     if (data) setTicheteList((p) => [...p, data[0]]);
+    // Sofer nou? Il salvam automat in tabela delegati
+    if (row.sofer && !delegatiList.some((d) => d.nume?.toLowerCase() === row.sofer.toLowerCase())) {
+      const { data: dNou } = await sb.from("delegati").insert({ nume: row.sofer, ci_serie: "", ci_numar: "", cnp: "" }).select();
+      if (dNou) setDelegatiList((p) => [...p, dNou[0]]);
+    }
     logAction("Creare", "Tichet cântar", row.serie + " " + row.nr_tichet, `${row.tip} • ${row.partener} • ${ePlin ? "BRUT" : "TARA"} ${g} kg`);
-    setTicNou({ tip: "Intrare", prima: "plin", partener: "", partener_cui: "", nr_masina: "", sofer: "", material: "", greutate: "", factura: "", aviz: "", obs: "" });
+    setTicNou({ tip: "Intrare", prima: "plin", partener: "", partener_cui: "", client: "GREEN KRAFT SRL", transportator: "", nr_masina: "", sofer: "", material: "", greutate: "", factura: "", aviz: "", obs: "" });
     setTicSubTab("deschise");
   };
   const inchideTichet = async (t) => {
@@ -1207,7 +1214,7 @@ export default function App() {
       <div style="border:2px solid #000;padding:4mm 5mm;font-family:Arial,sans-serif;font-size:9.5pt;box-sizing:border-box;">
         <div style="display:flex;justify-content:space-between;">
           <div>
-            ${L("Furnizor", "<b>Greenkraft SRL</b>")}
+            ${L("Emitent", "<b>Greenkraft SRL</b>")}
             ${L("CUI", "36191378 / Reg. Comert : J23/2426/2016")}
             ${L("Sediu Social", "Soseaua de centura dreapta nr. 18A, comuna Afumati, Jud. Ilfov")}
             ${L("Punct Lucru", "Soseaua de centura dreapta nr. 18A, comuna Afumati, Jud. Ilfov")}
@@ -1224,15 +1231,17 @@ export default function App() {
         <div style="text-align:center;font-size:14pt;font-weight:bold;margin:2.5mm 0;">TICHET CANTARIRE NR. ${t.nr_tichet}</div>
         <div style="display:flex;justify-content:space-between;">
           <div>
-            ${L("Client", "<b>" + (t.partener || "").toUpperCase() + "</b>")}
+            ${L("Furnizor", "<b>" + (t.partener || "").toUpperCase() + "</b>")}
+            ${L("Client", "<b>" + (t.client || "GREEN KRAFT SRL").toUpperCase() + "</b>")}
             ${L("Tip + Natura materialelor transportate", t.material || "")}
             ${L("Nr. Auto", "<b>" + (t.nr_masina || "") + "</b>")}
-            ${L("Transportator", (t.partener || "").toUpperCase())}
+            ${L("Transportator", (t.transportator || "").toUpperCase())}
           </div>
           <div style="text-align:right;">
-            ${L("CUI Client", t.partener_cui || "")}
+            ${L("CUI Furnizor", t.partener_cui || "")}
+            ${L("CUI Client", (t.client || "GREEN KRAFT SRL").toUpperCase().includes("GREEN KRAFT") ? "36191378" : "")}
             ${L("Configuratie vehicul", "")}
-            ${L("CUI Transportator", "")}
+            ${L("CUI Transportator", (() => { const tr = (t.transportator || "").toUpperCase(); if (tr.includes("GREEN KRAFT")) return "36191378"; const fj = pjList.find(x => x.denumire?.toUpperCase() === tr); return fj?.cod_fiscal || ""; })())}
           </div>
         </div>
         <div style="border:1.5px solid #000;margin:2mm 0;padding:2mm 3mm;">
@@ -3624,6 +3633,9 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
           });
           const totNet = filtrate.reduce((s, t) => s + (parseFloat(t.net) || 0), 0);
           const partenerOpts = [...new Set([...pfList.map(f => f.denumire), ...pjList.map(f => f.denumire)].filter(Boolean))];
+          const transpOpts = [...new Set(["GREEN KRAFT SRL", ...partenerOpts, ...ticheteList.map(t => t.transportator)].filter(Boolean))];
+          const masiniOpts = [...new Set(ticheteList.map(t => t.nr_masina).filter(Boolean))].sort();
+          const soferiOpts = [...new Set([...delegatiList.map(d => d.nume), ...ticheteList.map(t => t.sofer)].filter(Boolean))].sort();
           return (
             <div>
               <div style={{ display: "flex", gap: 6, marginBottom: 12, borderBottom: "2px solid #eee" }}>
@@ -3649,10 +3661,14 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                       <button onClick={() => setTicNou((p) => ({ ...p, prima: "gol" }))} style={{ flex: 1, padding: "8px", border: ticNou.prima === "gol" ? "2px solid #6a1b9a" : "2px solid #ddd", borderRadius: 7, background: ticNou.prima === "gol" ? "#f3e5f5" : "#fff", cursor: "pointer", fontWeight: 700, color: ticNou.prima === "gol" ? "#6a1b9a" : "#999", fontSize: 12 }}>🛻 GOL<div style={{ fontSize: 9, fontWeight: 400 }}>Prima cântărire = TARA</div></button>
                     </div>
                   </div>
-                  <div style={{ marginBottom: 8 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Partener (Furnizor / Client)</label><AC value={ticNou.partener} options={partenerOpts} placeholder="Caută PF sau PJ..." onChange={(v) => { const f = pjList.find(x => x.denumire === v) || pfList.find(x => x.denumire === v); setTicNou((p) => ({ ...p, partener: v, partener_cui: f?.cod_fiscal || "" })); }} /></div>
+                  <div style={{ marginBottom: 8 }}><label style={{ fontSize: 11, fontWeight: 700, color: "#e65100" }}>📥 Furnizor (cine aduce marfa — PF sau PJ)</label><AC value={ticNou.partener} options={partenerOpts} placeholder="Caută PF sau PJ..." onChange={(v) => { const f = pjList.find(x => x.denumire === v) || pfList.find(x => x.denumire === v); setTicNou((p) => ({ ...p, partener: v, partener_cui: f?.cod_fiscal || "" })); }} /></div>
                   <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                    <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Nr. înmatriculare</label><input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, boxSizing: "border-box", textTransform: "uppercase" }} value={ticNou.nr_masina} onChange={(e) => setTicNou((p) => ({ ...p, nr_masina: e.target.value }))} placeholder="ex: IF55KFT" /></div>
-                    <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Șofer / Delegat</label><AC value={ticNou.sofer} options={delegatiList.map(d => d.nume)} placeholder="opțional" onChange={(v) => setTicNou((p) => ({ ...p, sofer: v }))} /></div>
+                    <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: G }}>🏢 Client (noi)</label><input style={{ width: "100%", padding: "6px 8px", border: `1px solid ${G}`, borderRadius: 5, fontSize: 12, fontWeight: 600, color: G, background: "#f0faf4", boxSizing: "border-box" }} value={ticNou.client} onChange={(e) => setTicNou((p) => ({ ...p, client: e.target.value }))} /></div>
+                    <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>🚚 Transportator</label><AC value={ticNou.transportator} options={transpOpts} placeholder="noi / PF / PJ..." onChange={(v) => setTicNou((p) => ({ ...p, transportator: v }))} /></div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                    <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Nr. înmatriculare</label><AC value={ticNou.nr_masina} options={masiniOpts} placeholder="ex: IF55KFT" onChange={(v) => setTicNou((p) => ({ ...p, nr_masina: v.toUpperCase() }))} /></div>
+                    <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Delegat (Șofer) — cei noi se salvează automat</label><AC value={ticNou.sofer} options={soferiOpts} placeholder="alege sau scrie nou" onChange={(v) => setTicNou((p) => ({ ...p, sofer: v }))} /></div>
                   </div>
                   <div style={{ marginBottom: 8 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Material / Deșeu</label><AC value={ticNou.material} options={PRODUSE_DYN} placeholder="Selectează..." onChange={(v) => setTicNou((p) => ({ ...p, material: v }))} /></div>
                   <div style={{ marginBottom: 8 }}>
@@ -3735,7 +3751,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   </div>
                   <div style={{ overflowX: "auto" }}>
                     <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12 }}>
-                      <thead><tr>{["Nr.", "Data", "Ore", "Tip", "Partener", "Mașină", "Șofer", "Material", "Brut", "Tara", "NET (kg)", "Operator", "🖨️", "✏️", ""].map((h, i) => <th key={i} style={th({ background: G })}>{h}</th>)}</tr></thead>
+                      <thead><tr>{["Nr.", "Data", "Ore", "Tip", "Furnizor", "Mașină", "Șofer", "Material", "Brut", "Tara", "NET (kg)", "Operator", "🖨️", "✏️", ""].map((h, i) => <th key={i} style={th({ background: G })}>{h}</th>)}</tr></thead>
                       <tbody>
                         {filtrate.map((t, idx) => (
                           <tr key={t.id} style={{ background: idx % 2 === 0 ? "#fff" : "#f8fbf9" }}>
