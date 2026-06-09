@@ -564,6 +564,9 @@ export default function App() {
   const [scaleError, setScaleError] = useState("");
   const scaleReaderRef = useRef(null);
   const scaleActiveRef = useRef(false);
+  const [cantarLiveRows, setCantarLiveRows] = useState([]);
+  const [, setLiveTick] = useState(0);
+  const lastPushRef = useRef(0);
 
   const parseScaleLine = (line) => {
     if (!line || !line.trim()) return null;
@@ -924,9 +927,6 @@ export default function App() {
   const [ticTaraInput, setTicTaraInput] = useState({}); // { [id]: valoare }
   const [ticNou, setTicNou] = useState({ tip: "Intrare", prima: "plin", partener: "", partener_cui: "", client: "GREEN KRAFT SRL", transportator: "", nr_masina: "", sofer: "", material: "", greutate: "", factura: "", aviz: "", obs: "" });
   const [ticEdit, setTicEdit] = useState(null); // { id, nr_tichet, factura, aviz, brut_la, tara_la, ora_intrare, ora_iesire }
-  const [cantarLiveRows, setCantarLiveRows] = useState([]);
-  const [, setLiveTick] = useState(0);
-  const lastPushRef = useRef(0);
 
   useSupaTable("registru", setRegistru);
   useSupaTable("cheltuieli", setChRows);
