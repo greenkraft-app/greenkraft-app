@@ -883,6 +883,12 @@ export default function App() {
   const [taskuri, setTaskuri] = useState([]);
   const [delegatiList, setDelegatiList] = useState([]);
   const [varSubTab, setVarSubTab] = useState("produse"); // produse | delegati
+  const [ticheteList, setTicheteList] = useState([]);
+  const [ticSubTab, setTicSubTab] = useState("nou"); // nou | deschise | registru
+  const [ticFilter, setTicFilter] = useState("");
+  const [ticLuna, setTicLuna] = useState("");
+  const [ticTaraInput, setTicTaraInput] = useState({}); // { [id]: valoare }
+  const [ticNou, setTicNou] = useState({ tip: "Intrare", partener: "", partener_cui: "", nr_masina: "", sofer: "", material: "", brut: "", obs: "" });
 
   useSupaTable("registru", setRegistru);
   useSupaTable("cheltuieli", setChRows);
@@ -899,6 +905,7 @@ export default function App() {
   useSupaTable("produse", setProduseLista);
   useSupaTable("taskuri", setTaskuri);
   useSupaTable("delegati", setDelegatiList);
+  useSupaTable("tichete_cantar", setTicheteList);
 
   // Effective produse list: from DB if loaded, else fallback to hardcoded constant
   const produseList = produseLista.length > 0 ? produseLista : PRODUSE_LIST;
@@ -1109,6 +1116,109 @@ export default function App() {
     const c = printRef.current.innerHTML;
     const w = window.open("", "_blank");
     w.document.write(`<html><head><title>Borderou ${b.serie} ${b.nr}</title><style>body{margin:0;padding:16px;font-family:'Times New Roman',serif;}</style></head><body>${c}</body></html>`);
+    w.document.close(); w.focus(); w.print();
+  };
+
+  // ── Tichete Cantar helpers ────────────────────────────────
+  const oraAcum = () => { const d = new Date(); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+  const getNextTichetNr = () => {
+    const nrs = ticheteList.map((t) => parseInt(t.nr_tichet) || 0);
+    return String((nrs.length ? Math.max(...nrs) : 0) + 1);
+  };
+  const salveazaTichetBrut = async () => {
+    if (!ticNou.partener) { alert("Completați partenerul (furnizor/client)!"); return; }
+    if (!ticNou.nr_masina) { alert("Completați nr. de înmatriculare!"); return; }
+    if (!ticNou.brut || parseFloat(ticNou.brut) <= 0) { alert("Completați greutatea BRUT (prima cântărire)!"); return; }
+    const row = {
+      serie: "TC",
+      nr_tichet: getNextTichetNr(),
+      data: today(),
+      ora_intrare: oraAcum(),
+      ora_iesire: "",
+      tip: ticNou.tip,
+      partener: ticNou.partener,
+      partener_cui: ticNou.partener_cui || "",
+      nr_masina: ticNou.nr_masina.toUpperCase(),
+      sofer: ticNou.sofer || "",
+      material: ticNou.material || "",
+      brut: parseFloat(ticNou.brut) || 0,
+      tara: null,
+      net: null,
+      status: "deschis",
+      operator: currentUser || "",
+      obs: ticNou.obs || "",
+    };
+    const { data, error } = await sb.from("tichete_cantar").insert(row).select();
+    if (error) { alert("Eroare la salvare: " + error.message); return; }
+    if (data) setTicheteList((p) => [...p, data[0]]);
+    logAction("Creare", "Tichet cântar", row.serie + " " + row.nr_tichet, `${row.tip} • ${row.partener} • BRUT ${row.brut} kg`);
+    setTicNou({ tip: "Intrare", partener: "", partener_cui: "", nr_masina: "", sofer: "", material: "", brut: "", obs: "" });
+    setTicSubTab("deschise");
+  };
+  const inchideTichet = async (t) => {
+    const taraV = parseFloat(ticTaraInput[t.id]);
+    if (!taraV || taraV <= 0) { alert("Introduceți greutatea TARA (a doua cântărire)!"); return; }
+    const brutV = parseFloat(t.brut) || 0;
+    if (taraV >= brutV) { alert(`TARA (${taraV} kg) trebuie să fie mai mică decât BRUT (${brutV} kg)!`); return; }
+    const netV = Math.round((brutV - taraV) * 100) / 100;
+    const upd = { tara: taraV, net: netV, ora_iesire: oraAcum(), status: "inchis" };
+    const { error } = await sb.from("tichete_cantar").update(upd).eq("id", t.id);
+    if (error) { alert("Eroare: " + error.message); return; }
+    setTicheteList((p) => p.map((x) => (x.id === t.id ? { ...x, ...upd } : x)));
+    logAction("Închidere", "Tichet cântar", t.serie + " " + t.nr_tichet, `TARA ${taraV} kg → NET ${netV} kg`);
+    setTicTaraInput((p) => { const n = { ...p }; delete n[t.id]; return n; });
+  };
+  const delTichet = async (t) => {
+    if (!confirmDel("acest tichet de cântar")) return;
+    await sb.from("tichete_cantar").delete().eq("id", t.id);
+    setTicheteList((p) => p.filter((x) => x.id !== t.id));
+    logAction("Ștergere", "Tichet cântar", t.serie + " " + t.nr_tichet, `${t.partener}`);
+  };
+  const printTichet = (t) => {
+    const net = t.net != null ? t.net : "";
+    const html = `
+      <div style="width:148mm;border:2px solid #000;padding:8mm;font-family:'Times New Roman',serif;box-sizing:border-box;">
+        <div style="display:flex;justify-content:space-between;border-bottom:2px solid #1d6f42;padding-bottom:4mm;margin-bottom:4mm;">
+          <div>
+            <div style="font-size:16pt;font-weight:bold;color:#1d6f42;">GREEN KRAFT S.R.L.</div>
+            <div style="font-size:8pt;">CUI: 36191378 • J23/2426/2016</div>
+            <div style="font-size:8pt;">Afumați, Șos. de Centura Dreapta nr. 18A, Jud. Ilfov</div>
+            <div style="font-size:8pt;">Aut. Mediu nr. 233/22.12.2021</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:13pt;font-weight:bold;">TICHET CÂNTAR</div>
+            <div style="font-size:11pt;font-weight:bold;">Seria ${t.serie} Nr. ${t.nr_tichet}</div>
+            <div style="font-size:9pt;">Data: ${t.data}</div>
+            <div style="font-size:9pt;font-weight:bold;color:${t.tip === "Intrare" ? "#1d6f42" : "#bf360c"};">${t.tip === "Intrare" ? "▼ INTRARE (Recepție)" : "▲ IEȘIRE (Livrare)"}</div>
+          </div>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:10pt;">
+          <tr><td style="padding:2mm;border:1px solid #999;background:#f0f0f0;width:38%;"><b>Partener</b></td><td style="padding:2mm;border:1px solid #999;">${t.partener}${t.partener_cui ? " — " + t.partener_cui : ""}</td></tr>
+          <tr><td style="padding:2mm;border:1px solid #999;background:#f0f0f0;"><b>Nr. înmatriculare</b></td><td style="padding:2mm;border:1px solid #999;font-weight:bold;">${t.nr_masina || ""}</td></tr>
+          <tr><td style="padding:2mm;border:1px solid #999;background:#f0f0f0;"><b>Șofer / Delegat</b></td><td style="padding:2mm;border:1px solid #999;">${t.sofer || "—"}</td></tr>
+          <tr><td style="padding:2mm;border:1px solid #999;background:#f0f0f0;"><b>Material / Deșeu</b></td><td style="padding:2mm;border:1px solid #999;">${t.material || "—"}</td></tr>
+          <tr><td style="padding:2mm;border:1px solid #999;background:#f0f0f0;"><b>Ora intrare / ieșire</b></td><td style="padding:2mm;border:1px solid #999;">${t.ora_intrare || "—"} / ${t.ora_iesire || "—"}</td></tr>
+        </table>
+        <table style="width:100%;border-collapse:collapse;font-size:11pt;margin-top:4mm;">
+          <tr style="background:#1d6f42;color:#fff;text-align:center;font-weight:bold;">
+            <td style="padding:2.5mm;border:1px solid #000;">BRUT (kg)</td>
+            <td style="padding:2.5mm;border:1px solid #000;">TARA (kg)</td>
+            <td style="padding:2.5mm;border:1px solid #000;">NET (kg)</td>
+          </tr>
+          <tr style="text-align:center;font-size:13pt;">
+            <td style="padding:3mm;border:1px solid #000;">${t.brut ?? ""}</td>
+            <td style="padding:3mm;border:1px solid #000;">${t.tara ?? ""}</td>
+            <td style="padding:3mm;border:1px solid #000;font-weight:bold;font-size:15pt;">${net}</td>
+          </tr>
+        </table>
+        ${t.obs ? `<div style="font-size:9pt;margin-top:3mm;"><b>Observații:</b> ${t.obs}</div>` : ""}
+        <div style="display:flex;justify-content:space-between;margin-top:8mm;font-size:9pt;">
+          <div style="text-align:center;width:45%;">Operator cântar,<br/><b>${t.operator || ""}</b><br/><br/>________________</div>
+          <div style="text-align:center;width:45%;">Șofer / Delegat,<br/><b>${t.sofer || ""}</b><br/><br/>________________</div>
+        </div>
+      </div>`;
+    const w = window.open("", "_blank");
+    w.document.write(`<html><head><title>Tichet ${t.serie} ${t.nr_tichet}</title><style>body{margin:0;padding:10mm;} @page{size:A5 landscape;margin:5mm;}</style></head><body>${html}</body></html>`);
     w.document.close(); w.focus(); w.print();
   };
 
@@ -2372,7 +2482,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
 
       {/* Tabs */}
       <div style={{ display: "flex", background: "#e8f0eb", borderLeft: "1px solid #ccc", borderRight: "1px solid #ccc", overflowX: "auto" }}>
-        {[["dashboard","🏠 Acasă"],["borderou","📄 Borderouri"],["pv","📋 PV & Anexa 3"],["cheltuieli","💸 Cheltuieli"],["colectari","🚛 Colectări"],["livrari","📤 Livrări"],["stoc","📦 Stocuri"],["produse","🛠️ Variabile"],["salariati","👷 Salariați"],["datorii","💳 Datorii"],["avansuri","💵 Avansuri & Dividende"],["contracte","📃 Contracte"],["parole","🔐 Parole"],["rapoarte","📊 Rapoarte"],["trasabilitate","🔄 Trasabilitate"],["calculator","🧮 Calculator"],["audit","🕘 Istoric"]].map(([k, l]) => (
+        {[["dashboard","🏠 Acasă"],["borderou","📄 Borderouri"],["pv","📋 PV & Anexa 3"],["cheltuieli","💸 Cheltuieli"],["colectari","🚛 Colectări"],["livrari","📤 Livrări"],["cantar","⚖️ Tichete Cântar"],["stoc","📦 Stocuri"],["produse","🛠️ Variabile"],["salariati","👷 Salariați"],["datorii","💳 Datorii"],["avansuri","💵 Avansuri & Dividende"],["contracte","📃 Contracte"],["parole","🔐 Parole"],["rapoarte","📊 Rapoarte"],["trasabilitate","🔄 Trasabilitate"],["calculator","🧮 Calculator"],["audit","🕘 Istoric"]].map(([k, l]) => (
           <button key={k} style={tabSt(k)} onClick={() => setTab(k)}>{l}</button>
         ))}
       </div>
@@ -3417,6 +3527,142 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
         })()}
 
         {/* ══ STOCURI ══ */}
+        {tab === "cantar" && (() => {
+          const deschise = ticheteList.filter((t) => t.status === "deschis");
+          const inchise = sortByDateAsc(ticheteList.filter((t) => t.status === "inchis"));
+          const lunaOpts = [...new Set(ticheteList.map((t) => monthOf(t.data)).filter(Boolean))].sort();
+          const filtrate = inchise.filter((t) => {
+            if (ticLuna && monthOf(t.data) !== ticLuna) return false;
+            if (ticFilter) {
+              const q = ticFilter.toLowerCase();
+              if (!(t.partener?.toLowerCase().includes(q) || t.nr_masina?.toLowerCase().includes(q) || t.material?.toLowerCase().includes(q) || String(t.nr_tichet).includes(q))) return false;
+            }
+            return true;
+          });
+          const totNet = filtrate.reduce((s, t) => s + (parseFloat(t.net) || 0), 0);
+          const partenerOpts = [...new Set([...pfList.map(f => f.denumire), ...pjList.map(f => f.denumire)].filter(Boolean))];
+          return (
+            <div>
+              <div style={{ display: "flex", gap: 6, marginBottom: 12, borderBottom: "2px solid #eee" }}>
+                {[["nou", "➕ Tichet Nou"], ["deschise", `⏳ Deschise (${deschise.length})`], ["registru", "📒 Registru"]].map(([k, l]) => (
+                  <button key={k} onClick={() => setTicSubTab(k)} style={{ padding: "6px 14px", cursor: "pointer", border: "none", fontWeight: 600, fontSize: 12, borderBottom: ticSubTab === k ? `2px solid ${G}` : "2px solid transparent", background: ticSubTab === k ? "#f0faf4" : "transparent", color: ticSubTab === k ? G : "#666" }}>{l}</button>
+                ))}
+                <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: scalePort ? G : "#999", fontWeight: 600 }}>
+                  ⚖️ Cântar: {scalePort ? (scaleReading ? `${scaleReading.value} kg ${scaleReading.stable ? "✅" : "⏳"}` : "conectat") : "neconectat"}
+                </div>
+              </div>
+
+              {ticSubTab === "nou" && (
+                <div style={{ maxWidth: 560, background: "#fff", border: "1px solid #ddd", borderRadius: 10, padding: 18 }}>
+                  <div style={{ fontWeight: 700, color: G, fontSize: 14, marginBottom: 12 }}>➕ Tichet Cântar Nou — Cântărirea 1 (BRUT)</div>
+                  <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+                    <button onClick={() => setTicNou((p) => ({ ...p, tip: "Intrare" }))} style={{ flex: 1, padding: "10px", border: ticNou.tip === "Intrare" ? `2px solid ${G}` : "2px solid #ddd", borderRadius: 8, background: ticNou.tip === "Intrare" ? "#e8f5e9" : "#fff", cursor: "pointer", fontWeight: 700, color: ticNou.tip === "Intrare" ? G : "#999", fontSize: 13 }}>▼ INTRARE<div style={{ fontSize: 10, fontWeight: 400 }}>Recepție marfă</div></button>
+                    <button onClick={() => setTicNou((p) => ({ ...p, tip: "Iesire" }))} style={{ flex: 1, padding: "10px", border: ticNou.tip === "Iesire" ? "2px solid #bf360c" : "2px solid #ddd", borderRadius: 8, background: ticNou.tip === "Iesire" ? "#fbe9e7" : "#fff", cursor: "pointer", fontWeight: 700, color: ticNou.tip === "Iesire" ? "#bf360c" : "#999", fontSize: 13 }}>▲ IEȘIRE<div style={{ fontSize: 10, fontWeight: 400 }}>Livrare marfă</div></button>
+                  </div>
+                  <div style={{ marginBottom: 8 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Partener (Furnizor / Client)</label><AC value={ticNou.partener} options={partenerOpts} placeholder="Caută PF sau PJ..." onChange={(v) => { const f = pjList.find(x => x.denumire === v) || pfList.find(x => x.denumire === v); setTicNou((p) => ({ ...p, partener: v, partener_cui: f?.cod_fiscal || "" })); }} /></div>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                    <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Nr. înmatriculare</label><input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, boxSizing: "border-box", textTransform: "uppercase" }} value={ticNou.nr_masina} onChange={(e) => setTicNou((p) => ({ ...p, nr_masina: e.target.value }))} placeholder="ex: IF55KFT" /></div>
+                    <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Șofer / Delegat</label><AC value={ticNou.sofer} options={delegatiList.map(d => d.nume)} placeholder="opțional" onChange={(v) => setTicNou((p) => ({ ...p, sofer: v }))} /></div>
+                  </div>
+                  <div style={{ marginBottom: 8 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Material / Deșeu</label><AC value={ticNou.material} options={PRODUSE_DYN} placeholder="Selectează..." onChange={(v) => setTicNou((p) => ({ ...p, material: v }))} /></div>
+                  <div style={{ marginBottom: 8 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: G }}>⚖️ BRUT (kg) — prima cântărire</label>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <input style={{ flex: 1, padding: "10px", border: `2px solid ${G}`, borderRadius: 6, fontSize: 18, fontWeight: 700, textAlign: "right", boxSizing: "border-box" }} type="number" value={ticNou.brut} onChange={(e) => setTicNou((p) => ({ ...p, brut: e.target.value }))} placeholder="0" />
+                      {scalePort && <button onClick={() => useScaleWeight((v) => setTicNou((p) => ({ ...p, brut: v })))} style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 6, padding: "0 14px", cursor: "pointer", fontSize: 18 }} title="Citește din cantar">⚖️</button>}
+                    </div>
+                  </div>
+                  <div style={{ marginBottom: 12 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Observații</label><input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 12, boxSizing: "border-box" }} value={ticNou.obs} onChange={(e) => setTicNou((p) => ({ ...p, obs: e.target.value }))} placeholder="opțional" /></div>
+                  <button onClick={salveazaTichetBrut} style={{ width: "100%", padding: "12px", background: `linear-gradient(135deg,#1b5e20,${G})`, color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 14, fontWeight: 700 }}>💾 Salvează BRUT → tichet DESCHIS (Seria TC Nr. {getNextTichetNr()})</button>
+                  <div style={{ fontSize: 10, color: "#888", marginTop: 6, textAlign: "center" }}>Vehiculul descarcă/încarcă, apoi închizi tichetul cu a doua cântărire (TARA) din tab-ul „⏳ Deschise".</div>
+                </div>
+              )}
+
+              {ticSubTab === "deschise" && (
+                <div>
+                  {deschise.length === 0 && <div style={{ color: "#999", fontSize: 13, padding: "30px 0", textAlign: "center" }}>Niciun tichet deschis. Vehiculele cântărite la intrare apar aici până la a doua cântărire.</div>}
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+                    {deschise.map((t) => (
+                      <div key={t.id} style={{ width: 320, background: "#fff", border: "2px solid #ffa726", borderRadius: 10, overflow: "hidden" }}>
+                        <div style={{ background: "linear-gradient(135deg,#ef6c00,#ffa726)", color: "#fff", padding: "8px 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontWeight: 700, fontSize: 13 }}>⏳ {t.serie} #{t.nr_tichet}</span>
+                          <span style={{ fontSize: 11 }}>{t.tip === "Intrare" ? "▼ Intrare" : "▲ Ieșire"} • {t.data} {t.ora_intrare}</span>
+                        </div>
+                        <div style={{ padding: 12, fontSize: 12 }}>
+                          <div style={{ fontWeight: 700, marginBottom: 2 }}>{t.partener}</div>
+                          <div style={{ color: "#666", marginBottom: 6 }}>🚛 {t.nr_masina} {t.sofer ? `• ${t.sofer}` : ""}</div>
+                          <div style={{ marginBottom: 8 }}>📦 {t.material || "—"}</div>
+                          <div style={{ display: "flex", gap: 6, alignItems: "center", background: "#f5f5f5", borderRadius: 6, padding: 8 }}>
+                            <div style={{ flex: 1, textAlign: "center" }}><div style={{ fontSize: 10, color: "#888" }}>BRUT</div><div style={{ fontWeight: 700, fontSize: 15 }}>{fmt(t.brut)} kg</div></div>
+                            <div style={{ fontSize: 18, color: "#bbb" }}>−</div>
+                            <div style={{ flex: 1.4 }}>
+                              <div style={{ fontSize: 10, color: "#888", textAlign: "center" }}>TARA</div>
+                              <div style={{ display: "flex", gap: 3 }}>
+                                <input style={{ width: "100%", padding: "4px", border: "1px solid #ffa726", borderRadius: 4, fontSize: 14, fontWeight: 700, textAlign: "right", boxSizing: "border-box" }} type="number" value={ticTaraInput[t.id] || ""} onChange={(e) => setTicTaraInput((p) => ({ ...p, [t.id]: e.target.value }))} placeholder="kg" />
+                                {scalePort && <button onClick={() => useScaleWeight((v) => setTicTaraInput((p) => ({ ...p, [t.id]: v })))} style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 4, padding: "0 6px", cursor: "pointer", fontSize: 13 }}>⚖️</button>}
+                              </div>
+                            </div>
+                          </div>
+                          {ticTaraInput[t.id] && parseFloat(ticTaraInput[t.id]) > 0 && parseFloat(ticTaraInput[t.id]) < parseFloat(t.brut) && (
+                            <div style={{ textAlign: "center", marginTop: 6, fontSize: 12, color: G, fontWeight: 700 }}>NET = {fmt(Math.round((parseFloat(t.brut) - parseFloat(ticTaraInput[t.id])) * 100) / 100)} kg</div>
+                          )}
+                          <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+                            <button onClick={() => inchideTichet(t)} style={{ flex: 1, padding: "8px", background: G, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>✔ Închide tichet</button>
+                            <button onClick={() => delTichet(t)} style={{ padding: "8px 10px", background: "#fff", color: "#e53935", border: "1px solid #ef9a9a", borderRadius: 6, cursor: "pointer", fontSize: 12 }}>✕</button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {ticSubTab === "registru" && (
+                <div>
+                  <div style={{ display: "flex", gap: 10, marginBottom: 10, alignItems: "center", flexWrap: "wrap" }}>
+                    <select style={{ padding: "6px 10px", border: "1px solid #ccc", borderRadius: 5, fontSize: 12 }} value={ticLuna} onChange={(e) => setTicLuna(e.target.value)}>
+                      <option value="">Toate lunile</option>
+                      {lunaOpts.map((l) => <option key={l} value={l}>{l}</option>)}
+                    </select>
+                    <input style={{ padding: "6px 10px", border: "1px solid #ccc", borderRadius: 5, fontSize: 12, width: 220 }} value={ticFilter} onChange={(e) => setTicFilter(e.target.value)} placeholder="🔍 Caută partener / mașină / material..." />
+                    {(ticLuna || ticFilter) && <button onClick={() => { setTicLuna(""); setTicFilter(""); }} style={{ padding: "5px 10px", border: "1px solid #ccc", borderRadius: 5, background: "#fff", cursor: "pointer", fontSize: 11 }}>↺ Reset</button>}
+                    <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+                      <SC label="Tichete" value={String(filtrate.length)} c={G} bg="#e8f5e9" />
+                      <SC label="Total NET" value={fmt(totNet) + " kg"} c="#e65100" bg="#fff3e0" />
+                    </div>
+                  </div>
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12 }}>
+                      <thead><tr>{["Nr.", "Data", "Ore", "Tip", "Partener", "Mașină", "Șofer", "Material", "Brut", "Tara", "NET (kg)", "Operator", "🖨️", ""].map((h, i) => <th key={i} style={th({ background: G })}>{h}</th>)}</tr></thead>
+                      <tbody>
+                        {filtrate.map((t, idx) => (
+                          <tr key={t.id} style={{ background: idx % 2 === 0 ? "#fff" : "#f8fbf9" }}>
+                            <td style={td({ textAlign: "center", fontWeight: 700, color: G })}>{t.serie} {t.nr_tichet}</td>
+                            <td style={td({ textAlign: "center" })}>{t.data}</td>
+                            <td style={td({ textAlign: "center", fontSize: 10, color: "#888" })}>{t.ora_intrare}–{t.ora_iesire}</td>
+                            <td style={td({ textAlign: "center", fontWeight: 700, color: t.tip === "Intrare" ? G : "#bf360c", background: t.tip === "Intrare" ? "#e8f5e9" : "#fbe9e7" })}>{t.tip === "Intrare" ? "▼ IN" : "▲ OUT"}</td>
+                            <td style={td({ fontWeight: 600 })}>{t.partener}</td>
+                            <td style={td({ textAlign: "center", fontFamily: "monospace" })}>{t.nr_masina}</td>
+                            <td style={td()}>{t.sofer || "—"}</td>
+                            <td style={td()}>{t.material || "—"}</td>
+                            <td style={td({ textAlign: "right" })}>{fmt(t.brut)}</td>
+                            <td style={td({ textAlign: "right" })}>{fmt(t.tara)}</td>
+                            <td style={td({ textAlign: "right", fontWeight: 700, background: "#fff8e1", color: "#e65100" })}>{fmt(t.net)}</td>
+                            <td style={td({ textAlign: "center", fontSize: 10 })}>{t.operator || "—"}</td>
+                            <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => printTichet(t)} style={{ background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 4, cursor: "pointer", color: "#1565c0", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>🖨️</button></td>
+                            <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => delTichet(t)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
+                          </tr>
+                        ))}
+                        {filtrate.length === 0 && <tr><td colSpan={14} style={{ padding: 20, textAlign: "center", color: "#999", fontSize: 12 }}>Niciun tichet închis {ticLuna || ticFilter ? "pentru filtrele alese" : "încă"}.</td></tr>}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {tab === "stoc" && (
           <div>
             <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
