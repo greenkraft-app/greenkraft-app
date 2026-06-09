@@ -1250,17 +1250,17 @@ export default function App() {
     const cuiClient = (t.client || "GREEN KRAFT SRL").toUpperCase().includes("GREEN KRAFT") ? "36191378" : "";
     const cuiTransp = (() => { const tr = (t.transportator || "").toUpperCase(); if (!tr) return ""; if (tr.includes("GREEN KRAFT")) return "36191378"; const fj = pjList.find(x => x.denumire?.toUpperCase() === tr); return fj?.cod_fiscal || ""; })();
     const R = (lbl, val, lbl2, val2) => `<tr>
-      <td style="padding:1.8mm 3mm;border:0.5px solid #bbb;background:#f4f4f4;font-weight:bold;width:22%;white-space:nowrap;">${lbl}</td>
-      <td style="padding:1.8mm 3mm;border:0.5px solid #bbb;width:34%;">${val || "—"}</td>
-      <td style="padding:1.8mm 3mm;border:0.5px solid #bbb;background:#f4f4f4;font-weight:bold;width:18%;white-space:nowrap;">${lbl2 || ""}</td>
-      <td style="padding:1.8mm 3mm;border:0.5px solid #bbb;width:26%;">${lbl2 ? (val2 || "—") : ""}</td>
+      <td style="padding:1.2mm 2.5mm;border:0.5px solid #bbb;background:#f4f4f4;font-weight:bold;width:22%;white-space:nowrap;">${lbl}</td>
+      <td style="padding:1.2mm 2.5mm;border:0.5px solid #bbb;width:34%;">${val || "—"}</td>
+      <td style="padding:1.2mm 2.5mm;border:0.5px solid #bbb;background:#f4f4f4;font-weight:bold;width:18%;white-space:nowrap;">${lbl2 || ""}</td>
+      <td style="padding:1.2mm 2.5mm;border:0.5px solid #bbb;width:26%;">${lbl2 ? (val2 || "—") : ""}</td>
     </tr>`;
     const html = `
       <div style="font-family:Arial,sans-serif;font-size:9.5pt;color:#111;">
         <!-- Antet emitent -->
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2.5px solid #1d6f42;padding-bottom:3mm;margin-bottom:3mm;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1d6f42;padding-bottom:2mm;margin-bottom:2mm;">
           <div>
-            <div style="font-size:15pt;font-weight:bold;color:#1d6f42;">GREEN KRAFT S.R.L.</div>
+            <div style="font-size:13pt;font-weight:bold;color:#1d6f42;">GREEN KRAFT S.R.L.</div>
             <div style="font-size:8pt;line-height:1.5;">CUI: RO 36191378 • Reg. Com.: J23/2426/2016<br/>Șos. de Centura Dreapta nr. 18A, com. Afumați, Jud. Ilfov<br/>Autorizație de Mediu nr. 233/22.12.2021 (rev. 27.11.2025)</div>
           </div>
           <div style="text-align:right;">
@@ -1279,40 +1279,39 @@ export default function App() {
           ${R("Material / Deșeu", t.material, "Factura / Aviz", [t.factura, t.aviz].filter(Boolean).join(" / "))}
         </table>
         <!-- Cantariri -->
-        <table style="width:100%;border-collapse:collapse;font-size:10pt;margin-top:3mm;">
+        <table style="width:100%;border-collapse:collapse;font-size:9.5pt;margin-top:2mm;">
           <tr style="background:#1d6f42;color:#fff;font-weight:bold;text-align:center;">
-            <td style="padding:2mm;border:0.5px solid #1d6f42;width:25%;">Cântărire</td>
-            <td style="padding:2mm;border:0.5px solid #1d6f42;width:30%;">Greutate</td>
-            <td style="padding:2mm;border:0.5px solid #1d6f42;width:45%;">Data și ora cântăririi</td>
+            <td style="padding:1.5mm;border:0.5px solid #1d6f42;width:25%;">Cântărire</td>
+            <td style="padding:1.5mm;border:0.5px solid #1d6f42;width:30%;">Greutate</td>
+            <td style="padding:1.5mm;border:0.5px solid #1d6f42;width:45%;">Data și ora cântăririi</td>
           </tr>
           <tr style="text-align:center;">
-            <td style="padding:2mm;border:0.5px solid #bbb;font-weight:bold;">BRUT</td>
-            <td style="padding:2mm;border:0.5px solid #bbb;font-size:11pt;">${t.brut != null ? fmt(t.brut) + " kg" : "—"}</td>
-            <td style="padding:2mm;border:0.5px solid #bbb;">${t.brut_la || "—"}</td>
+            <td style="padding:1.5mm;border:0.5px solid #bbb;font-weight:bold;">BRUT</td>
+            <td style="padding:1.5mm;border:0.5px solid #bbb;font-size:10.5pt;">${t.brut != null ? fmt(t.brut) + " kg" : "—"}</td>
+            <td style="padding:1.5mm;border:0.5px solid #bbb;">${t.brut_la || "—"}</td>
           </tr>
           <tr style="text-align:center;">
-            <td style="padding:2mm;border:0.5px solid #bbb;font-weight:bold;">TARA</td>
-            <td style="padding:2mm;border:0.5px solid #bbb;font-size:11pt;">${t.tara != null ? fmt(t.tara) + " kg" : "—"}</td>
-            <td style="padding:2mm;border:0.5px solid #bbb;">${t.tara_la || "—"}</td>
+            <td style="padding:1.5mm;border:0.5px solid #bbb;font-weight:bold;">TARA</td>
+            <td style="padding:1.5mm;border:0.5px solid #bbb;font-size:10.5pt;">${t.tara != null ? fmt(t.tara) + " kg" : "—"}</td>
+            <td style="padding:1.5mm;border:0.5px solid #bbb;">${t.tara_la || "—"}</td>
           </tr>
           <tr style="text-align:center;background:#eef7f0;">
-            <td style="padding:2.5mm;border:1.5px solid #1d6f42;font-weight:bold;font-size:11pt;">NET</td>
-            <td style="padding:2.5mm;border:1.5px solid #1d6f42;font-weight:bold;font-size:14pt;" colspan="2">${t.net != null ? fmt(t.net) + " kg" : "—"}</td>
+            <td style="padding:2mm;border:1.5px solid #1d6f42;font-weight:bold;font-size:10.5pt;">NET</td>
+            <td style="padding:2mm;border:1.5px solid #1d6f42;font-weight:bold;font-size:13pt;" colspan="2">${t.net != null ? fmt(t.net) + " kg" : "—"}</td>
           </tr>
         </table>
         <!-- Identificare cantar -->
-        <div style="font-size:8pt;color:#444;margin-top:2.5mm;border:0.5px solid #ccc;padding:1.8mm 3mm;background:#fafafa;">
+        <div style="font-size:8pt;color:#444;margin-top:2mm;border:0.5px solid #ccc;padding:1.2mm 2.5mm;background:#fafafa;">
           <b>Aparat de cântărit:</b> Dini Argeo DFW • Serie: 18360 • Tip cântărire: Statică • Clasa de exactitate: III • Locație: Șos. de Centura Dreapta nr. 18A, Afumați, IF
         </div>
         ${t.obs ? `<div style="font-size:8.5pt;margin-top:2mm;"><b>Observații:</b> ${t.obs}</div>` : ""}
-        <!-- Semnaturi -->
-        <div style="display:flex;justify-content:space-between;margin-top:7mm;font-size:9pt;">
-          <div style="text-align:center;width:45%;">Operator cântar,<br/><b>${t.operator || ""}</b><br/><br/>__________________</div>
-          <div style="text-align:center;width:45%;">Delegat (am primit exemplarul),<br/><b>${(t.sofer || "").toUpperCase()}</b><br/><br/>__________________</div>
+        <!-- Semnatura -->
+        <div style="display:flex;justify-content:flex-end;margin-top:4mm;font-size:9pt;">
+          <div style="text-align:center;">Semnătura Operator,<br/><b>${t.operator || ""}</b><br/><br/>__________________</div>
         </div>
       </div>`;
     const w = window.open("", "_blank");
-    w.document.write(`<html><head><title>Tichet ${t.serie} ${t.nr_tichet}</title><style>body{margin:0;padding:8mm;} @page{size:A5 landscape;margin:6mm;}</style></head><body>${html}</body></html>`);
+    w.document.write(`<html><head><title>Tichet ${t.serie} ${t.nr_tichet}</title><style>html,body{margin:0;padding:0;} body{padding:4mm;} @page{size:A5 landscape;margin:4mm;} @media print{ body{height:140mm;overflow:hidden;} }</style></head><body>${html}</body></html>`);
     w.document.close(); w.focus(); w.print();
   };
 
@@ -3668,6 +3667,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
           const soferiOpts = [...new Set([...delegatiList.map(d => d.nume), ...ticheteList.map(t => t.sofer)].filter(Boolean))].sort();
           const FL = { fontSize: 11, fontWeight: 600, color: "#555", display: "block", marginBottom: 2 };
           const FI = { width: "100%", padding: "7px 9px", border: "1px solid #d5d5d5", borderRadius: 6, fontSize: 13, boxSizing: "border-box" };
+          const ACB = { border: "1px solid #d5d5d5", borderRadius: 6, padding: "3px 4px", background: "#fff" };
           return (
             <div>
               {/* Bara status cantar */}
@@ -3714,16 +3714,16 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                           <option value="gol">🛻 Vine gol (1. TARA)</option>
                         </select>
                       </div>
-                      <div style={{ marginBottom: 10 }}><label style={FL}>Furnizor (cine aduce marfa)</label><AC value={ticNou.partener} options={partenerOpts} placeholder="Caută PF sau PJ..." onChange={(v) => { const f = pjList.find(x => x.denumire === v) || pfList.find(x => x.denumire === v); setTicNou((p) => ({ ...p, partener: v, partener_cui: f?.cod_fiscal || "" })); }} /></div>
+                      <div style={{ marginBottom: 10 }}><label style={FL}>Furnizor (cine aduce marfa)</label><div style={ACB}><AC value={ticNou.partener} options={partenerOpts} placeholder="Caută PF sau PJ..." onChange={(v) => { const f = pjList.find(x => x.denumire === v) || pfList.find(x => x.denumire === v); setTicNou((p) => ({ ...p, partener: v, partener_cui: f?.cod_fiscal || "" })); }} /></div></div>
                       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
                         <div style={{ flex: 1 }}><label style={FL}>Client</label><input style={{ ...FI, color: G, fontWeight: 600 }} value={ticNou.client} onChange={(e) => setTicNou((p) => ({ ...p, client: e.target.value }))} /></div>
-                        <div style={{ flex: 1 }}><label style={FL}>Transportator</label><AC value={ticNou.transportator} options={transpOpts} placeholder="noi / PF / PJ" onChange={(v) => setTicNou((p) => ({ ...p, transportator: v }))} /></div>
+                        <div style={{ flex: 1 }}><label style={FL}>Transportator</label><div style={ACB}><AC value={ticNou.transportator} options={transpOpts} placeholder="noi / PF / PJ" onChange={(v) => setTicNou((p) => ({ ...p, transportator: v }))} /></div></div>
                       </div>
                       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-                        <div style={{ flex: 1 }}><label style={FL}>Nr. auto</label><AC value={ticNou.nr_masina} options={masiniOpts} placeholder="IF55KFT" onChange={(v) => setTicNou((p) => ({ ...p, nr_masina: v.toUpperCase() }))} /></div>
-                        <div style={{ flex: 1 }}><label style={FL}>Delegat (șofer)</label><AC value={ticNou.sofer} options={soferiOpts} placeholder="alege sau scrie nou" onChange={(v) => setTicNou((p) => ({ ...p, sofer: v }))} /></div>
+                        <div style={{ flex: 1 }}><label style={FL}>Nr. auto</label><div style={ACB}><AC value={ticNou.nr_masina} options={masiniOpts} placeholder="IF55KFT" onChange={(v) => setTicNou((p) => ({ ...p, nr_masina: v.toUpperCase() }))} /></div></div>
+                        <div style={{ flex: 1 }}><label style={FL}>Delegat (șofer)</label><div style={ACB}><AC value={ticNou.sofer} options={soferiOpts} placeholder="alege sau scrie nou" onChange={(v) => setTicNou((p) => ({ ...p, sofer: v }))} /></div></div>
                       </div>
-                      <div style={{ marginBottom: 10 }}><label style={FL}>Material / Deșeu</label><AC value={ticNou.material} options={PRODUSE_DYN} placeholder="Selectează..." onChange={(v) => setTicNou((p) => ({ ...p, material: v }))} /></div>
+                      <div style={{ marginBottom: 10 }}><label style={FL}>Material / Deșeu</label><div style={ACB}><AC value={ticNou.material} options={PRODUSE_DYN} placeholder="Selectează..." onChange={(v) => setTicNou((p) => ({ ...p, material: v }))} /></div></div>
                       <div style={{ display: "flex", gap: 8 }}>
                         <div style={{ flex: 1 }}><label style={FL}>Factura</label><input style={FI} value={ticNou.factura} onChange={(e) => setTicNou((p) => ({ ...p, factura: e.target.value }))} placeholder="opțional" /></div>
                         <div style={{ flex: 1 }}><label style={FL}>Aviz</label><input style={FI} value={ticNou.aviz} onChange={(e) => setTicNou((p) => ({ ...p, aviz: e.target.value }))} placeholder="opțional" /></div>
