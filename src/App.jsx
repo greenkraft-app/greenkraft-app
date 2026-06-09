@@ -692,6 +692,40 @@ export default function App() {
     }
     callback(scaleReading.value);
   };
+
+  // ── Cantar Live Bridge: PC-ul cu cantarul publica greutatea in Supabase ──
+  useEffect(() => {
+    if (!scalePort || !scaleReading) return;
+    const now = Date.now();
+    if (now - lastPushRef.current < 1200) return; // max ~1 update/sec
+    lastPushRef.current = now;
+    sb.from("cantar_live").upsert({ id: 1, value: scaleReading.value, stable: !!scaleReading.stable, updated_at: new Date().toISOString() }).then(() => {});
+  }, [scaleReading, scalePort]);
+
+  // Tick pentru verificarea prospetimii (doar cand suntem in tab-ul cantar)
+  useEffect(() => {
+    if (tab !== "cantar") return;
+    const iv = setInterval(() => setLiveTick((t) => t + 1), 4000);
+    return () => clearInterval(iv);
+  }, [tab]);
+
+  const cantarLive = (() => {
+    const r = cantarLiveRows[0];
+    if (!r || !r.updated_at) return null;
+    const age = Date.now() - new Date(r.updated_at).getTime();
+    return { value: r.value, stable: r.stable, age, fresh: age < 15000 };
+  })();
+
+  const useLiveWeight = (callback) => {
+    const r = cantarLiveRows[0];
+    if (!r || !r.updated_at) { alert("Nu există date de la cântar."); return; }
+    const age = Date.now() - new Date(r.updated_at).getTime();
+    if (age > 15000) { alert(`Datele de la cântar sunt vechi (${Math.round(age / 1000)}s). Verifică dacă aplicația e deschisă pe calculatorul cu cântarul.`); return; }
+    if (!r.stable) {
+      if (!window.confirm(`Cântărire instabilă (${r.value} kg). Folosești această valoare?`)) return;
+    }
+    callback(r.value);
+  };
   // ── Helper: confirmation dialog for deletes ──────────────
   const confirmDel = (what) => window.confirm(`⚠️ Sigur vrei să ștergi ${what}?\n\nAcțiunea NU poate fi anulată.`);
   // ── Helper: audit log ─────────────────────────────────────
@@ -890,6 +924,9 @@ export default function App() {
   const [ticTaraInput, setTicTaraInput] = useState({}); // { [id]: valoare }
   const [ticNou, setTicNou] = useState({ tip: "Intrare", prima: "plin", partener: "", partener_cui: "", client: "GREEN KRAFT SRL", transportator: "", nr_masina: "", sofer: "", material: "", greutate: "", factura: "", aviz: "", obs: "" });
   const [ticEdit, setTicEdit] = useState(null); // { id, nr_tichet, factura, aviz, brut_la, tara_la, ora_intrare, ora_iesire }
+  const [cantarLiveRows, setCantarLiveRows] = useState([]);
+  const [, setLiveTick] = useState(0);
+  const lastPushRef = useRef(0);
 
   useSupaTable("registru", setRegistru);
   useSupaTable("cheltuieli", setChRows);
@@ -907,6 +944,7 @@ export default function App() {
   useSupaTable("taskuri", setTaskuri);
   useSupaTable("delegati", setDelegatiList);
   useSupaTable("tichete_cantar", setTicheteList);
+  useSupaTable("cantar_live", setCantarLiveRows);
 
   // Effective produse list: from DB if loaded, else fallback to hardcoded constant
   const produseList = produseLista.length > 0 ? produseLista : PRODUSE_LIST;
@@ -1209,73 +1247,72 @@ export default function App() {
     setTicEdit(null);
   };
   const printTichet = (t) => {
-    const L = (lbl, val) => `<div style="margin:0.6mm 0;"><b>${lbl} :</b> ${val || ""}</div>`;
+    const cuiClient = (t.client || "GREEN KRAFT SRL").toUpperCase().includes("GREEN KRAFT") ? "36191378" : "";
+    const cuiTransp = (() => { const tr = (t.transportator || "").toUpperCase(); if (!tr) return ""; if (tr.includes("GREEN KRAFT")) return "36191378"; const fj = pjList.find(x => x.denumire?.toUpperCase() === tr); return fj?.cod_fiscal || ""; })();
+    const R = (lbl, val, lbl2, val2) => `<tr>
+      <td style="padding:1.8mm 3mm;border:0.5px solid #bbb;background:#f4f4f4;font-weight:bold;width:22%;white-space:nowrap;">${lbl}</td>
+      <td style="padding:1.8mm 3mm;border:0.5px solid #bbb;width:34%;">${val || "—"}</td>
+      <td style="padding:1.8mm 3mm;border:0.5px solid #bbb;background:#f4f4f4;font-weight:bold;width:18%;white-space:nowrap;">${lbl2 || ""}</td>
+      <td style="padding:1.8mm 3mm;border:0.5px solid #bbb;width:26%;">${lbl2 ? (val2 || "—") : ""}</td>
+    </tr>`;
     const html = `
-      <div style="border:2px solid #000;padding:4mm 5mm;font-family:Arial,sans-serif;font-size:9.5pt;box-sizing:border-box;">
-        <div style="display:flex;justify-content:space-between;">
+      <div style="font-family:Arial,sans-serif;font-size:9.5pt;color:#111;">
+        <!-- Antet emitent -->
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2.5px solid #1d6f42;padding-bottom:3mm;margin-bottom:3mm;">
           <div>
-            ${L("Emitent", "<b>Greenkraft SRL</b>")}
-            ${L("CUI", "36191378 / Reg. Comert : J23/2426/2016")}
-            ${L("Sediu Social", "Soseaua de centura dreapta nr. 18A, comuna Afumati, Jud. Ilfov")}
-            ${L("Punct Lucru", "Soseaua de centura dreapta nr. 18A, comuna Afumati, Jud. Ilfov")}
-            ${L("Tel. / Fax", "")}
+            <div style="font-size:15pt;font-weight:bold;color:#1d6f42;">GREEN KRAFT S.R.L.</div>
+            <div style="font-size:8pt;line-height:1.5;">CUI: RO 36191378 • Reg. Com.: J23/2426/2016<br/>Șos. de Centura Dreapta nr. 18A, com. Afumați, Jud. Ilfov<br/>Autorizație de Mediu nr. 233/22.12.2021 (rev. 27.11.2025)</div>
           </div>
           <div style="text-align:right;">
-            ${L("Tichet generat de", t.operator || "")}
-            ${L("Cantarire efectuata de", t.operator || "")}
-            ${L("Data tiparirii", today())}
-            ${L("Ora tiparirii", oraAcum() + ":00")}
-            ${L("Tiparit cu", "Greenkraft App")}
+            <div style="font-size:13pt;font-weight:bold;letter-spacing:0.5px;">TICHET DE CÂNTAR</div>
+            <div style="font-size:12pt;font-weight:bold;margin-top:1mm;">Seria ${t.serie} Nr. ${t.nr_tichet}</div>
+            <div style="font-size:9pt;margin-top:1mm;">Data: <b>${t.data}</b></div>
+            <div style="font-size:9pt;font-weight:bold;color:${t.tip === "Intrare" ? "#1d6f42" : "#bf360c"};">${t.tip === "Intrare" ? "▼ INTRARE — Recepție deșeuri" : "▲ IEȘIRE — Livrare deșeuri"}</div>
           </div>
         </div>
-        <div style="text-align:center;font-size:14pt;font-weight:bold;margin:2.5mm 0;">TICHET CANTARIRE NR. ${t.nr_tichet}</div>
-        <div style="display:flex;justify-content:space-between;">
-          <div>
-            ${L("Furnizor", "<b>" + (t.partener || "").toUpperCase() + "</b>")}
-            ${L("Client", "<b>" + (t.client || "GREEN KRAFT SRL").toUpperCase() + "</b>")}
-            ${L("Tip + Natura materialelor transportate", t.material || "")}
-            ${L("Nr. Auto", "<b>" + (t.nr_masina || "") + "</b>")}
-            ${L("Transportator", (t.transportator || "").toUpperCase())}
-          </div>
-          <div style="text-align:right;">
-            ${L("CUI Furnizor", t.partener_cui || "")}
-            ${L("CUI Client", (t.client || "GREEN KRAFT SRL").toUpperCase().includes("GREEN KRAFT") ? "36191378" : "")}
-            ${L("Configuratie vehicul", "")}
-            ${L("CUI Transportator", (() => { const tr = (t.transportator || "").toUpperCase(); if (tr.includes("GREEN KRAFT")) return "36191378"; const fj = pjList.find(x => x.denumire?.toUpperCase() === tr); return fj?.cod_fiscal || ""; })())}
-          </div>
+        <!-- Date partener / transport -->
+        <table style="width:100%;border-collapse:collapse;font-size:9pt;">
+          ${R("Furnizor", "<b>" + (t.partener || "").toUpperCase() + "</b>", "CUI/CNP", t.partener_cui)}
+          ${R("Client", "<b>" + (t.client || "GREEN KRAFT SRL").toUpperCase() + "</b>", "CUI", cuiClient)}
+          ${R("Transportator", (t.transportator || "").toUpperCase(), "CUI", cuiTransp)}
+          ${R("Nr. auto", "<b>" + (t.nr_masina || "") + "</b>", "Delegat", (t.sofer || "").toUpperCase())}
+          ${R("Material / Deșeu", t.material, "Factura / Aviz", [t.factura, t.aviz].filter(Boolean).join(" / "))}
+        </table>
+        <!-- Cantariri -->
+        <table style="width:100%;border-collapse:collapse;font-size:10pt;margin-top:3mm;">
+          <tr style="background:#1d6f42;color:#fff;font-weight:bold;text-align:center;">
+            <td style="padding:2mm;border:0.5px solid #1d6f42;width:25%;">Cântărire</td>
+            <td style="padding:2mm;border:0.5px solid #1d6f42;width:30%;">Greutate</td>
+            <td style="padding:2mm;border:0.5px solid #1d6f42;width:45%;">Data și ora cântăririi</td>
+          </tr>
+          <tr style="text-align:center;">
+            <td style="padding:2mm;border:0.5px solid #bbb;font-weight:bold;">BRUT</td>
+            <td style="padding:2mm;border:0.5px solid #bbb;font-size:11pt;">${t.brut != null ? fmt(t.brut) + " kg" : "—"}</td>
+            <td style="padding:2mm;border:0.5px solid #bbb;">${t.brut_la || "—"}</td>
+          </tr>
+          <tr style="text-align:center;">
+            <td style="padding:2mm;border:0.5px solid #bbb;font-weight:bold;">TARA</td>
+            <td style="padding:2mm;border:0.5px solid #bbb;font-size:11pt;">${t.tara != null ? fmt(t.tara) + " kg" : "—"}</td>
+            <td style="padding:2mm;border:0.5px solid #bbb;">${t.tara_la || "—"}</td>
+          </tr>
+          <tr style="text-align:center;background:#eef7f0;">
+            <td style="padding:2.5mm;border:1.5px solid #1d6f42;font-weight:bold;font-size:11pt;">NET</td>
+            <td style="padding:2.5mm;border:1.5px solid #1d6f42;font-weight:bold;font-size:14pt;" colspan="2">${t.net != null ? fmt(t.net) + " kg" : "—"}</td>
+          </tr>
+        </table>
+        <!-- Identificare cantar -->
+        <div style="font-size:8pt;color:#444;margin-top:2.5mm;border:0.5px solid #ccc;padding:1.8mm 3mm;background:#fafafa;">
+          <b>Aparat de cântărit:</b> Dini Argeo DFW • Serie: 18360 • Tip cântărire: Statică • Clasa de exactitate: III • Locație: Șos. de Centura Dreapta nr. 18A, Afumați, IF
         </div>
-        <div style="border:1.5px solid #000;margin:2mm 0;padding:2mm 3mm;">
-          <div style="display:flex;justify-content:space-between;">
-            <div><b>Tara : ${t.tara != null ? fmt(t.tara) + " KG" : "—"}</b> ${t.tara != null ? "[Tara Masurata]" : ""}</div>
-            <div><b>Cantarit la :</b> ${t.tara_la || "—"}</div>
-          </div>
-          <div style="display:flex;justify-content:space-between;">
-            <div><b>Brut : ${t.brut != null ? fmt(t.brut) + " KG" : "—"}</b></div>
-            <div><b>Cantarit la :</b> ${t.brut_la || "—"}</div>
-          </div>
-          <div style="display:flex;justify-content:space-between;border-top:1.5px solid #000;margin-top:1.5mm;padding-top:1.5mm;">
-            <div style="font-size:11pt;"><b>Net : ${t.net != null ? fmt(t.net) + " KG" : "—"}</b></div>
-            <div><b>Clasa de exactitate :</b> III</div>
-          </div>
+        ${t.obs ? `<div style="font-size:8.5pt;margin-top:2mm;"><b>Observații:</b> ${t.obs}</div>` : ""}
+        <!-- Semnaturi -->
+        <div style="display:flex;justify-content:space-between;margin-top:7mm;font-size:9pt;">
+          <div style="text-align:center;width:45%;">Operator cântar,<br/><b>${t.operator || ""}</b><br/><br/>__________________</div>
+          <div style="text-align:center;width:45%;">Delegat (am primit exemplarul),<br/><b>${(t.sofer || "").toUpperCase()}</b><br/><br/>__________________</div>
         </div>
-        <div style="display:flex;justify-content:space-between;">
-          <div>
-            ${L("Factura", t.factura || "")}
-            ${L("Aviz", t.aviz || "")}
-            ${L("Cantar", "Dini Argeo DFW")}
-            ${L("Serie cantar", "18360 / Tip cantarire : Statica")}
-          </div>
-          <div style="text-align:right;">
-            ${L("Delegat", (t.sofer || "").toUpperCase())}
-            ${L("Operator", t.operator || "")}
-            ${L("Locatie Cantarire", "Sos.de centura dreapta nr.18A,Afumati,IF")}
-            ${L("Semnatura Operator", "________________________")}
-          </div>
-        </div>
-        ${t.obs ? `<div style="margin-top:1.5mm;"><b>Observatii :</b> ${t.obs}</div>` : ""}
       </div>`;
     const w = window.open("", "_blank");
-    w.document.write(`<html><head><title>Tichet ${t.serie} ${t.nr_tichet}</title><style>body{margin:0;padding:6mm;} @page{size:A5 landscape;margin:5mm;}</style></head><body>${html}</body></html>`);
+    w.document.write(`<html><head><title>Tichet ${t.serie} ${t.nr_tichet}</title><style>body{margin:0;padding:8mm;} @page{size:A5 landscape;margin:6mm;}</style></head><body>${html}</body></html>`);
     w.document.close(); w.focus(); w.print();
   };
 
@@ -2340,13 +2377,6 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
             <button onClick={() => { if (window.confirm("Schimbi user-ul?")) { localStorage.removeItem("currentUser"); setCurrentUser(""); } }} title="Schimbă user" style={{ background: "transparent", border: "none", color: "#fff", cursor: "pointer", fontSize: 10, marginLeft: 4, opacity: 0.7 }}>🔄</button>
           </div>
           <button onClick={generateBackup} disabled={backupLoading} title="Descarcă backup JSON" style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.3)", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: backupLoading ? "wait" : "pointer", fontSize: 11, fontWeight: 600 }}>{backupLoading ? "⏳" : "💾 Backup"}</button>
-          {scalePort ? (
-            <button onClick={disconnectScale} title={scaleRawLine ? `Raw: ${scaleRawLine}\nClick pentru deconectare` : "Click pentru deconectare"} style={{ background: scaleReading?.stable ? "rgba(76,175,80,0.4)" : "rgba(255,193,7,0.4)", border: "1px solid rgba(255,255,255,0.4)", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 12, fontWeight: 700, fontFamily: "monospace" }}>
-              ⚖️ {scaleReading ? `${Number.isInteger(scaleReading.value) ? scaleReading.value : scaleReading.value.toFixed(3)} kg ${scaleReading.stable ? "✓" : "⚠"}` : "..."}
-            </button>
-          ) : (
-            <button onClick={connectScale} title="Conectează cantar Dini Argeo" style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.3)", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>⚖️ Cantar</button>
-          )}
         </div>
       </div>
 
@@ -3636,98 +3666,123 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
           const transpOpts = [...new Set(["GREEN KRAFT SRL", ...partenerOpts, ...ticheteList.map(t => t.transportator)].filter(Boolean))];
           const masiniOpts = [...new Set(ticheteList.map(t => t.nr_masina).filter(Boolean))].sort();
           const soferiOpts = [...new Set([...delegatiList.map(d => d.nume), ...ticheteList.map(t => t.sofer)].filter(Boolean))].sort();
+          const FL = { fontSize: 11, fontWeight: 600, color: "#555", display: "block", marginBottom: 2 };
+          const FI = { width: "100%", padding: "7px 9px", border: "1px solid #d5d5d5", borderRadius: 6, fontSize: 13, boxSizing: "border-box" };
           return (
             <div>
-              <div style={{ display: "flex", gap: 6, marginBottom: 12, borderBottom: "2px solid #eee" }}>
-                {[["nou", "➕ Tichet Nou"], ["deschise", `⏳ Deschise (${deschise.length})`], ["registru", "📒 Registru"]].map(([k, l]) => (
-                  <button key={k} onClick={() => setTicSubTab(k)} style={{ padding: "6px 14px", cursor: "pointer", border: "none", fontWeight: 600, fontSize: 12, borderBottom: ticSubTab === k ? `2px solid ${G}` : "2px solid transparent", background: ticSubTab === k ? "#f0faf4" : "transparent", color: ticSubTab === k ? G : "#666" }}>{l}</button>
+              {/* Bara status cantar */}
+              <div style={{ display: "flex", alignItems: "center", gap: 14, background: "#fff", border: "1px solid #e0e0e0", borderRadius: 10, padding: "10px 16px", marginBottom: 14, flexWrap: "wrap" }}>
+                {scalePort ? (
+                  <>
+                    <span style={{ fontSize: 22, fontWeight: 700, fontFamily: "monospace", color: scaleReading?.stable ? G : "#e65100" }}>{scaleReading ? `${fmt(scaleReading.value)} kg` : "..."}</span>
+                    <span style={{ fontSize: 11, color: scaleReading?.stable ? G : "#e65100", fontWeight: 600 }}>{scaleReading?.stable ? "✓ stabil" : "⚠ instabil"}</span>
+                    <button onClick={disconnectScale} style={{ marginLeft: "auto", padding: "5px 12px", border: "1px solid #ccc", borderRadius: 6, background: "#fff", cursor: "pointer", fontSize: 11, color: "#666" }}>Deconectează cântarul</button>
+                  </>
+                ) : cantarLive?.fresh ? (
+                  <>
+                    <span style={{ fontSize: 22, fontWeight: 700, fontFamily: "monospace", color: "#1565c0" }}>📡 {fmt(cantarLive.value)} kg</span>
+                    <span style={{ fontSize: 11, color: "#1565c0", fontWeight: 600 }}>{cantarLive.stable ? "✓ stabil" : "⚠ instabil"} • live de la birou</span>
+                    <button onClick={connectScale} style={{ marginLeft: "auto", padding: "5px 12px", border: `1px solid ${G}`, borderRadius: 6, background: "#fff", cursor: "pointer", fontSize: 11, color: G, fontWeight: 600 }}>⚖️ Conectează local</button>
+                  </>
+                ) : (
+                  <>
+                    <span style={{ fontSize: 13, color: "#999" }}>⚖️ Cântar neconectat</span>
+                    <button onClick={connectScale} style={{ marginLeft: "auto", padding: "6px 16px", border: "none", borderRadius: 6, background: G, cursor: "pointer", fontSize: 12, color: "#fff", fontWeight: 700 }}>⚖️ Conectează cântarul</button>
+                  </>
+                )}
+              </div>
+
+              <div style={{ display: "flex", gap: 6, marginBottom: 14, borderBottom: "2px solid #eee" }}>
+                {[["nou", "➕ Tichet Nou"], ["deschise", `⏳ Deschise${deschise.length ? ` (${deschise.length})` : ""}`], ["registru", "📒 Registru"]].map(([k, l]) => (
+                  <button key={k} onClick={() => setTicSubTab(k)} style={{ padding: "7px 16px", cursor: "pointer", border: "none", fontWeight: 600, fontSize: 12, borderBottom: ticSubTab === k ? `2px solid ${G}` : "2px solid transparent", background: ticSubTab === k ? "#f0faf4" : "transparent", color: ticSubTab === k ? G : "#666" }}>{l}</button>
                 ))}
-                <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: scalePort ? G : "#999", fontWeight: 600 }}>
-                  ⚖️ Cântar: {scalePort ? (scaleReading ? `${scaleReading.value} kg ${scaleReading.stable ? "✅" : "⏳"}` : "conectat") : "neconectat"}
-                </div>
               </div>
 
               {ticSubTab === "nou" && (
-                <div style={{ maxWidth: 560, background: "#fff", border: "1px solid #ddd", borderRadius: 10, padding: 18 }}>
-                  <div style={{ fontWeight: 700, color: G, fontSize: 14, marginBottom: 12 }}>➕ Tichet Cântar Nou — Cântărirea 1 (BRUT)</div>
-                  <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
-                    <button onClick={() => setTicNou((p) => ({ ...p, tip: "Intrare" }))} style={{ flex: 1, padding: "10px", border: ticNou.tip === "Intrare" ? `2px solid ${G}` : "2px solid #ddd", borderRadius: 8, background: ticNou.tip === "Intrare" ? "#e8f5e9" : "#fff", cursor: "pointer", fontWeight: 700, color: ticNou.tip === "Intrare" ? G : "#999", fontSize: 13 }}>▼ INTRARE<div style={{ fontSize: 10, fontWeight: 400 }}>Recepție marfă</div></button>
-                    <button onClick={() => setTicNou((p) => ({ ...p, tip: "Iesire" }))} style={{ flex: 1, padding: "10px", border: ticNou.tip === "Iesire" ? "2px solid #bf360c" : "2px solid #ddd", borderRadius: 8, background: ticNou.tip === "Iesire" ? "#fbe9e7" : "#fff", cursor: "pointer", fontWeight: 700, color: ticNou.tip === "Iesire" ? "#bf360c" : "#999", fontSize: 13 }}>▲ IEȘIRE<div style={{ fontSize: 10, fontWeight: 400 }}>Livrare marfă</div></button>
-                  </div>
-                  <div style={{ marginBottom: 10 }}>
-                    <label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Cum vine vehiculul la prima cântărire?</label>
-                    <div style={{ display: "flex", gap: 8, marginTop: 3 }}>
-                      <button onClick={() => setTicNou((p) => ({ ...p, prima: "plin" }))} style={{ flex: 1, padding: "8px", border: ticNou.prima === "plin" ? "2px solid #6a1b9a" : "2px solid #ddd", borderRadius: 7, background: ticNou.prima === "plin" ? "#f3e5f5" : "#fff", cursor: "pointer", fontWeight: 700, color: ticNou.prima === "plin" ? "#6a1b9a" : "#999", fontSize: 12 }}>🚛 PLIN<div style={{ fontSize: 9, fontWeight: 400 }}>Prima cântărire = BRUT</div></button>
-                      <button onClick={() => setTicNou((p) => ({ ...p, prima: "gol" }))} style={{ flex: 1, padding: "8px", border: ticNou.prima === "gol" ? "2px solid #6a1b9a" : "2px solid #ddd", borderRadius: 7, background: ticNou.prima === "gol" ? "#f3e5f5" : "#fff", cursor: "pointer", fontWeight: 700, color: ticNou.prima === "gol" ? "#6a1b9a" : "#999", fontSize: 12 }}>🛻 GOL<div style={{ fontSize: 9, fontWeight: 400 }}>Prima cântărire = TARA</div></button>
+                <div style={{ maxWidth: 860 }}>
+                  <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+                    {/* Coloana stanga: date transport */}
+                    <div style={{ flex: "1 1 380px", background: "#fff", border: "1px solid #e0e0e0", borderRadius: 10, padding: 16 }}>
+                      <div style={{ fontWeight: 700, color: "#444", fontSize: 12, marginBottom: 12, textTransform: "uppercase", letterSpacing: 0.5 }}>Date transport</div>
+                      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                        <select style={{ ...FI, flex: 1, fontWeight: 700, color: ticNou.tip === "Intrare" ? G : "#bf360c" }} value={ticNou.tip} onChange={(e) => setTicNou((p) => ({ ...p, tip: e.target.value }))}>
+                          <option value="Intrare">▼ Intrare (recepție)</option>
+                          <option value="Iesire">▲ Ieșire (livrare)</option>
+                        </select>
+                        <select style={{ ...FI, flex: 1, fontWeight: 600, color: "#6a1b9a" }} value={ticNou.prima} onChange={(e) => setTicNou((p) => ({ ...p, prima: e.target.value }))}>
+                          <option value="plin">🚛 Vine plin (1. BRUT)</option>
+                          <option value="gol">🛻 Vine gol (1. TARA)</option>
+                        </select>
+                      </div>
+                      <div style={{ marginBottom: 10 }}><label style={FL}>Furnizor (cine aduce marfa)</label><AC value={ticNou.partener} options={partenerOpts} placeholder="Caută PF sau PJ..." onChange={(v) => { const f = pjList.find(x => x.denumire === v) || pfList.find(x => x.denumire === v); setTicNou((p) => ({ ...p, partener: v, partener_cui: f?.cod_fiscal || "" })); }} /></div>
+                      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                        <div style={{ flex: 1 }}><label style={FL}>Client</label><input style={{ ...FI, color: G, fontWeight: 600 }} value={ticNou.client} onChange={(e) => setTicNou((p) => ({ ...p, client: e.target.value }))} /></div>
+                        <div style={{ flex: 1 }}><label style={FL}>Transportator</label><AC value={ticNou.transportator} options={transpOpts} placeholder="noi / PF / PJ" onChange={(v) => setTicNou((p) => ({ ...p, transportator: v }))} /></div>
+                      </div>
+                      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                        <div style={{ flex: 1 }}><label style={FL}>Nr. auto</label><AC value={ticNou.nr_masina} options={masiniOpts} placeholder="IF55KFT" onChange={(v) => setTicNou((p) => ({ ...p, nr_masina: v.toUpperCase() }))} /></div>
+                        <div style={{ flex: 1 }}><label style={FL}>Delegat (șofer)</label><AC value={ticNou.sofer} options={soferiOpts} placeholder="alege sau scrie nou" onChange={(v) => setTicNou((p) => ({ ...p, sofer: v }))} /></div>
+                      </div>
+                      <div style={{ marginBottom: 10 }}><label style={FL}>Material / Deșeu</label><AC value={ticNou.material} options={PRODUSE_DYN} placeholder="Selectează..." onChange={(v) => setTicNou((p) => ({ ...p, material: v }))} /></div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <div style={{ flex: 1 }}><label style={FL}>Factura</label><input style={FI} value={ticNou.factura} onChange={(e) => setTicNou((p) => ({ ...p, factura: e.target.value }))} placeholder="opțional" /></div>
+                        <div style={{ flex: 1 }}><label style={FL}>Aviz</label><input style={FI} value={ticNou.aviz} onChange={(e) => setTicNou((p) => ({ ...p, aviz: e.target.value }))} placeholder="opțional" /></div>
+                        <div style={{ flex: 1 }}><label style={FL}>Observații</label><input style={FI} value={ticNou.obs} onChange={(e) => setTicNou((p) => ({ ...p, obs: e.target.value }))} placeholder="opțional" /></div>
+                      </div>
+                    </div>
+                    {/* Coloana dreapta: cantarirea */}
+                    <div style={{ flex: "1 1 280px", background: "#fff", border: `1px solid ${G}`, borderRadius: 10, padding: 16, display: "flex", flexDirection: "column" }}>
+                      <div style={{ fontWeight: 700, color: G, fontSize: 12, marginBottom: 12, textTransform: "uppercase", letterSpacing: 0.5 }}>Cântărirea 1 — {ticNou.prima === "plin" ? "Brut (plin)" : "Tara (gol)"}</div>
+                      <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+                        <input style={{ flex: 1, padding: "14px", border: `2px solid ${G}`, borderRadius: 8, fontSize: 26, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="number" value={ticNou.greutate} onChange={(e) => setTicNou((p) => ({ ...p, greutate: e.target.value }))} placeholder="0" />
+                        <span style={{ alignSelf: "center", fontSize: 15, color: "#888", fontWeight: 600 }}>kg</span>
+                      </div>
+                      {scalePort && <button onClick={() => useScaleWeight((v) => setTicNou((p) => ({ ...p, greutate: v })))} style={{ padding: "10px", background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: `1px solid ${G}`, borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700, color: G, marginBottom: 8 }}>⚖️ Preia din cântar {scaleReading ? `(${fmt(scaleReading.value)} kg)` : ""}</button>}
+                      {!scalePort && cantarLive?.fresh && <button onClick={() => useLiveWeight((v) => setTicNou((p) => ({ ...p, greutate: v })))} style={{ padding: "10px", background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#1565c0", marginBottom: 8 }}>📡 Preia live de la birou ({fmt(cantarLive.value)} kg)</button>}
+                      <button onClick={salveazaTichet1} style={{ marginTop: "auto", padding: "13px", background: `linear-gradient(135deg,#1b5e20,${G})`, color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 14, fontWeight: 700 }}>💾 Deschide tichet TC #{getNextTichetNr()}</button>
+                      <div style={{ fontSize: 10, color: "#999", marginTop: 6, textAlign: "center" }}>A doua cântărire se face din „⏳ Deschise"</div>
                     </div>
                   </div>
-                  <div style={{ marginBottom: 8 }}><label style={{ fontSize: 11, fontWeight: 700, color: "#e65100" }}>📥 Furnizor (cine aduce marfa — PF sau PJ)</label><AC value={ticNou.partener} options={partenerOpts} placeholder="Caută PF sau PJ..." onChange={(v) => { const f = pjList.find(x => x.denumire === v) || pfList.find(x => x.denumire === v); setTicNou((p) => ({ ...p, partener: v, partener_cui: f?.cod_fiscal || "" })); }} /></div>
-                  <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                    <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: G }}>🏢 Client (noi)</label><input style={{ width: "100%", padding: "6px 8px", border: `1px solid ${G}`, borderRadius: 5, fontSize: 12, fontWeight: 600, color: G, background: "#f0faf4", boxSizing: "border-box" }} value={ticNou.client} onChange={(e) => setTicNou((p) => ({ ...p, client: e.target.value }))} /></div>
-                    <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>🚚 Transportator</label><AC value={ticNou.transportator} options={transpOpts} placeholder="noi / PF / PJ..." onChange={(v) => setTicNou((p) => ({ ...p, transportator: v }))} /></div>
-                  </div>
-                  <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                    <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Nr. înmatriculare</label><AC value={ticNou.nr_masina} options={masiniOpts} placeholder="ex: IF55KFT" onChange={(v) => setTicNou((p) => ({ ...p, nr_masina: v.toUpperCase() }))} /></div>
-                    <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Delegat (Șofer) — cei noi se salvează automat</label><AC value={ticNou.sofer} options={soferiOpts} placeholder="alege sau scrie nou" onChange={(v) => setTicNou((p) => ({ ...p, sofer: v }))} /></div>
-                  </div>
-                  <div style={{ marginBottom: 8 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Material / Deșeu</label><AC value={ticNou.material} options={PRODUSE_DYN} placeholder="Selectează..." onChange={(v) => setTicNou((p) => ({ ...p, material: v }))} /></div>
-                  <div style={{ marginBottom: 8 }}>
-                    <label style={{ fontSize: 11, fontWeight: 700, color: G }}>⚖️ {ticNou.prima === "plin" ? "BRUT" : "TARA"} (kg) — prima cântărire ({ticNou.prima === "plin" ? "vehicul plin" : "vehicul gol"})</label>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <input style={{ flex: 1, padding: "10px", border: `2px solid ${G}`, borderRadius: 6, fontSize: 18, fontWeight: 700, textAlign: "right", boxSizing: "border-box" }} type="number" value={ticNou.greutate} onChange={(e) => setTicNou((p) => ({ ...p, greutate: e.target.value }))} placeholder="0" />
-                      {scalePort && <button onClick={() => useScaleWeight((v) => setTicNou((p) => ({ ...p, greutate: v })))} style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 6, padding: "0 14px", cursor: "pointer", fontSize: 18 }} title="Citește din cantar">⚖️</button>}
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                    <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Factura</label><input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 12, boxSizing: "border-box" }} value={ticNou.factura} onChange={(e) => setTicNou((p) => ({ ...p, factura: e.target.value }))} placeholder="opțional" /></div>
-                    <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Aviz</label><input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 12, boxSizing: "border-box" }} value={ticNou.aviz} onChange={(e) => setTicNou((p) => ({ ...p, aviz: e.target.value }))} placeholder="opțional" /></div>
-                  </div>
-                  <div style={{ marginBottom: 12 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Observații</label><input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 12, boxSizing: "border-box" }} value={ticNou.obs} onChange={(e) => setTicNou((p) => ({ ...p, obs: e.target.value }))} placeholder="opțional" /></div>
-                  <button onClick={salveazaTichet1} style={{ width: "100%", padding: "12px", background: `linear-gradient(135deg,#1b5e20,${G})`, color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 14, fontWeight: 700 }}>💾 Salvează {ticNou.prima === "plin" ? "BRUT" : "TARA"} → tichet DESCHIS (Seria TC Nr. {getNextTichetNr()})</button>
-                  <div style={{ fontSize: 10, color: "#888", marginTop: 6, textAlign: "center" }}>Vehiculul {ticNou.prima === "plin" ? "descarcă" : "încarcă"} marfa, apoi închizi tichetul cu a doua cântărire ({ticNou.prima === "plin" ? "TARA — gol" : "BRUT — plin"}) din tab-ul „⏳ Deschise".</div>
                 </div>
               )}
 
               {ticSubTab === "deschise" && (
                 <div>
-                  {deschise.length === 0 && <div style={{ color: "#999", fontSize: 13, padding: "30px 0", textAlign: "center" }}>Niciun tichet deschis. Vehiculele cântărite la intrare apar aici până la a doua cântărire.</div>}
+                  {deschise.length === 0 && <div style={{ color: "#999", fontSize: 13, padding: "40px 0", textAlign: "center" }}>Niciun tichet deschis.<br /><span style={{ fontSize: 11 }}>Vehiculele cântărite o singură dată apar aici până la a doua cântărire.</span></div>}
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
                     {deschise.map((t) => (
-                      <div key={t.id} style={{ width: 320, background: "#fff", border: "2px solid #ffa726", borderRadius: 10, overflow: "hidden" }}>
-                        <div style={{ background: "linear-gradient(135deg,#ef6c00,#ffa726)", color: "#fff", padding: "8px 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <span style={{ fontWeight: 700, fontSize: 13 }}>⏳ {t.serie} #{t.nr_tichet}</span>
-                          <span style={{ fontSize: 11 }}>{t.tip === "Intrare" ? "▼ Intrare" : "▲ Ieșire"} • {t.data} {t.ora_intrare}</span>
+                      <div key={t.id} style={{ width: 320, background: "#fff", border: "1px solid #e0e0e0", borderLeft: "4px solid #ffa726", borderRadius: 10, padding: 14 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+                          <span style={{ fontWeight: 700, fontSize: 14 }}>TC #{t.nr_tichet}</span>
+                          <span style={{ fontSize: 10, color: "#999" }}>{t.tip === "Intrare" ? "▼ Intrare" : "▲ Ieșire"} • {t.data} {t.ora_intrare}</span>
                         </div>
-                        <div style={{ padding: 12, fontSize: 12 }}>
-                          <div style={{ fontWeight: 700, marginBottom: 2 }}>{t.partener}</div>
-                          <div style={{ color: "#666", marginBottom: 6 }}>🚛 {t.nr_masina} {t.sofer ? `• ${t.sofer}` : ""}</div>
-                          <div style={{ marginBottom: 8 }}>📦 {t.material || "—"}</div>
-                          <div style={{ display: "flex", gap: 6, alignItems: "center", background: "#f5f5f5", borderRadius: 6, padding: 8 }}>
-                            <div style={{ flex: 1, textAlign: "center" }}>
-                              <div style={{ fontSize: 10, color: "#888" }}>{t.brut != null ? "BRUT ✓" : "TARA ✓"}</div>
-                              <div style={{ fontWeight: 700, fontSize: 15 }}>{fmt(t.brut != null ? t.brut : t.tara)} kg</div>
-                            </div>
-                            <div style={{ fontSize: 18, color: "#bbb" }}>{t.brut != null ? "−" : "+"}</div>
-                            <div style={{ flex: 1.4 }}>
-                              <div style={{ fontSize: 10, color: "#888", textAlign: "center" }}>{t.brut != null ? "TARA (gol)" : "BRUT (plin)"}</div>
-                              <div style={{ display: "flex", gap: 3 }}>
-                                <input style={{ width: "100%", padding: "4px", border: "1px solid #ffa726", borderRadius: 4, fontSize: 14, fontWeight: 700, textAlign: "right", boxSizing: "border-box" }} type="number" value={ticTaraInput[t.id] || ""} onChange={(e) => setTicTaraInput((p) => ({ ...p, [t.id]: e.target.value }))} placeholder="kg" />
-                                {scalePort && <button onClick={() => useScaleWeight((v) => setTicTaraInput((p) => ({ ...p, [t.id]: v })))} style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 4, padding: "0 6px", cursor: "pointer", fontSize: 13 }}>⚖️</button>}
-                              </div>
-                            </div>
+                        <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 1 }}>{t.partener}</div>
+                        <div style={{ fontSize: 11, color: "#777", marginBottom: 10 }}>🚛 {t.nr_masina}{t.sofer ? ` • ${t.sofer}` : ""}{t.material ? ` • ${t.material}` : ""}</div>
+                        <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 8 }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 10, color: "#999" }}>{t.brut != null ? "Brut ✓" : "Tara ✓"}</div>
+                            <div style={{ fontWeight: 700, fontSize: 16, fontFamily: "monospace" }}>{fmt(t.brut != null ? t.brut : t.tara)}</div>
                           </div>
-                          {(() => {
-                            const v2 = parseFloat(ticTaraInput[t.id]);
-                            if (!v2 || v2 <= 0) return null;
-                            const brutV = t.brut != null ? parseFloat(t.brut) : v2;
-                            const taraV = t.brut != null ? v2 : parseFloat(t.tara);
-                            if (brutV <= taraV) return <div style={{ textAlign: "center", marginTop: 6, fontSize: 11, color: "#c62828", fontWeight: 600 }}>⚠️ Brut trebuie să fie mai mare decât Tara</div>;
-                            return <div style={{ textAlign: "center", marginTop: 6, fontSize: 12, color: G, fontWeight: 700 }}>NET = {fmt(Math.round((brutV - taraV) * 100) / 100)} kg</div>;
-                          })()}
-                          <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-                            <button onClick={() => inchideTichet(t)} style={{ flex: 1, padding: "8px", background: G, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>✔ Închide tichet</button>
-                            <button onClick={() => delTichet(t)} style={{ padding: "8px 10px", background: "#fff", color: "#e53935", border: "1px solid #ef9a9a", borderRadius: 6, cursor: "pointer", fontSize: 12 }}>✕</button>
+                          <div style={{ flex: 1.3 }}>
+                            <div style={{ fontSize: 10, color: "#e65100", fontWeight: 600 }}>{t.brut != null ? "Tara (gol)" : "Brut (plin)"}</div>
+                            <input style={{ width: "100%", padding: "6px", border: "1.5px solid #ffa726", borderRadius: 6, fontSize: 15, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="number" value={ticTaraInput[t.id] || ""} onChange={(e) => setTicTaraInput((p) => ({ ...p, [t.id]: e.target.value }))} placeholder="kg" />
                           </div>
+                        </div>
+                        <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
+                          {scalePort && <button onClick={() => useScaleWeight((v) => setTicTaraInput((p) => ({ ...p, [t.id]: v })))} style={{ flex: 1, padding: "5px", background: "#e8f5e9", border: "1px solid #a5d6a7", borderRadius: 5, cursor: "pointer", fontSize: 11, color: G, fontWeight: 600 }}>⚖️ Din cântar</button>}
+                          {!scalePort && cantarLive?.fresh && <button onClick={() => useLiveWeight((v) => setTicTaraInput((p) => ({ ...p, [t.id]: v })))} style={{ flex: 1, padding: "5px", background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 5, cursor: "pointer", fontSize: 11, color: "#1565c0", fontWeight: 600 }}>📡 Live birou</button>}
+                        </div>
+                        {(() => {
+                          const v2 = parseFloat(ticTaraInput[t.id]);
+                          if (!v2 || v2 <= 0) return null;
+                          const brutV = t.brut != null ? parseFloat(t.brut) : v2;
+                          const taraV = t.brut != null ? v2 : parseFloat(t.tara);
+                          if (brutV <= taraV) return <div style={{ textAlign: "center", marginBottom: 8, fontSize: 11, color: "#c62828", fontWeight: 600 }}>⚠️ Brut trebuie să fie mai mare decât Tara</div>;
+                          return <div style={{ textAlign: "center", marginBottom: 8, fontSize: 14, color: G, fontWeight: 700, fontFamily: "monospace" }}>NET = {fmt(Math.round((brutV - taraV) * 100) / 100)} kg</div>;
+                        })()}
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button onClick={() => inchideTichet(t)} style={{ flex: 1, padding: "9px", background: G, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>✔ Închide tichet</button>
+                          <button onClick={() => delTichet(t)} style={{ padding: "9px 11px", background: "#fff", color: "#e53935", border: "1px solid #ef9a9a", borderRadius: 6, cursor: "pointer", fontSize: 12 }}>✕</button>
                         </div>
                       </div>
                     ))}
@@ -3742,7 +3797,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                       <option value="">Toate lunile</option>
                       {lunaOpts.map((l) => <option key={l} value={l}>{l}</option>)}
                     </select>
-                    <input style={{ padding: "6px 10px", border: "1px solid #ccc", borderRadius: 5, fontSize: 12, width: 220 }} value={ticFilter} onChange={(e) => setTicFilter(e.target.value)} placeholder="🔍 Caută partener / mașină / material..." />
+                    <input style={{ padding: "6px 10px", border: "1px solid #ccc", borderRadius: 5, fontSize: 12, width: 220 }} value={ticFilter} onChange={(e) => setTicFilter(e.target.value)} placeholder="🔍 Caută furnizor / mașină / material..." />
                     {(ticLuna || ticFilter) && <button onClick={() => { setTicLuna(""); setTicFilter(""); }} style={{ padding: "5px 10px", border: "1px solid #ccc", borderRadius: 5, background: "#fff", cursor: "pointer", fontSize: 11 }}>↺ Reset</button>}
                     <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
                       <SC label="Tichete" value={String(filtrate.length)} c={G} bg="#e8f5e9" />
