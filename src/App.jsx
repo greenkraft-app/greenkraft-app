@@ -1305,13 +1305,17 @@ export default function App() {
           <b>Aparat de cântărit:</b> Dini Argeo DFW • Serie: 18360 • Tip cântărire: Statică • Clasa de exactitate: III • Locație: Șos. de Centura Dreapta nr. 18A, Afumați, IF
         </div>
         ${t.obs ? `<div style="font-size:8.5pt;margin-top:2mm;"><b>Observații:</b> ${t.obs}</div>` : ""}
-        <!-- Semnatura -->
-        <div style="display:flex;justify-content:flex-end;margin-top:4mm;font-size:9pt;">
-          <div style="text-align:center;">Semnătura Operator,<br/><b>${t.operator || ""}</b><br/><br/>__________________</div>
+        <!-- Semnatura + stampila -->
+        <div style="display:flex;justify-content:flex-end;margin-top:1mm;font-size:9pt;">
+          <div style="text-align:center;position:relative;width:52mm;height:34mm;">
+            <div style="position:absolute;top:0;left:0;right:0;">Semnătura Operator,<br/><b>${t.operator || ""}</b></div>
+            <img src="${window.location.origin}/stampila-semnatura.png" style="position:absolute;top:6mm;left:50%;transform:translateX(-50%) rotate(-4deg);width:36mm;opacity:0.92;" />
+            <div style="position:absolute;bottom:0;left:0;right:0;">__________________</div>
+          </div>
         </div>
       </div>`;
     const w = window.open("", "_blank");
-    w.document.write(`<html><head><title>Tichet ${t.serie} ${t.nr_tichet}</title><style>html,body{margin:0;padding:0;} body{padding:4mm;} @page{size:A5 landscape;margin:4mm;} @media print{ body{height:140mm;overflow:hidden;} }</style></head><body>${html}</body></html>`);
+    w.document.write(`<html><head><title>Tichet ${t.serie} ${t.nr_tichet}</title><style>html,body{margin:0;padding:0;} body{box-sizing:border-box;padding:3mm;} @page{size:A5 landscape;margin:4mm;} @media print{ html,body{height:138mm;overflow:hidden;} }</style></head><body>${html}</body></html>`);
     w.document.close(); w.focus(); w.print();
   };
 
