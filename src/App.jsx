@@ -716,14 +716,14 @@ export default function App() {
     const r = cantarLiveRows[0];
     if (!r || !r.updated_at) return null;
     const age = Date.now() - new Date(r.updated_at).getTime();
-    return { value: r.value, stable: r.stable, age, fresh: age < 15000 };
+    return { value: r.value, stable: r.stable, age, fresh: age < 30000 };
   })();
 
   const useLiveWeight = (callback) => {
     const r = cantarLiveRows[0];
     if (!r || !r.updated_at) { alert("Nu există date de la cântar."); return; }
     const age = Date.now() - new Date(r.updated_at).getTime();
-    if (age > 15000) { alert(`Datele de la cântar sunt vechi (${Math.round(age / 1000)}s). Verifică dacă aplicația e deschisă pe calculatorul cu cântarul.`); return; }
+    if (age > 30000) { alert(`Datele de la cântar sunt vechi (${Math.round(age / 1000)}s). Verifică dacă aplicația e deschisă pe calculatorul cu cântarul.`); return; }
     if (!r.stable) {
       if (!window.confirm(`Cântărire instabilă (${r.value} kg). Folosești această valoare?`)) return;
     }
@@ -1307,9 +1307,10 @@ export default function App() {
         ${t.obs ? `<div style="font-size:8.5pt;margin-top:2mm;"><b>Observații:</b> ${t.obs}</div>` : ""}
         <!-- Semnatura + stampila -->
         <div style="display:flex;justify-content:flex-end;margin-top:1mm;font-size:9pt;">
-          <div style="text-align:center;position:relative;width:52mm;height:34mm;">
+          <div style="text-align:center;position:relative;width:62mm;height:34mm;">
             <div style="position:absolute;top:0;left:0;right:0;">Semnătura Operator,<br/><b>${t.operator || ""}</b></div>
-            <img src="${window.location.origin}/stampila-semnatura.png" style="position:absolute;top:6mm;left:50%;transform:translateX(-50%) rotate(-4deg);width:36mm;opacity:0.92;" />
+            <img src="${window.location.origin}/stampila.png" onerror="this.style.display='none'" style="position:absolute;top:5mm;left:4mm;transform:rotate(-5deg);width:32mm;opacity:0.93;" />
+            <img src="${window.location.origin}/semnatura-${(t.operator || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")}.png" onerror="this.style.display='none'" style="position:absolute;bottom:3mm;right:2mm;height:14mm;max-width:30mm;object-fit:contain;" />
             <div style="position:absolute;bottom:0;left:0;right:0;">__________________</div>
           </div>
         </div>
