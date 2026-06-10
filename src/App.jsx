@@ -1309,14 +1309,14 @@ export default function App() {
         <div style="display:flex;justify-content:flex-end;margin-top:1mm;font-size:9pt;">
           <div style="text-align:center;position:relative;width:62mm;height:34mm;">
             <div style="position:absolute;top:0;left:0;right:0;">Semnătura Operator,<br/><b>${t.operator || ""}</b></div>
-            <img src="${window.location.origin}/stampila.png" onerror="this.style.display='none'" style="position:absolute;top:5mm;left:4mm;transform:rotate(-5deg);width:32mm;opacity:0.93;" />
+            <img src="${window.location.origin}/stampila.png" onerror="this.style.display='none'" style="position:absolute;top:5mm;left:4mm;transform:rotate(-5deg);width:28mm;" />
             <img src="${window.location.origin}/semnatura-${(t.operator || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")}.png" onerror="this.style.display='none'" style="position:absolute;bottom:3mm;right:2mm;height:14mm;max-width:30mm;object-fit:contain;" />
             <div style="position:absolute;bottom:0;left:0;right:0;">__________________</div>
           </div>
         </div>
       </div>`;
     const w = window.open("", "_blank");
-    w.document.write(`<html><head><title>Tichet ${t.serie} ${t.nr_tichet}</title><style>html,body{margin:0;padding:0;} body{box-sizing:border-box;padding:3mm;} @page{size:A5 landscape;margin:4mm;} @media print{ html,body{height:138mm;overflow:hidden;} }</style></head><body>${html}</body></html>`);
+    w.document.write(`<html><head><title>Tichet ${t.serie} ${t.nr_tichet}</title><style>html,body{margin:0;padding:0;} body{box-sizing:border-box;padding:3mm;} *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;} img{image-rendering:auto;} @page{size:A5 landscape;margin:4mm;} @media print{ html,body{height:138mm;overflow:hidden;} }</style></head><body>${html}</body></html>`);
     w.document.close(); w.focus(); w.print();
   };
 
