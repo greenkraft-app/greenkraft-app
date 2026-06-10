@@ -737,30 +737,6 @@ export default function App() {
     }
     callback(r.value);
   };
-
-  // ── Print Bridge: trimitere tichet la imprimanta de la birou ──
-  const togglePrintServer = () => {
-    const nv = !printServer;
-    setPrintServer(nv);
-    localStorage.setItem("gk_print_server", nv ? "1" : "0");
-  };
-  const trimiteLaPrint = async (t) => {
-    const { error } = await sb.from("print_queue").insert({ tichet_id: t.id, status: "pending", requested_by: currentUser || "" });
-    if (error) { alert("Eroare la trimitere: " + error.message); return; }
-    alert(`🖨️ Tichetul TC #${t.nr_tichet} a fost trimis la imprimanta de la birou.`);
-  };
-  // Procesare coada: doar pe calculatorul marcat ca server de print
-  useEffect(() => {
-    if (!printServer) return;
-    const pending = printQueue.filter((j) => j.status === "pending" && (Date.now() - new Date(j.created_at).getTime()) < 10 * 60 * 1000);
-    pending.forEach(async (job, idx) => {
-      if (printedJobsRef.current.has(job.id)) return;
-      printedJobsRef.current.add(job.id);
-      const t = ticheteList.find((x) => x.id === job.tichet_id);
-      await sb.from("print_queue").update({ status: t ? "printed" : "error" }).eq("id", job.id);
-      if (t) setTimeout(() => printTichetSilent(t), idx * 4000); // 4s intre joburi multiple
-    });
-  }, [printQueue, printServer, ticheteList]);
   // ── Helper: confirmation dialog for deletes ──────────────
   const confirmDel = (what) => window.confirm(`⚠️ Sigur vrei să ștergi ${what}?\n\nAcțiunea NU poate fi anulată.`);
   // ── Helper: audit log ─────────────────────────────────────
@@ -1366,6 +1342,30 @@ export default function App() {
     doc.close();
     setTimeout(() => { try { document.body.removeChild(fr); } catch (e) {} }, 60000);
   };
+
+  // ── Print Bridge: trimitere tichet la imprimanta de la birou ──
+  const togglePrintServer = () => {
+    const nv = !printServer;
+    setPrintServer(nv);
+    localStorage.setItem("gk_print_server", nv ? "1" : "0");
+  };
+  const trimiteLaPrint = async (t) => {
+    const { error } = await sb.from("print_queue").insert({ tichet_id: t.id, status: "pending", requested_by: currentUser || "" });
+    if (error) { alert("Eroare la trimitere: " + error.message); return; }
+    alert(`🖨️ Tichetul TC #${t.nr_tichet} a fost trimis la imprimanta de la birou.`);
+  };
+  // Procesare coada: doar pe calculatorul marcat ca server de print
+  useEffect(() => {
+    if (!printServer) return;
+    const pending = printQueue.filter((j) => j.status === "pending" && (Date.now() - new Date(j.created_at).getTime()) < 10 * 60 * 1000);
+    pending.forEach(async (job, idx) => {
+      if (printedJobsRef.current.has(job.id)) return;
+      printedJobsRef.current.add(job.id);
+      const t = ticheteList.find((x) => x.id === job.tichet_id);
+      await sb.from("print_queue").update({ status: t ? "printed" : "error" }).eq("id", job.id);
+      if (t) setTimeout(() => printTichetSilent(t), idx * 4000); // 4s intre joburi multiple
+    });
+  }, [printQueue, printServer, ticheteList]);
 
   // ── PV (Proces Verbal) helpers ────────────────────────────
   const newPV = (lst = [], serie = "A") => {
