@@ -189,6 +189,11 @@ const COL_COLORS = { Curte: "#c6efce", Deee: "#bdd7ee", Diverse: "#fff2cc", Alte
 const CATEGORIE_CH = ["Diverse","Taxe","Salarii","Utilități","Transport","Combustibil","Altele"];
 const DECONT_CAT = ["Marfă","Salarii","Furnizor","Combustibil","Taxe","Comisioane","Altele"];
 const GREENKRAFT_OPT = ["Deee","Greenkraft"];
+// ── Liste predefinite Tichete Cantar (din aplicatia veche, curatate) ──
+const TIC_DELEGATI = ["ANDREI ALEXANDRU","BALESCU DUMITRU","BALTAC CONSTANTIN","BARBU DANIEL","BARBU LIVIU","BERCU MARIAN","BERCUCI NICOLAE","BOGDAN STEFAN COSMIN","BUDU MIHAI","CALIN RAZVAN","CARCEI IONUT","CIMPOIERU VIOREL","CIORTAN FLORIN","CIUCA SORIN DANIEL","COSTEA DANIEL MIHAI","DAN VARGATU","DEATCU MARIN","DINU DANUT","DINU TITI","DONDOE EMIL","DUMITRACHE CORNEL","DUMITRU MARIUS","FLOREA ION","FLOREA STEFAN","FLORESCU VASILE","FODOROIU MARIAN","GAGU TRAIAN","GANA MIHAI","GAULEA MARIAN","GHERGHILESCU CIPRIAN","GORE GEORGIAN","GRIGORE EUGEN","ILIE VASILE","ION BOGDAN","IORDACHE NICUSOR","IORGA IONEL","LAZAR FLORIN","MARADIN ANDREI","MARCU NELUS","MARINICA NICOLAIE","MATEI MARIAN","MAZILU FLORIN","MIHAI BOGDANEL","MIHAI CRISTIAN","MIHAI DORIAN","MIINEA VALENTIN (BALBI)","MITICA CORNELIU","MOCANU MARIUS","MORARU CONSTANTIN","NEAGU NICOLAE","NICOLAE CONSTANTIN","NISTOR CATALIN GEORGE","OLARU VIOREL","OPRESCU ION","PATRICHI GICA","PAUN GEORGE","PETRE DUMITRU","PINTILIE SILVIU","PITIGOI DUMITRU","PLAIASU IONEL","POROINEANU VALENTIN","PUSCASU CLAUDIU","RADU IULIAN","RADUCANU MARIUS","ROSU SORIN","RUBEI DORIAN","SAMOILA FLORIN DANIEL","SANDEL","SANDU IULIAN GABRIEL","SANDU ROMEO","SCARLAT MARIAN","SERBAN GIANI","SMARANDA ALIN","STAICU DANUT VIRGIL","STANCIU MARIAN ALEXANDRU","STATE NICUSOR","STEREA FLORIN GABRIEL","TANASE ALEXANDRU","TARZIU VASILE","TELEASA MIHAI","TOADER CATALIN","TUDOR IONUT","URDA VOICU","VENTRI CLAUDIU","VICA MARCEL","VISAN ADRIAN","ZICA ZISU CATALIN"];
+const TIC_TRANSPORTATORI = ["GREEN KRAFT SRL","AUTO HOFF TECHNOLOGY","AWR GREEN POINT SRL","BEFIN","BRAVA EVE SRL","CIUCA SORIN DANIEL","COSTEA DANIEL MIHAI","COSTELO SPEED SRL","DIMAR SRL","DINU TITI","DOM & LUK SRL","DSE WEST TRANS SOLUTIONS SRL","ECO METAL COLECT","ECOSAL SERV DOBROESTI","ECOSFERA COLECT","EUROPE WASTE MANAGEMENT","FRANCESCA WEN TRUCK SRL","GABIONEL MARFURI TRANS SRL","GREEN PACK","GREEN RESPO RECYCLING SRL","GREENWEEE INTERNATIONAL SA","IULIAN","MANY SPEED TRANS","MARADIN ANDREI","MARCU DRAGOS IANIS SRL","MARILU EXPRESS","MARIMAR BEST SPEDITION","MEGA ACTIV SRL","METAL TURAL","MITICA CORNELIU","ND CORNELIO","OGLEJA GROUP TRANS SRL","OMEGA MET CONSTRUCT","PATRIKI TRANS LOGISTIC SRL","PAVIS DENIS AUTO SRL","PRO AUTO COLLINI","RADU IULIAN","RALEX TRANZIT SRL","REMAT BUCURESTI SUD","REMAT ECO METAL SRL","RFC CLAUS INTER TRANS","RNC IDEAL LOGISTIC INT","RODI DOR SPEED SRL","ROMCARBON SA","ROMRECYCLING SRL","SANDEL","SD STEELMET SRL","SILPIN EUROTRANS","SKY DAA TRANS","SORGETI","STAICU TRANS","STEP ONE AGRO SRL","TD TYA CONCEPT TRANS","TEH 2001 SERVICE SRL","TRANS TIMIABI LEVI SRL","YASMI MAR LOGISTIC SRL","YULIAF TRANS","ZERO WASTE CONCEPT"];
+const TIC_MASINI = ["34GF2212","B06SUN","B113CKM","B131RRY","B150YRS","B158RSA","B16GPC B07GPC","B170RHO","B199DAR","B204EMC","B223RHO","B232MDI","B23RRY","B305ATU IL05DBJ","B305ATU IL30DBJ","B35ATU IL33DBJ","B35RRY","B580MST IF17HJH","B707MCI","B750MIT","B80LUY","B82DYR","B898EST DJ64EST","B900WIP","B90JTR","B90LUY","BZ04MCD","BZ05AST","BZ10JNN","BZ16LPP","BZ21UTE","BZ26SKY","BZ28SKY","BZ29AKM","BZ33TIA","BZ41MDI","BZ46MDI","BZ52MCD","BZ52RNC","BZ65CST","BZ75KAT","BZ76MAZ","CL02DCS CL24DCS","CL23BYA CL23SAF","CT88RFC","DB11ULB DB11UCN","DB17WEN DB20WEN","DB24BFN","DB89PST DB90PST","DJ21STH","DJ36EST","DJ56EST","DJ87EST","GR26PKV GR30PKV","GR88ECS","IF03JFJ","IF057673","IF06EMC","IF06TRE","IF11UYK","IF12VXT","IF15DSW","IF20KFT","IF31RAL","IF35WSD","IF39WSD","IF43EVE","IF44WTW B02WIA","IF49ECS","IF50LAF","IF55KFT","IF71EXA","IF81PDA","IF85PDA","IF88HLP","IF88KFT","IF90RRY","IF95WTW","IL04DBJ TR32MAS","IL41VAN","IL41VAN IL14VAN","IL41VAN IL18VAN","IL99BRV IL05DBJ","IL99BRV IL30DBJ","MH09TOX MH80TOX","MH24LTC","PH76MMR","PH93MRD","PH94TAS PH85TRS","SB17PMY CT19XKR","TL05FWU","TR32MAS IL04DBJ"];
+const TIC_CLIENTI = ["GREEN KRAFT SRL","AWR GREEN POINT SRL","BALAN VASILE","BALTAC CONSTANTIN","BURLACU PAVEL-ANDREI","CALIN GHEORGHE-BOGDAN","CAN PACK RECYCLING SRL","CASE CALDUROASE SRL","CIUCA SORIN-DANIEL","COSTEA DANIEL-MIHAI","COTAN CODRIN","DGASPC IALOMITA","DINU IORDAN","ECO METAL COLECT","ECOFRIEND RECYCLING","ECOSAL SERV DOBROESTI","ECOVOL ILFOV SA","EDIL MAR NORD EST SRL","EUROPE WASTE MANAGEMENT","EVEREST","FUTURE INSPIRED TRAINING SRL","GENERAL CONCRETE CERNAVODA SRL","GHEORGHE CRISTINA-MIRELA","GLINTA LUCIAN","GREEN CITY VOLUNTARI SA","GREEN KRAFT SRL / ENVIRON","GREENWEEE INTERNATIONAL SA","INCD-IBA BUCURESTI","LUCICA","MANOLACHE MARCEL","MARADIN ANDREI","MORARU DORIN-CLAUDIU","OMEGA MET CONSTRUCT","PAS SERVICE SRL","PAUZA DE DULCE SRL","PERCA RAZVAN-FLORIN","POP CONSTANTIN-LIVIU","PREMIUM STORE SRL","REMAT BUCURESTI","REMAT BUCURESTI SUD","REMAT ECO METAL SRL","RETURO SISTEM SA","ROCK STAR CONSTRUCT","ROMCARBON SA","ROMRECYCLING SRL","RUS ELECTRONIC RECYCLING","SANDU MARIAN","SD STEELMET SRL","SERVICE CICLOP SA","STANCIU MARIAN-ALEXANDRU","STOICA GEORGE-ALEXANDRU","STOOK CONCEPT SRL","TAURUS TEHNOLOGII MEDIU","TEH 2001 SERVICE SRL","TEHNO INVEST BALKAN","TEMPOS SERV","TEO TODICA","TOPORAN FLORIN","TOTAL PRO ACHIZITII SRL","VIRSARU MARIAN-AUREL","WASTE RECYCLING INVESTMENT SRL","WOWSTEP CONCEPT SRL","ZUHUR IMPORT SRL"];
 const LUNI = ["Ian","Feb","Mar","Apr","Mai","Iun","Iul","Aug","Sep","Oct","Nov","Dec"];
 const SERII = ["GK","GKR"];
 const CAT_PAROLE = ["Email","Bancă","Card","Platformă","WiFi","Altele"];
@@ -567,6 +572,9 @@ export default function App() {
   const [cantarLiveRows, setCantarLiveRows] = useState([]);
   const [, setLiveTick] = useState(0);
   const lastPushRef = useRef(0);
+  const [printQueue, setPrintQueue] = useState([]);
+  const [printServer, setPrintServer] = useState(() => localStorage.getItem("gk_print_server") === "1");
+  const printedJobsRef = useRef(new Set());
 
   const parseScaleLine = (line) => {
     if (!line || !line.trim()) return null;
@@ -729,6 +737,30 @@ export default function App() {
     }
     callback(r.value);
   };
+
+  // ── Print Bridge: trimitere tichet la imprimanta de la birou ──
+  const togglePrintServer = () => {
+    const nv = !printServer;
+    setPrintServer(nv);
+    localStorage.setItem("gk_print_server", nv ? "1" : "0");
+  };
+  const trimiteLaPrint = async (t) => {
+    const { error } = await sb.from("print_queue").insert({ tichet_id: t.id, status: "pending", requested_by: currentUser || "" });
+    if (error) { alert("Eroare la trimitere: " + error.message); return; }
+    alert(`🖨️ Tichetul TC #${t.nr_tichet} a fost trimis la imprimanta de la birou.`);
+  };
+  // Procesare coada: doar pe calculatorul marcat ca server de print
+  useEffect(() => {
+    if (!printServer) return;
+    const pending = printQueue.filter((j) => j.status === "pending" && (Date.now() - new Date(j.created_at).getTime()) < 10 * 60 * 1000);
+    pending.forEach(async (job, idx) => {
+      if (printedJobsRef.current.has(job.id)) return;
+      printedJobsRef.current.add(job.id);
+      const t = ticheteList.find((x) => x.id === job.tichet_id);
+      await sb.from("print_queue").update({ status: t ? "printed" : "error" }).eq("id", job.id);
+      if (t) setTimeout(() => printTichetSilent(t), idx * 4000); // 4s intre joburi multiple
+    });
+  }, [printQueue, printServer, ticheteList]);
   // ── Helper: confirmation dialog for deletes ──────────────
   const confirmDel = (what) => window.confirm(`⚠️ Sigur vrei să ștergi ${what}?\n\nAcțiunea NU poate fi anulată.`);
   // ── Helper: audit log ─────────────────────────────────────
@@ -945,6 +977,7 @@ export default function App() {
   useSupaTable("delegati", setDelegatiList);
   useSupaTable("tichete_cantar", setTicheteList);
   useSupaTable("cantar_live", setCantarLiveRows);
+  useSupaTable("print_queue", setPrintQueue);
 
   // Effective produse list: from DB if loaded, else fallback to hardcoded constant
   const produseList = produseLista.length > 0 ? produseLista : PRODUSE_LIST;
@@ -1246,7 +1279,7 @@ export default function App() {
     logAction("Editare", "Tichet cântar", "TC " + ticEdit.nr_tichet, "Factura/Aviz/Ore");
     setTicEdit(null);
   };
-  const printTichet = (t) => {
+  const buildTichetHTML = (t) => {
     const cuiClient = (t.client || "GREEN KRAFT SRL").toUpperCase().includes("GREEN KRAFT") ? "36191378" : "";
     const cuiTransp = (() => { const tr = (t.transportator || "").toUpperCase(); if (!tr) return ""; if (tr.includes("GREEN KRAFT")) return "36191378"; const fj = pjList.find(x => x.denumire?.toUpperCase() === tr); return fj?.cod_fiscal || ""; })();
     const R = (lbl, val, lbl2, val2) => `<tr>
@@ -1309,15 +1342,29 @@ export default function App() {
         <div style="display:flex;justify-content:flex-end;margin-top:1mm;font-size:9pt;">
           <div style="text-align:center;position:relative;width:62mm;height:34mm;">
             <div style="position:absolute;top:0;left:0;right:0;">Semnătura Operator,<br/><b>${t.operator || ""}</b></div>
-            <img src="${window.location.origin}/stampila.png" onerror="this.style.display='none'" style="position:absolute;top:5mm;left:4mm;transform:rotate(-5deg);width:28mm;" />
+            <img src="${window.location.origin}/stampila.png" onerror="this.style.display='none'" style="position:absolute;top:7mm;left:8mm;transform:rotate(-5deg);width:22mm;" />
             <img src="${window.location.origin}/semnatura-${(t.operator || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")}.png" onerror="this.style.display='none'" style="position:absolute;bottom:3mm;right:2mm;height:14mm;max-width:30mm;object-fit:contain;" />
             <div style="position:absolute;bottom:0;left:0;right:0;">__________________</div>
           </div>
         </div>
       </div>`;
+    return `<html><head><title>Tichet ${t.serie} ${t.nr_tichet}</title><style>html,body{margin:0;padding:0;} body{box-sizing:border-box;padding:4mm;max-width:150mm;} *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;} @page{size:A5 portrait;margin:5mm;} @media print{ body{page-break-after:avoid;} }</style></head><body>${html}<scr` + `ipt>window.onload=function(){setTimeout(function(){window.print();},300);};</scr` + `ipt></body></html>`;
+  };
+  const printTichet = (t) => {
     const w = window.open("", "_blank");
-    w.document.write(`<html><head><title>Tichet ${t.serie} ${t.nr_tichet}</title><style>html,body{margin:0;padding:0;} body{box-sizing:border-box;padding:3mm;} *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;} img{image-rendering:auto;} @page{size:A5 landscape;margin:4mm;} @media print{ html,body{height:138mm;overflow:hidden;} }</style></head><body>${html}</body></html>`);
-    w.document.close(); w.focus(); w.print();
+    w.document.write(buildTichetHTML(t));
+    w.document.close(); w.focus();
+  };
+  const printTichetSilent = (t) => {
+    // print prin iframe ascuns — functioneaza fara click (pt. coada de print de la birou)
+    const fr = document.createElement("iframe");
+    fr.style.position = "fixed"; fr.style.right = "-9999px"; fr.style.width = "1px"; fr.style.height = "1px";
+    document.body.appendChild(fr);
+    const doc = fr.contentWindow.document;
+    doc.open();
+    doc.write(buildTichetHTML(t).replace("window.print()", "parent.postMessage('gk-print-done','*'); window.print()"));
+    doc.close();
+    setTimeout(() => { try { document.body.removeChild(fr); } catch (e) {} }, 60000);
   };
 
   // ── PV (Proces Verbal) helpers ────────────────────────────
@@ -3667,9 +3714,10 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
           });
           const totNet = filtrate.reduce((s, t) => s + (parseFloat(t.net) || 0), 0);
           const partenerOpts = [...new Set([...pfList.map(f => f.denumire), ...pjList.map(f => f.denumire)].filter(Boolean))];
-          const transpOpts = [...new Set(["GREEN KRAFT SRL", ...partenerOpts, ...ticheteList.map(t => t.transportator)].filter(Boolean))];
-          const masiniOpts = [...new Set(ticheteList.map(t => t.nr_masina).filter(Boolean))].sort();
-          const soferiOpts = [...new Set([...delegatiList.map(d => d.nume), ...ticheteList.map(t => t.sofer)].filter(Boolean))].sort();
+          const transpOpts = [...new Set(["GREEN KRAFT SRL", ...TIC_TRANSPORTATORI, ...partenerOpts, ...ticheteList.map(t => t.transportator)].filter(Boolean))];
+          const masiniOpts = [...new Set([...TIC_MASINI, ...ticheteList.map(t => t.nr_masina)].filter(Boolean))].sort();
+          const soferiOpts = [...new Set([...TIC_DELEGATI, ...delegatiList.map(d => (d.nume || "").toUpperCase()), ...ticheteList.map(t => (t.sofer || "").toUpperCase())].filter(Boolean))].sort();
+          const clientOpts = [...new Set(["GREEN KRAFT SRL", ...TIC_CLIENTI, ...ticheteList.map(t => t.client)].filter(Boolean))];
           const FL = { fontSize: 11, fontWeight: 600, color: "#555", display: "block", marginBottom: 2 };
           const FI = { width: "100%", padding: "7px 9px", border: "1px solid #d5d5d5", borderRadius: 6, fontSize: 13, boxSizing: "border-box" };
           const ACB = { border: "1px solid #d5d5d5", borderRadius: 6, padding: "3px 4px", background: "#fff" };
@@ -3695,6 +3743,10 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                     <button onClick={connectScale} style={{ marginLeft: "auto", padding: "6px 16px", border: "none", borderRadius: 6, background: G, cursor: "pointer", fontSize: 12, color: "#fff", fontWeight: 700 }}>⚖️ Conectează cântarul</button>
                   </>
                 )}
+                <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: printServer ? "#1565c0" : "#999", fontWeight: 600, cursor: "pointer", borderLeft: "1px solid #e0e0e0", paddingLeft: 12 }} title="Activează DOAR pe calculatorul de la birou conectat la imprimantă. Tichetele trimise de pe telefon/alte calculatoare se vor printa aici.">
+                  <input type="checkbox" checked={printServer} onChange={togglePrintServer} style={{ accentColor: "#1565c0" }} />
+                  🖨️ Server print{printServer ? " ✓ activ" : ""}
+                </label>
               </div>
 
               <div style={{ display: "flex", gap: 6, marginBottom: 14, borderBottom: "2px solid #eee" }}>
@@ -3721,7 +3773,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                       </div>
                       <div style={{ marginBottom: 10 }}><label style={FL}>Furnizor (cine aduce marfa)</label><div style={ACB}><AC value={ticNou.partener} options={partenerOpts} placeholder="Caută PF sau PJ..." onChange={(v) => { const f = pjList.find(x => x.denumire === v) || pfList.find(x => x.denumire === v); setTicNou((p) => ({ ...p, partener: v, partener_cui: f?.cod_fiscal || "" })); }} /></div></div>
                       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-                        <div style={{ flex: 1 }}><label style={FL}>Client</label><input style={{ ...FI, color: G, fontWeight: 600 }} value={ticNou.client} onChange={(e) => setTicNou((p) => ({ ...p, client: e.target.value }))} /></div>
+                        <div style={{ flex: 1 }}><label style={FL}>Client</label><div style={ACB}><AC value={ticNou.client} options={clientOpts} placeholder="GREEN KRAFT SRL" onChange={(v) => setTicNou((p) => ({ ...p, client: v }))} /></div></div>
                         <div style={{ flex: 1 }}><label style={FL}>Transportator</label><div style={ACB}><AC value={ticNou.transportator} options={transpOpts} placeholder="noi / PF / PJ" onChange={(v) => setTicNou((p) => ({ ...p, transportator: v }))} /></div></div>
                       </div>
                       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
@@ -3827,7 +3879,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                             <td style={td({ textAlign: "right" })}>{fmt(t.tara)}</td>
                             <td style={td({ textAlign: "right", fontWeight: 700, background: "#fff8e1", color: "#e65100" })}>{fmt(t.net)}</td>
                             <td style={td({ textAlign: "center", fontSize: 10 })}>{t.operator || "—"}</td>
-                            <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => printTichet(t)} style={{ background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 4, cursor: "pointer", color: "#1565c0", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>🖨️</button></td>
+                            <td style={td({ textAlign: "center", padding: 2, whiteSpace: "nowrap" })}><button onClick={() => printTichet(t)} style={{ background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 4, cursor: "pointer", color: "#1565c0", fontSize: 11, fontWeight: 700, padding: "2px 8px" }} title="Printează aici">🖨️</button> <button onClick={() => trimiteLaPrint(t)} style={{ background: "#ede7f6", border: "1px solid #b39ddb", borderRadius: 4, cursor: "pointer", color: "#6a1b9a", fontSize: 11, fontWeight: 700, padding: "2px 6px" }} title="Trimite la imprimanta de la birou">📡🖨️</button></td>
                             <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => setTicEdit({ id: t.id, nr_tichet: t.nr_tichet, factura: t.factura || "", aviz: t.aviz || "", brut_la: t.brut_la || "", tara_la: t.tara_la || "", ora_intrare: t.ora_intrare || "", ora_iesire: t.ora_iesire || "" })} style={{ background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 4, cursor: "pointer", color: "#e65100", fontSize: 11, fontWeight: 700, padding: "2px 8px" }} title="Editează factura/aviz/ore">✏️</button></td>
                             <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => delTichet(t)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
                           </tr>
