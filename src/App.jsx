@@ -1172,7 +1172,8 @@ export default function App() {
   const timestampAcum = () => { const d = new Date(); return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`; };
   const getNextTichetNr = () => {
     const nrs = ticheteList.map((t) => parseInt(t.nr_tichet) || 0);
-    return String((nrs.length ? Math.max(...nrs) : 0) + 1);
+    const maxNr = nrs.length ? Math.max(...nrs) : 0;
+    return String(Math.max(maxNr, 3377) + 1); // numerotare continua de la 3378 (preluata din sKala)
   };
   const salveazaTichet1 = async () => {
     if (!ticNou.partener) { alert("Completați furnizorul (cine aduce marfa)!"); return; }
