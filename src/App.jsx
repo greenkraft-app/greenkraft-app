@@ -569,9 +569,10 @@ export default function App() {
   const [scaleError, setScaleError] = useState("");
   const scaleReaderRef = useRef(null);
   const scaleActiveRef = useRef(false);
+  const lastReadingRef = useRef(null);
   const [cantarLiveRows, setCantarLiveRows] = useState([]);
   const [, setLiveTick] = useState(0);
-  const lastPushRef = useRef(0);
+  const lastPushRef = useRef({ key: "", t: 0 });
   const [printQueue, setPrintQueue] = useState([]);
   const [printServer, setPrintServer] = useState(() => localStorage.getItem("gk_print_server") === "1");
   const printedJobsRef = useRef(new Set());
@@ -624,9 +625,15 @@ export default function App() {
           if (lines.length > 1) {
             for (let i = 0; i < lines.length - 1; i++) {
               const raw = lines[i].trim();
-              if (raw) setScaleRawLine(raw);
               const parsed = parseScaleLine(lines[i]);
-              if (parsed) setScaleReading(parsed);
+              // Actualizam state-ul DOAR cand valoarea/stabilitatea se schimba efectiv,
+              // altfel cantarul (care transmite continuu) redeseneaza aplicatia de mai
+              // multe ori pe secunda si blocheaza lucrul in celelalte sectiuni.
+              if (parsed && (!lastReadingRef.current || lastReadingRef.current.value !== parsed.value || lastReadingRef.current.stable !== parsed.stable || lastReadingRef.current.overload !== parsed.overload)) {
+                lastReadingRef.current = parsed;
+                if (raw) setScaleRawLine(raw);
+                setScaleReading(parsed);
+              }
             }
             buffer = lines[lines.length - 1];
           }
@@ -670,6 +677,7 @@ export default function App() {
     setScalePort(null);
     setScaleReading(null);
     setScaleRawLine("");
+    lastReadingRef.current = null;
     localStorage.removeItem("scaleAutoConnect");
     // Cleanup in background, don't await
     (async () => {
@@ -705,13 +713,22 @@ export default function App() {
   };
 
   // ── Cantar Live Bridge: PC-ul cu cantarul publica greutatea in Supabase ──
+  const scaleReadingRef = useRef(null);
+  scaleReadingRef.current = scaleReading;
   useEffect(() => {
-    if (!scalePort || !scaleReading) return;
-    const now = Date.now();
-    if (now - lastPushRef.current < 1200) return; // max ~1 update/sec
-    lastPushRef.current = now;
-    sb.from("cantar_live").upsert({ id: 1, value: scaleReading.value, stable: !!scaleReading.stable, updated_at: new Date().toISOString() }).then(() => {});
-  }, [scaleReading, scalePort]);
+    if (!scalePort) return;
+    const iv = setInterval(() => {
+      const r = scaleReadingRef.current;
+      if (!r) return;
+      const key = `${r.value}|${r.stable}`;
+      const now = Date.now();
+      // publicam la schimbare de valoare, dar minim o data la 10s (heartbeat ca sa ramana "fresh")
+      if (lastPushRef.current.key === key && now - lastPushRef.current.t < 10000) return;
+      lastPushRef.current = { key, t: now };
+      sb.from("cantar_live").upsert({ id: 1, value: r.value, stable: !!r.stable, updated_at: new Date().toISOString() }).then(() => {});
+    }, 1500);
+    return () => clearInterval(iv);
+  }, [scalePort]);
 
   // Tick pentru verificarea prospetimii (doar cand suntem in tab-ul cantar)
   useEffect(() => {
