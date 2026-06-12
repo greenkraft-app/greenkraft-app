@@ -1266,11 +1266,26 @@ export default function App() {
     logAction("Ștergere", "Tichet cântar", t.serie + " " + t.nr_tichet, `${t.partener}`);
   };
   const salveazaTicEdit = async () => {
-    const upd = { factura: ticEdit.factura || "", aviz: ticEdit.aviz || "", brut_la: ticEdit.brut_la || "", tara_la: ticEdit.tara_la || "", ora_intrare: ticEdit.ora_intrare || "", ora_iesire: ticEdit.ora_iesire || "" };
+    const brutV = parseFloat(ticEdit.brut);
+    const taraV = parseFloat(ticEdit.tara);
+    if (!ticEdit.partener) { alert("Furnizorul nu poate fi gol!"); return; }
+    if (!brutV || brutV <= 0) { alert("Brut trebuie să fie un număr pozitiv!"); return; }
+    if (!taraV || taraV <= 0) { alert("Tara trebuie să fie un număr pozitiv!"); return; }
+    if (brutV <= taraV) { alert(`Brut (${brutV} kg) trebuie să fie mai mare decât Tara (${taraV} kg)!`); return; }
+    const netV = Math.round((brutV - taraV) * 100) / 100;
+    const f = pjList.find(x => x.denumire === ticEdit.partener) || pfList.find(x => x.denumire === ticEdit.partener);
+    const upd = {
+      partener: ticEdit.partener, partener_cui: f?.cod_fiscal || "",
+      nr_masina: (ticEdit.nr_masina || "").toUpperCase(), sofer: ticEdit.sofer || "", material: ticEdit.material || "",
+      brut: brutV, tara: taraV, net: netV,
+      factura: ticEdit.factura || "", aviz: ticEdit.aviz || "",
+      brut_la: ticEdit.brut_la || "", tara_la: ticEdit.tara_la || "",
+      ora_intrare: ticEdit.ora_intrare || "", ora_iesire: ticEdit.ora_iesire || "",
+    };
     const { error } = await sb.from("tichete_cantar").update(upd).eq("id", ticEdit.id);
     if (error) { alert("Eroare: " + error.message); return; }
     setTicheteList((p) => p.map((x) => (x.id === ticEdit.id ? { ...x, ...upd } : x)));
-    logAction("Editare", "Tichet cântar", "TC " + ticEdit.nr_tichet, "Factura/Aviz/Ore");
+    logAction("Editare", "Tichet cântar", "TC " + ticEdit.nr_tichet, `NET recalculat: ${netV} kg`);
     setTicEdit(null);
   };
   const buildTichetHTML = (t) => {
@@ -2644,7 +2659,26 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
               <div style={{ fontWeight: 700, fontSize: 14 }}>✏️ Editare Tichet TC #{ticEdit.nr_tichet}</div>
               <button onClick={() => setTicEdit(null)} style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.4)", color: "#fff", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 16 }}>✕</button>
             </div>
-            <div style={{ padding: "14px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ padding: "14px 18px", display: "flex", flexDirection: "column", gap: 10, maxHeight: "70vh", overflowY: "auto" }}>
+              <div><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Furnizor</label><div style={{ border: "1px solid #ccc", borderRadius: 5, padding: "2px 4px" }}><AC value={ticEdit.partener} options={[...new Set([...pfList.map(f => f.denumire), ...pjList.map(f => f.denumire), ...TIC_TRANSPORTATORI].filter(Boolean))]} placeholder="Caută PF / PJ..." onChange={(v) => setTicEdit((p) => ({ ...p, partener: v }))} /></div></div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Mașină</label><input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, boxSizing: "border-box", textTransform: "uppercase" }} value={ticEdit.nr_masina} onChange={(e) => setTicEdit((p) => ({ ...p, nr_masina: e.target.value }))} /></div>
+                <div style={{ flex: 1.4 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Șofer</label><input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, boxSizing: "border-box" }} value={ticEdit.sofer} onChange={(e) => setTicEdit((p) => ({ ...p, sofer: e.target.value }))} /></div>
+              </div>
+              <div><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Material / Deșeu</label><div style={{ border: "1px solid #ccc", borderRadius: 5, padding: "2px 4px" }}><AC value={ticEdit.material} options={PRODUSE_DYN} placeholder="Selectează..." onChange={(v) => setTicEdit((p) => ({ ...p, material: v }))} /></div></div>
+              <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+                <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 700, color: G }}>Brut (kg)</label><input style={{ width: "100%", padding: "7px 8px", border: `1.5px solid ${G}`, borderRadius: 5, fontSize: 14, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="number" value={ticEdit.brut} onChange={(e) => setTicEdit((p) => ({ ...p, brut: e.target.value }))} /></div>
+                <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 700, color: "#e65100" }}>Tara (kg)</label><input style={{ width: "100%", padding: "7px 8px", border: "1.5px solid #ffa726", borderRadius: 5, fontSize: 14, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="number" value={ticEdit.tara} onChange={(e) => setTicEdit((p) => ({ ...p, tara: e.target.value }))} /></div>
+                <div style={{ flex: 1, textAlign: "center", background: "#eef7f0", border: `1.5px solid ${G}`, borderRadius: 5, padding: "5px 4px" }}>
+                  <div style={{ fontSize: 10, color: "#777" }}>NET (auto)</div>
+                  {(() => {
+                    const b = parseFloat(ticEdit.brut), tr = parseFloat(ticEdit.tara);
+                    if (!b || !tr) return <div style={{ fontSize: 14, fontWeight: 700, color: "#bbb" }}>—</div>;
+                    if (b <= tr) return <div style={{ fontSize: 11, fontWeight: 700, color: "#c62828" }}>Brut ≤ Tara!</div>;
+                    return <div style={{ fontSize: 15, fontWeight: 700, color: G, fontFamily: "monospace" }}>{fmt(Math.round((b - tr) * 100) / 100)}</div>;
+                  })()}
+                </div>
+              </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Factura</label><input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, boxSizing: "border-box" }} value={ticEdit.factura} onChange={(e) => setTicEdit((p) => ({ ...p, factura: e.target.value }))} /></div>
                 <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Aviz</label><input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, boxSizing: "border-box" }} value={ticEdit.aviz} onChange={(e) => setTicEdit((p) => ({ ...p, aviz: e.target.value }))} /></div>
@@ -3908,7 +3942,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                             <td style={td({ textAlign: "right", fontWeight: 700, background: "#fff8e1", color: "#e65100" })}>{fmt(t.net)}</td>
                             <td style={td({ textAlign: "center", fontSize: 10 })}>{t.operator || "—"}</td>
                             <td style={td({ textAlign: "center", padding: 2, whiteSpace: "nowrap" })}><button onClick={() => printTichet(t)} style={{ background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 4, cursor: "pointer", color: "#1565c0", fontSize: 11, fontWeight: 700, padding: "2px 8px" }} title="Printează aici">🖨️</button> <button onClick={() => trimiteLaPrint(t)} style={{ background: "#ede7f6", border: "1px solid #b39ddb", borderRadius: 4, cursor: "pointer", color: "#6a1b9a", fontSize: 11, fontWeight: 700, padding: "2px 6px" }} title="Trimite la imprimanta de la birou">📡🖨️</button></td>
-                            <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => setTicEdit({ id: t.id, nr_tichet: t.nr_tichet, factura: t.factura || "", aviz: t.aviz || "", brut_la: t.brut_la || "", tara_la: t.tara_la || "", ora_intrare: t.ora_intrare || "", ora_iesire: t.ora_iesire || "" })} style={{ background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 4, cursor: "pointer", color: "#e65100", fontSize: 11, fontWeight: 700, padding: "2px 8px" }} title="Editează factura/aviz/ore">✏️</button></td>
+                            <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => setTicEdit({ id: t.id, nr_tichet: t.nr_tichet, partener: t.partener || "", nr_masina: t.nr_masina || "", sofer: t.sofer || "", material: t.material || "", brut: t.brut != null ? String(t.brut) : "", tara: t.tara != null ? String(t.tara) : "", factura: t.factura || "", aviz: t.aviz || "", brut_la: t.brut_la || "", tara_la: t.tara_la || "", ora_intrare: t.ora_intrare || "", ora_iesire: t.ora_iesire || "" })} style={{ background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 4, cursor: "pointer", color: "#e65100", fontSize: 11, fontWeight: 700, padding: "2px 8px" }} title="Editează tichetul">✏️</button></td>
                             <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => delTichet(t)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
                           </tr>
                         ))}
