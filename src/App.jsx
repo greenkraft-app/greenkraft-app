@@ -319,6 +319,22 @@ function AC({ value, onChange, options, placeholder = "" }) {
       setPos({ top: r.bottom + 2, left: r.left, width: Math.max(220, r.width) });
     }
   };
+  // Recalculeaza pozitia cat timp lista e deschisa — altfel, la scroll (sau la scroll-ul automat
+  // pe care unele telefoane/browsere il fac la focus pe input), caseta ramane "lipita" de pozitia
+  // veche si pare ca "fuge" de langa camp.
+  useEffect(() => {
+    if (!open) return;
+    updatePos();
+    const onMove = () => updatePos();
+    window.addEventListener("scroll", onMove, true);
+    window.addEventListener("resize", onMove);
+    const t = setTimeout(updatePos, 300); // prinde si scroll-ul intarziat (ex: aparitia tastaturii pe mobil)
+    return () => {
+      window.removeEventListener("scroll", onMove, true);
+      window.removeEventListener("resize", onMove);
+      clearTimeout(t);
+    };
+  }, [open]);
   const filtered = options.filter((o) => o.toLowerCase().includes((q || "").toLowerCase()));
   return (
     <div style={{ position: "relative" }}>
