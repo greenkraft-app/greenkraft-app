@@ -3576,11 +3576,11 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   <col style={{ width: 28 }} />
                   <col style={{ width: 122 }} />
                   <col style={{ width: 85 }} />
-                  <col style={{ width: 95 }} />
+                  <col style={{ width: 160 }} />
                   <col style={{ width: 62 }} />
                   <col style={{ width: 78 }} />
                   <col style={{ width: 80 }} />
-                  <col />
+                  <col style={{ width: 330 }} />
                   <col style={{ width: 98 }} />
                   <col style={{ width: 65 }} />
                   <col style={{ width: 78 }} />
