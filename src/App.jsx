@@ -198,7 +198,6 @@ const TIC_CLIENTI = ["GREEN KRAFT SRL","AWR GREEN POINT SRL","BALAN VASILE","BAL
 // ── Categorii deseuri Anexa 3 (formular incarcare-descarcare HG 1061/2008) ──
 const ANEXA3_CATEGORII = ["ACUMULATORI  - COD 16 06 01","ALTE BATERII - COD 16 06 05","ALUMINIU - COD 15 01 04","ALUMINIU - COD 16 02 16","ALUMINIU - COD 17 04 02","ALUMINIU DIN CABLURI - COD 17 04 02","BETON - COD 19 12 09","CARTON - COD 15 01 01","CARTUSE, TONERE - COD: 08 03 18","CAUCIUC - COD: 16 02 16","CAUCIUC DIN DEEE-COD: 19 12 04","COMPONENTE ELECTRONICE - COD 16 02 16","CONDENSATORI - COD 16 02 15*","CUPRU - COD 16 02 16","CUPRU - COD 17 04 01","CUPRU DIN CABLURI - COD 17 04 01","DEEE - COD 16 02 14","DESEU PLASTIC AMESTEC DIN CABLU","DESEURI DIN CONSTRUCTII","EUROPALETI","FIER - COD 16 01 17","FIER - COD 16 02 16","FIER - COD 17 04 05","FIER DIN DEEE - COD 16 02 16","FIER DIN DEEE - COD 19 12 02","FOLIE COLOR - COD 15 01 02","FOLIE TRANSPARENTA - COD 15 01 02","HARTIE - COD 20 01 01","HDD/SSD - COD: 16 02 16","HDPE - COD 15 01 02","IMPURITATI FARA COMPUSI PERICULOSI - COD 19 12 12","INOX - COD 17 04 05","INOX - COD: 16 02 16","LEMN - COD 15 01 03","LEMN DIN DEEE-COD: 19 12 07","MATERIAL ABSORBANT - COD: 19 12 04","MATERIAL IZOLANT DIN DEEE-COD: 19 12 04","MATERIALE PLASTICE - COD 16 01 19","MOTOARE/TRANSFORMATOARE - COD: 16 02 16","Marfuri neconforme 20 01 99","Metale 20 01 40","PET - COD 15 01 02","PLACI CU CIRCUITE IMPRIMATE - COD 16 02 16","PLASTIC (AFARA DE PET)- COD 15 01 02","PLASTIC DIN DEEE-COD: 19 12 04","PLASTIC NESORTAT - COD 16 02 16","POMPE DRC 80-400","POMPE MV 253","POMPE NC 200","SPUMA POLIURITERMICA DIN DEEE-COD: 19 12 04","SPUMA POLIUTERMICA - COD: 16 02 16","STICLA - COD 15 01 07","STICLA - COD 16 02 16","SURSE ALIMENTARE - COD 16 02 16","ULEI SI GRASIMI COMESTIBILE - COD 20 01 25","VATA DE STICLA DIN DEEE-COD: 19 12 12","VENTILATOARE - COD: 16 02 16"];
 const ANEXA3_SERII = ["GK", "GKF", "KFT"];
-const ANEXA3_DESTINATII = ["Colectare", "Stocare temporara", "Tratare", "Valorificare", "Eliminare"];
 const LUNI = ["Ian","Feb","Mar","Apr","Mai","Iun","Iul","Aug","Sep","Oct","Nov","Dec"];
 const SERII = ["GK","GKR"];
 const CAT_PAROLE = ["Email","Bancă","Card","Platformă","WiFi","Altele"];
@@ -845,6 +844,7 @@ export default function App() {
     { material: "Cupru", pa: 35, pv: 40 }, { material: "Baterii", pa: 2.3, pv: 2.8 }, { material: "Deee", pa: 1.1, pv: 1.6 },
   ].map((r) => calcRow(r, 86100)));
   const [datFilter, setDatFilter] = useState("");
+  const [datAchitat, setDatAchitat] = useState("");
   const [avTip, setAvTip] = useState("toate");
   const [avPers, setAvPers] = useState("");
   const [expandedAv, setExpandedAv] = useState(null); // id of expanded avans row
@@ -1588,44 +1588,78 @@ export default function App() {
     setA3Modal(null);
   };
   const printA3 = (a3) => {
-    const R = (lbl, val) => "<div style=\"margin:0.5mm 0;font-size:8pt;\"><b>" + lbl + ":</b> " + (val || "—") + "</div>";
-    const destBoxes = ANEXA3_DESTINATII.map((d) => "<div style=\"font-size:8pt;\">" + (d === a3.descriere_destinatie ? "\u2611" : "\u2610") + " " + d + "</div>").join("");
+    const kgTxt = a3.kilograme != null ? fmt(a3.kilograme) + " Kg" : "* se cantareste la destinatie";
+    const destRows = DESTINATII.map((d) =>
+      "<div style=\"font-size:10px;\">" + d + " " + (a3.descriere_destinatie === d ? "\u25cf" : "\u25cb") + "</div>"
+    ).join("");
     const html =
-      "<div style=\"font-family:Arial,sans-serif;font-size:9pt;color:#111;\">" +
-        "<div style=\"display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1d6f42;padding-bottom:2mm;margin-bottom:2mm;\">" +
-          "<div><div style=\"font-size:11pt;font-weight:bold;\">ANEXA Nr. 3</div><div style=\"font-size:9pt;\">Formular de incarcare - descarcare deseuri nepericuloase</div></div>" +
-          "<div style=\"text-align:right;\"><div style=\"font-size:11pt;font-weight:bold;\">Seria " + a3.serie + " Nr. " + a3.numar + "</div></div>" +
-        "</div>" +
-        "<table style=\"width:100%;border-collapse:collapse;font-size:9pt;margin-bottom:2mm;\"><tr>" +
-          "<td style=\"width:50%;vertical-align:top;padding:2mm;border:1px solid #bbb;background:#f7f7f7;\"><b>TRANSPORTATOR</b><br/>" +
-            R("Denumire", a3.transportator) + R("CUI", a3.transportator_cui) + R("Delegat", a3.delegat_nume) + R("CI Delegat", a3.delegat_ci) + R("Auto", a3.delegat_auto) + R("Licenta", a3.licenta) + R("Licenta expira", a3.licenta_expira) +
-          "</td>" +
-          "<td style=\"width:50%;vertical-align:top;padding:2mm;border:1px solid #bbb;\"><b>DESCRIERE DESTINATIE</b><br/>" + destBoxes +
-            (a3.obs ? "<div style=\"margin-top:2mm;font-size:8pt;\"><b>Obs:</b> " + a3.obs + "</div>" : "") +
-          "</td>" +
-        "</tr></table>" +
-        "<table style=\"width:100%;border-collapse:collapse;font-size:9pt;\">" +
-          "<tr style=\"background:#1d6f42;color:#fff;text-align:center;font-weight:bold;\"><td style=\"padding:1.5mm;border:1px solid #1d6f42;width:50%;\">INCARCARE</td><td style=\"padding:1.5mm;border:1px solid #1d6f42;width:50%;\">DESCARCARE</td></tr>" +
-          "<tr>" +
-            "<td style=\"vertical-align:top;padding:2mm;border:1px solid #bbb;\">" +
-              R("Data", a3.data_incarcare) + R("Categorie deseu", a3.categorie) + R("Kilograme", a3.kilograme != null ? fmt(a3.kilograme) + " kg" : "* se cantareste la destinatie") +
-              "<div style=\"margin-top:2mm;\"><b>Date identificare Expeditor</b></div>" +
-              R("Denumire", a3.expeditor) + R("CUI", a3.expeditor_cui) + R("Adresa", a3.expeditor_adresa) + R("Aut. mediu", a3.expeditor_aut_mediu) + R("Revizuita", a3.expeditor_aut_revizuita) + R("Expira", a3.expeditor_aut_expira) +
-            "</td>" +
-            "<td style=\"vertical-align:top;padding:2mm;border:1px solid #bbb;\">" +
-              R("Data", a3.data_descarcare) + R("Categorie deseu", a3.categorie) + R("Kilograme", a3.kilograme != null ? fmt(a3.kilograme) + " kg" : "* se cantareste la destinatie") +
-              "<div style=\"margin-top:2mm;\"><b>Date identificare Destinatar</b></div>" +
-              R("Denumire", a3.destinatar) + R("CUI", a3.destinatar_cui) + R("Adresa", a3.destinatar_adresa) + R("Aut. mediu", a3.destinatar_aut_mediu) + R("Revizuita", a3.destinatar_aut_revizuita) + R("Expira", a3.destinatar_aut_expira) +
-            "</td>" +
-          "</tr>" +
-        "</table>" +
-        "<div style=\"display:flex;justify-content:space-between;margin-top:6mm;font-size:9pt;\">" +
-          "<div style=\"text-align:center;width:45%;\">Semnatura si stampila<br/>(Expeditor / Transportator),<br/><br/>__________________</div>" +
-          "<div style=\"text-align:center;width:45%;\">Semnatura si stampila<br/>(Destinatar),<br/><br/>__________________</div>" +
+      "<div style=\"font-family:'Times New Roman',serif;font-size:11px;color:#000;background:#fff;\">" +
+        "<div style=\"padding:30px 40px;max-width:800px;margin:0 auto;\">" +
+          "<div style=\"text-align:center;margin-bottom:6px;\">Anexa 3 - Nr. " + a3.numar + " din data de " + a3.data_incarcare + "</div>" +
+          "<div style=\"text-align:center;margin-bottom:14px;\">Formular de incarcare " + "\u2013" + " descarcare deseuri nepericuloase</div>" +
+          "<table style=\"width:100%;border-collapse:collapse;border:1px solid #000;font-size:10px;\">" +
+            "<thead><tr style=\"background:#fff;\">" +
+              "<th style=\"border:1px solid #000;padding:5px;width:22%;\">Date de identificare transportator</th>" +
+              "<th style=\"border:1px solid #000;padding:5px;width:12%;\">Data</th>" +
+              "<th style=\"border:1px solid #000;padding:5px;width:22%;\">Caracteristici deseuri</th>" +
+              "<th style=\"border:1px solid #000;padding:5px;width:12%;\">Cantitate</th>" +
+              "<th style=\"border:1px solid #000;padding:5px;width:32%;\">Date privind punctul de lucru*) unde se efectueaza:</th>" +
+            "</tr></thead>" +
+            "<tbody><tr>" +
+              "<td style=\"border:1px solid #000;padding:8px;vertical-align:top;line-height:1.6;\">" +
+                "<div><u>Date identificare:</u></div>" +
+                "<div><strong>" + (a3.transportator || "") + "</strong></div>" +
+                "<div style=\"margin-top:8px;\"><u>Delegat:</u></div>" +
+                "<div><strong>" + (a3.delegat_nume || "") + "</strong></div>" +
+                "<div style=\"margin-top:12px;\">Nr. de inmatriculare</div>" +
+                "<div><u>mijloc de transport:</u></div>" +
+                "<div><strong>" + (a3.delegat_auto || "") + "</strong></div>" +
+                "<div style=\"margin-top:12px;\">Numar licenta de transport</div>" +
+                "<div><u>marfuri nepericuloase:</u></div>" +
+                "<div>" + (a3.licenta || "nu e cazul") + "</div>" +
+                "<div style=\"margin-top:8px;font-size:9px;\">Data expirare licenta transport <u>marfuri nepericuloase:</u></div>" +
+                "<div>" + (a3.licenta_expira || "") + "</div>" +
+                "<div style=\"margin-top:24px;\">Semnatura si stampila</div>" +
+              "</td>" +
+              "<td style=\"border:1px solid #000;padding:8px;vertical-align:top;\">" +
+                "<div><u>Incarcare:</u></div>" +
+                "<div><strong>" + (a3.data_incarcare || "") + "</strong></div>" +
+                "<div style=\"margin-top:50px;\"><u>Descarcare:</u></div>" +
+                "<div><strong>" + (a3.data_descarcare || "") + "</strong></div>" +
+              "</td>" +
+              "<td style=\"border:1px solid #000;padding:8px;vertical-align:top;line-height:1.4;\">" +
+                "<div style=\"min-height:36px;margin-bottom:6px;\"><div>" + (a3.categorie || "") + "</div></div>" +
+                "<div style=\"margin-top:30px;text-align:center;font-weight:bold;\"><u>Descriere destinatie:</u></div>" +
+                destRows +
+              "</td>" +
+              "<td style=\"border:1px solid #000;padding:8px;vertical-align:top;line-height:1.4;font-weight:bold;\">" +
+                "<div style=\"min-height:36px;margin-bottom:6px;\">" + kgTxt + "</div>" +
+              "</td>" +
+              "<td style=\"border:1px solid #000;padding:8px;vertical-align:top;line-height:1.6;\">" +
+                "<div style=\"text-align:center;font-weight:bold;\"><u>INCARCAREA</u></div>" +
+                "<div style=\"margin-top:4px;\"><u>Date de identificare expeditor:</u></div>" +
+                "<div style=\"font-weight:bold;font-style:italic;\">" + (a3.expeditor || "").toUpperCase() + "</div>" +
+                "<div>" + (a3.expeditor_adresa || "") + "</div>" +
+                "<div style=\"margin-top:8px;\"><u>Autorizatie de mediu nr:</u></div>" +
+                "<div>" + (a3.expeditor_aut_mediu || "") + "</div>" +
+                "<div><u>Data expirare Autorizatie Mediu:</u></div>" +
+                "<div>" + (a3.expeditor_aut_expira || "") + "</div>" +
+                "<div style=\"text-align:center;margin-top:8px;\">Semnatura si stampila</div>" +
+                "<div style=\"text-align:center;margin-top:30px;font-weight:bold;\"><u>DESCARCAREA</u></div>" +
+                "<div><u>Date identificare destinatar:</u></div>" +
+                "<div style=\"font-weight:bold;font-style:italic;\">" + (a3.destinatar || "").toUpperCase() + "</div>" +
+                "<div><u>Autorizatie de mediu numar:</u></div>" +
+                "<div style=\"margin-top:8px;font-weight:bold;text-align:center;\">" + (a3.destinatar_aut_mediu || "") + "</div>" +
+                "<div style=\"margin-top:8px;font-size:9px;\">Data expirare Autorizatie de Mediu:</div>" +
+                "<div style=\"font-weight:bold;text-align:center;\">" + (a3.destinatar_aut_expira || "") + "</div>" +
+                "<div style=\"text-align:center;margin-top:18px;\">Semnatura si stampila</div>" +
+              "</td>" +
+            "</tr></tbody>" +
+          "</table>" +
         "</div>" +
       "</div>";
     const w = window.open("", "_blank");
-    w.document.write("<html><head><title>Anexa 3 " + a3.serie + " " + a3.numar + "</title><style>html,body{margin:0;padding:0;} body{padding:6mm;box-sizing:border-box;} *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;} @page{size:A4 portrait;margin:8mm;}</style></head><body>" + html + "<scr" + "ipt>window.onload=function(){setTimeout(function(){window.print();},300);};</scr" + "ipt></body></html>");
+    w.document.write("<html><head><title>Anexa 3 " + a3.serie + " " + a3.numar + "</title><style>body{margin:0;} @page{size:A4 portrait;margin:10mm;}</style></head><body>" + html + "<scr" + "ipt>window.onload=function(){setTimeout(function(){window.print();},300);};</scr" + "ipt></body></html>");
     w.document.close(); w.focus();
   };
 
@@ -2506,9 +2540,11 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
 
   // Datorii computed
   const numeUnici = [...new Set(datRows.map((r) => r.nume))];
-  const filtDat = sortByDateAsc(datRows.filter((r) => !datFilter || r.nume === datFilter));
+  const filtDat = sortByDateAsc(datRows.filter((r) => (!datFilter || r.nume === datFilter) && (!datAchitat || r.ach === datAchitat)));
   const totDat = filtDat.reduce((s, r) => s + (parseSuma(r.suma) || 0), 0);
   const totDatAll = datRows.reduce((s, r) => s + (parseSuma(r.suma) || 0), 0);
+  const totDatNeachitat = datRows.filter((r) => r.ach !== "Da").reduce((s, r) => s + (parseSuma(r.suma) || 0), 0);
+  const totDatAchitat = datRows.filter((r) => r.ach === "Da").reduce((s, r) => s + (parseSuma(r.suma) || 0), 0);
 
   // Avansuri computed
   const filtAv = sortByDateAsc(avRows.filter((r) => (avTip === "toate" || r.tip === avTip) && (!avPers || r.catre === avPers)));
@@ -2535,7 +2571,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
   // ── Dynamic option lists (predefined + values used) ────────
   const agentOptions = [...new Set([...AGENTI, ...colRows.map(r => r.agent).filter(Boolean)])].sort();
   const furnOptions = [...new Set(colRows.map(r => r.furn).filter(Boolean))].sort();
-  const achitatOptions = [...new Set([...ACHITAT_DE_OPT, ...colRows.map(r => r.ach_de).filter(Boolean), ...chRows.map(r => r.ach_de).filter(Boolean)])].sort();
+  const achitatOptions = [...new Set([...ACHITAT_DE_OPT, ...colRows.map(r => r.ach_de).filter(Boolean), ...chRows.map(r => r.ach_de).filter(Boolean), ...datRows.map(r => r.ach_de).filter(Boolean)])].sort();
   const clientOptions = [...new Set([...CLIENTI, ...livRows.map(r => r.client).filter(Boolean)])].sort();
 
   // ── Render helpers ────────────────────────────────────────
@@ -3706,7 +3742,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                             <div style={{ flex: 1 }}>
                               <label style={FL}>Descriere destinație</label>
                               <select style={FI} value={a3Nou.descriere_destinatie} onChange={(e) => setA3Nou((p) => ({ ...p, descriere_destinatie: e.target.value }))}>
-                                {ANEXA3_DESTINATII.map((d) => <option key={d} value={d}>{d}</option>)}
+                                {DESTINATII.map((d) => <option key={d} value={d}>{d}</option>)}
                               </select>
                             </div>
                             <div style={{ flex: 1 }}><label style={FL}>Observații</label><input style={FI} value={a3Nou.obs} onChange={(e) => setA3Nou((p) => ({ ...p, obs: e.target.value }))} placeholder="opțional" /></div>
@@ -4471,19 +4507,26 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
           <div>
             <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
               <SC label="Total Datorii" value={fmt(totDatAll) + " lei"} c="#c62828" bg="#ffebee" />
+              <SC label="⏳ Neachitat" value={fmt(totDatNeachitat) + " lei"} c="#c62828" bg="#ffebee" />
+              <SC label="✅ Achitat" value={fmt(totDatAchitat) + " lei"} c={G} bg="#e8f5e9" />
               {numeUnici.map((n) => { const tot = datRows.filter((r) => r.nume === n).reduce((s, r) => s + (parseSuma(r.suma) || 0), 0); return <SC key={n} label={n} value={fmt(tot) + " lei"} c="#e65100" bg="#fff3e0" />; })}
               <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+                <select value={datAchitat} onChange={(e) => setDatAchitat(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 6, padding: "5px 10px", fontSize: 12 }}>
+                  <option value="">💰 Toate</option>
+                  <option value="Da">✅ Achitate</option>
+                  <option value="Nu">⏳ Neachitate</option>
+                </select>
                 <select value={datFilter} onChange={(e) => setDatFilter(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 6, padding: "5px 10px", fontSize: 12, minWidth: 110 }}><option value="">Toți</option>{numeUnici.map((n) => <option key={n} value={n}>{n}</option>)}</select>
-                {datFilter && <button onClick={() => setDatFilter("")} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 16 }}>✕</button>}
+                {(datFilter || datAchitat) && <button onClick={() => { setDatFilter(""); setDatAchitat(""); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 16 }}>✕</button>}
                 <button onClick={addDAT} style={{ padding: "6px 14px", background: "#c62828", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Adaugă</button>
               </div>
             </div>
             <div style={{ overflowX: "auto" }}>
-              <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 480 }}>
-                <colgroup><col style={{ width: 28 }} /><col style={{ width: 130 }} /><col style={{ width: 130 }} /><col style={{ width: 100 }} /><col /><col style={{ width: 30 }} /></colgroup>
-                <thead><tr style={{ background: "#c62828" }}><th style={th({ background: "#b71c1c" })}></th><th style={th({ background: "#c62828", textAlign: "center" })}>Data</th><th style={th({ background: "#c62828", textAlign: "center" })}>Nume</th><th style={th({ background: "#c62828", textAlign: "center" })}>Total (lei)</th><th style={th({ background: "#c62828", textAlign: "center" })}>Detalii</th><th style={th({ background: "#c62828" })}></th></tr></thead>
-                <tbody>{filtDat.map((r, i) => { const oi = datRows.indexOf(r); const rowBg = i % 2 === 0 ? "#fff" : "#fff5f5"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 2}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updDAT(oi, "data", v)} /></td><td style={td({ background: "#fff8e1", fontWeight: 600 })}><input title={r.nume || undefined} style={inp({ textAlign: "center", fontWeight: 600 })} value={r.nume || ""} onChange={(e) => updDAT(oi, "nume", e.target.value)} placeholder="Nume..." /></td><td style={td({ background: "#ffebee", textAlign: "right", fontWeight: 700, color: "#c62828" })}><input style={inp({ textAlign: "right", fontWeight: 700, color: "#c62828" })} value={r.suma || ""} onChange={(e) => updDAT(oi, "suma", e.target.value)} placeholder="0" /></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.det}><input title={r.det || undefined} style={inp({ textAlign: "center" })} value={r.det || ""} onChange={(e) => updDAT(oi, "det", e.target.value)} placeholder="Descriere..." /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delDAT(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 14 }}>✕</button></td></tr>); })}</tbody>
-                <tfoot><tr style={{ background: "#c62828", color: "#fff" }}><td colSpan={3} style={{ padding: "7px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL {datFilter ? "— " + datFilter : ""}</td><td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700, fontSize: 13 }}>{fmt(totDat)} lei</td><td colSpan={2}></td></tr></tfoot>
+              <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 680 }}>
+                <colgroup><col style={{ width: 28 }} /><col style={{ width: 110 }} /><col style={{ width: 120 }} /><col style={{ width: 95 }} /><col /><col style={{ width: 75 }} /><col style={{ width: 100 }} /><col style={{ width: 105 }} /><col style={{ width: 30 }} /></colgroup>
+                <thead><tr style={{ background: "#c62828" }}><th style={th({ background: "#b71c1c" })}></th><th style={th({ background: "#c62828", textAlign: "center" })}>Data</th><th style={th({ background: "#c62828", textAlign: "center" })}>Nume</th><th style={th({ background: "#c62828", textAlign: "center" })}>Total (lei)</th><th style={th({ background: "#c62828", textAlign: "center" })}>Detalii</th><th style={th({ background: "#c62828", textAlign: "center" })}>Achitat</th><th style={th({ background: "#c62828", textAlign: "center" })}>Achitat De</th><th style={th({ background: "#c62828", textAlign: "center" })}>Data Achitării</th><th style={th({ background: "#c62828" })}></th></tr></thead>
+                <tbody>{filtDat.map((r, i) => { const oi = datRows.indexOf(r); const isPaid = r.ach === "Da"; const rowBg = isPaid ? (i % 2 === 0 ? "#f4faf5" : "#eaf6ec") : (i % 2 === 0 ? "#fff" : "#fff5f5"); const achBg = r.ach === "Da" ? "#e8f5e9" : r.ach === "Nu" ? "#ffebee" : "#fff"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 2}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updDAT(oi, "data", v)} /></td><td style={td({ background: isPaid ? rowBg : "#fff8e1", fontWeight: 600, textDecoration: isPaid ? "line-through" : "none", color: isPaid ? "#888" : "#222" })}><input title={r.nume || undefined} style={inp({ textAlign: "center", fontWeight: 600 })} value={r.nume || ""} onChange={(e) => updDAT(oi, "nume", e.target.value)} placeholder="Nume..." /></td><td style={td({ background: isPaid ? rowBg : "#ffebee", textAlign: "right", fontWeight: 700, color: isPaid ? "#888" : "#c62828", textDecoration: isPaid ? "line-through" : "none" })}><input style={inpNum({ textAlign: "right", fontWeight: 700, color: isPaid ? "#888" : "#c62828" })} value={r.suma || ""} onChange={(e) => updDAT(oi, "suma", e.target.value)} placeholder="0" /></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.det}><input title={r.det || undefined} style={inp({ textAlign: "center" })} value={r.det || ""} onChange={(e) => updDAT(oi, "det", e.target.value)} placeholder="Descriere..." /></td><td style={td({ background: achBg })}><select style={sel({ color: r.ach === "Da" ? G : r.ach === "Nu" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.ach || ""} onChange={(e) => { updDAT(oi, "ach", e.target.value); if (e.target.value === "Da" && !r.data_achitare) updDAT(oi, "data_achitare", today()); }}><option value=""></option><option>Da</option><option>Nu</option></select></td><td style={td({ background: r.ach_de ? "#e8f5e9" : "#fff" })}><AC value={r.ach_de || ""} options={achitatOptions} onChange={(v) => updDAT(oi, "ach_de", v)} placeholder="—" /></td><td style={td({ background: rowBg, textAlign: "center" })}><DateInput value={r.data_achitare || ""} onChange={(v) => updDAT(oi, "data_achitare", v)} /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delDAT(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 14 }}>✕</button></td></tr>); })}</tbody>
+                <tfoot><tr style={{ background: "#c62828", color: "#fff" }}><td colSpan={3} style={{ padding: "7px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL {datFilter ? "— " + datFilter : ""}{datAchitat ? " — " + (datAchitat === "Da" ? "Achitate" : "Neachitate") : ""}</td><td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700, fontSize: 13 }}>{fmt(totDat)} lei</td><td colSpan={5}></td></tr></tfoot>
               </table>
             </div>
           </div>
