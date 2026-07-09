@@ -319,21 +319,16 @@ function AC({ value, onChange, options, placeholder = "" }) {
       setPos({ top: r.bottom + 2, left: r.left, width: Math.max(220, r.width) });
     }
   };
-  // Recalculeaza pozitia cat timp lista e deschisa — altfel, la scroll (sau la scroll-ul automat
-  // pe care unele telefoane/browsere il fac la focus pe input), caseta ramane "lipita" de pozitia
-  // veche si pare ca "fuge" de langa camp.
+  // Recalculeaza pozitia in continuu (la fiecare cadru), cat timp lista e deschisa.
+  // Ascultarea doar la evenimente scroll/resize nu e suficienta: pe telefon, tastatura
+  // virtuala si re-asezarea paginii nu declanseaza mereu aceste evenimente, iar caseta
+  // ramane "in urma" fata de camp. requestAnimationFrame prinde orice cauza de miscare.
   useEffect(() => {
     if (!open) return;
-    updatePos();
-    const onMove = () => updatePos();
-    window.addEventListener("scroll", onMove, true);
-    window.addEventListener("resize", onMove);
-    const t = setTimeout(updatePos, 300); // prinde si scroll-ul intarziat (ex: aparitia tastaturii pe mobil)
-    return () => {
-      window.removeEventListener("scroll", onMove, true);
-      window.removeEventListener("resize", onMove);
-      clearTimeout(t);
-    };
+    let raf;
+    const loop = () => { updatePos(); raf = requestAnimationFrame(loop); };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
   }, [open]);
   const filtered = options.filter((o) => o.toLowerCase().includes((q || "").toLowerCase()));
   return (
