@@ -1013,7 +1013,7 @@ export default function App() {
   const updCOL = mkUpd(colRows, setColRows, "colectari");
   const delCOL = mkDel(setColRows, "colectari", "această colectare");
   const addCOL = async () => {
-    const row = { data: today(), agent: "", furn: "", cat: "Curte", produs: "", cant: 0, pret: 0, ach: "", ach_de: "" };
+    const row = { data: today(), agent: "", furn: "", serie: "", nr_doc: "", cat: "Curte", produs: "", cant: 0, pret: 0, ach: "", ach_de: "" };
     const { data } = await sb.from("colectari").insert(row).select();
     if (data) setColRows((p) => [...p, data[0]]);
   };
@@ -1576,6 +1576,18 @@ export default function App() {
     });
   });
 
+  const buildColRows = () => colRows.filter(r => r.serie && r.nr_doc && inRange(r.data)).map(r => {
+    const cant = parseFloat(r.cant) || 0;
+    const pu = parseFloat(r.pret) || 0;
+    const v = cant * pu;
+    const imp = Math.round(v * 0.1);
+    const tax = Math.round(v * 0.02);
+    const fd = produseList.find(p => p.den === r.produs);
+    const codSaga = fd?.cod_art || "";
+    const denSaga = fd?.den || r.produs || "";
+    return [r.serie || "", r.nr_doc || "", r.data || "", r.furn || "", "", "", denSaga, codSaga, cant, pu, "", "", "", r.produs || "", imp, tax, v];
+  });
+
   const loadXLSX = async () => {
     if (window.XLSX) return window.XLSX;
     await new Promise((res) => {
@@ -1606,6 +1618,13 @@ export default function App() {
         ws["!cols"] = RAP_HEADERS.map(h => ({ wch: Math.max(12, h.length + 2) }));
         XLSX.utils.book_append_sheet(wb, ws, "Registru PJ");
         if (type === "pj") fileName = `raport_PJ_${today().replace(/\./g, "-")}.xlsx`;
+      }
+      if (type === "col" || type === "all") {
+        const rows = buildColRows();
+        const ws = XLSX.utils.aoa_to_sheet([RAP_HEADERS, ...rows]);
+        ws["!cols"] = RAP_HEADERS.map(h => ({ wch: Math.max(12, h.length + 2) }));
+        XLSX.utils.book_append_sheet(wb, ws, "Colectări");
+        if (type === "col") fileName = `raport_Colectari_${today().replace(/\./g, "-")}.xlsx`;
       }
       if (type === "all") fileName = `raport_complet_${today().replace(/\./g, "-")}.xlsx`;
       XLSX.writeFile(wb, fileName);
@@ -1681,6 +1700,8 @@ export default function App() {
         { excel: "Data", field: "data" },
         { excel: "Agent", field: "agent" },
         { excel: "Furnizor", field: "furn" },
+        { excel: "Serie", field: "serie" },
+        { excel: "Nr. Document", field: "nr_doc" },
         { excel: "Categorie", field: "cat" },
         { excel: "Produs", field: "produs" },
         { excel: "Cantitate (kg)", field: "cant", type: "number" },
@@ -2660,7 +2681,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
               <button onClick={() => setTicEdit(null)} style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.4)", color: "#fff", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 16 }}>✕</button>
             </div>
             <div style={{ padding: "14px 18px", display: "flex", flexDirection: "column", gap: 10, maxHeight: "70vh", overflowY: "auto" }}>
-              <div><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Furnizor</label><div style={{ border: "1px solid #ccc", borderRadius: 5, padding: "2px 4px" }}><AC value={ticEdit.partener} options={[...new Set([...pfList.map(f => f.denumire), ...pjList.map(f => f.denumire), ...TIC_TRANSPORTATORI].filter(Boolean))]} placeholder="Caută PF / PJ..." onChange={(v) => setTicEdit((p) => ({ ...p, partener: v }))} /></div></div>
+              <div><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Furnizor</label><div style={{ border: "1px solid #ccc", borderRadius: 5, padding: "2px 4px" }}><AC value={ticEdit.partener} options={[...new Set([...pfList.map(f => f.denumire), ...pjList.map(f => f.denumire), ...TIC_TRANSPORTATORI, ...ticheteList.map(t => t.partener)].filter(Boolean))]} placeholder="Caută PF / PJ..." onChange={(v) => setTicEdit((p) => ({ ...p, partener: v }))} /></div></div>
               <div style={{ display: "flex", gap: 8 }}>
                 <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Mașină</label><input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, boxSizing: "border-box", textTransform: "uppercase" }} value={ticEdit.nr_masina} onChange={(e) => setTicEdit((p) => ({ ...p, nr_masina: e.target.value }))} /></div>
                 <div style={{ flex: 1.4 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Șofer</label><input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, boxSizing: "border-box" }} value={ticEdit.sofer} onChange={(e) => setTicEdit((p) => ({ ...p, sofer: e.target.value }))} /></div>
@@ -3490,6 +3511,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
               <SC label="Total Cant." value={fmt(colFiltered.reduce((s, r) => s + (parseFloat(r.cant) || 0), 0)) + " kg"} c="#1565c0" bg="#e3f2fd" />
               <SC label="Total Valoare" value={fmt(colFiltered.reduce((s, r) => s + (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0), 0)) + " lei"} c={G} bg="#e8f5e9" />
               <SC label="Înregistrări" value={colFiltered.length + " / " + colRows.length} c="#6a1b9a" bg="#f3e5f5" />
+              <SC label="✓ Eligibile Raport (Serie+Nr.)" value={String(colRows.filter(r => r.serie && r.nr_doc).length)} c={G} bg="#e8f5e9" />
             </div>
             <div style={{ background: "#f5f5f5", border: "1px solid #ddd", borderRadius: 8, padding: 10, marginBottom: 10, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
               <input value={colSearch} onChange={(e) => setColSearch(e.target.value)} placeholder="🔍 Caută furnizor, produs, achitat de..." style={{ flex: 1, minWidth: 180, border: "1px solid #ccc", borderRadius: 5, padding: "5px 10px", fontSize: 12 }} />
@@ -3519,6 +3541,8 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   <col style={{ width: 130 }} />
                   <col style={{ width: 90 }} />
                   <col style={{ width: 100 }} />
+                  <col style={{ width: 70 }} />
+                  <col style={{ width: 85 }} />
                   <col style={{ width: 80 }} />
                   <col />
                   <col style={{ width: 75 }} />
@@ -3534,6 +3558,8 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   <th style={th({ textAlign: "center" })}>Data</th>
                   <th style={th({ textAlign: "center" })}>Agent</th>
                   <th style={th({ textAlign: "center" })}>Furnizor</th>
+                  <th style={th({ textAlign: "center" })} title="Necesar pentru Rapoarte">Serie</th>
+                  <th style={th({ textAlign: "center" })} title="Necesar pentru Rapoarte">Nr. doc.</th>
                   <th style={th({ textAlign: "center" })}>Categorie</th>
                   <th style={th({ textAlign: "left" })}>Produs</th>
                   <th style={th({ textAlign: "center" })}>Cant.(kg)</th>
@@ -3544,8 +3570,8 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   <th style={th({ textAlign: "center" })}>Achitat De</th>
                   <th style={th({})}></th>
                 </tr></thead>
-                <tbody>{colFiltered.map((r, idx) => { const i = colRows.indexOf(r); const tot = (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0); const faraImp = tot ? +(tot * 0.88).toFixed(2) : 0; const rowBg = idx % 2 === 0 ? "#fff" : "#f8fbf9"; const achBg = r.ach === "Da" ? "#e8f5e9" : r.ach === "Nu" ? "#ffebee" : "#fff"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 2}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updCOL(i, "data", v)} /></td><td style={td({ background: rowBg })}><AC value={r.agent || ""} options={agentOptions} onChange={(v) => updCOL(i, "agent", v)} placeholder="—" /></td><td style={td({ background: rowBg })}><AC value={r.furn || ""} options={furnOptions} onChange={(v) => updCOL(i, "furn", v)} placeholder="—" /></td><td style={td({ background: COL_COLORS[r.cat] || "#eee", textAlign: "center" })}><select style={sel({ fontWeight: 600, textAlign: "center" })} value={r.cat || ""} onChange={(e) => updCOL(i, "cat", e.target.value)}>{CATEGORIE_COL.map((o) => <option key={o}>{o}</option>)}</select></td><td style={td({ background: rowBg })}><AC value={r.produs || ""} options={PRODUSE_DYN} onChange={(v) => updCOL(i, "produs", v)} /></td><td style={td({ background: rowBg })}><div style={{ display: "flex", gap: 2, alignItems: "center" }}><input style={inp({ textAlign: "right" })} type="number" value={r.cant || ""} onChange={(e) => updCOL(i, "cant", e.target.value)} />{scalePort && <button onClick={() => useScaleWeight(v => updCOL(i, "cant", v))} title="Citește din cantar" style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 3, padding: "1px 4px", cursor: "pointer", fontSize: 11 }}>⚖️</button>}</div></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "right" })} type="number" value={r.pret || ""} onChange={(e) => updCOL(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 600 })}>{tot > 0 ? fmt(tot) : "0,00"}</td><td style={td({ textAlign: "right", background: "#fce4d6", fontWeight: 600, color: "#bf360c" })}>{faraImp > 0 ? fmt(faraImp) : "0,00"}</td><td style={td({ background: achBg })}><select style={sel({ color: r.ach === "Da" ? G : r.ach === "Nu" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.ach || ""} onChange={(e) => updCOL(i, "ach", e.target.value)}><option value=""></option><option>Da</option><option>Nu</option></select></td><td style={td({ background: r.ach_de ? "#ffe0b2" : "#fff" })}><AC value={r.ach_de || ""} options={achitatOptions} onChange={(v) => updCOL(i, "ach_de", v)} placeholder="—" /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delCOL(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
-                <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={6} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(colFiltered.reduce((s, r) => s + (parseFloat(r.cant) || 0), 0))} kg</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(colFiltered.reduce((s, r) => s + (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0), 0))}</td><td colSpan={4}></td></tr></tfoot>
+                <tbody>{colFiltered.map((r, idx) => { const i = colRows.indexOf(r); const tot = (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0); const faraImp = tot ? +(tot * 0.88).toFixed(2) : 0; const rowBg = idx % 2 === 0 ? "#fff" : "#f8fbf9"; const achBg = r.ach === "Da" ? "#e8f5e9" : r.ach === "Nu" ? "#ffebee" : "#fff"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 2}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updCOL(i, "data", v)} /></td><td style={td({ background: rowBg })}><AC value={r.agent || ""} options={agentOptions} onChange={(v) => updCOL(i, "agent", v)} placeholder="—" /></td><td style={td({ background: rowBg })}><AC value={r.furn || ""} options={furnOptions} onChange={(v) => updCOL(i, "furn", v)} placeholder="—" /></td><td style={td({ background: r.serie ? "#e8f5e9" : "#fff3e0" })}><input style={inp({ textAlign: "center", fontWeight: 600 })} value={r.serie || ""} onChange={(e) => updCOL(i, "serie", e.target.value)} placeholder="—" /></td><td style={td({ background: r.nr_doc ? "#e8f5e9" : "#fff3e0" })}><input style={inp({ textAlign: "center", fontWeight: 600 })} value={r.nr_doc || ""} onChange={(e) => updCOL(i, "nr_doc", e.target.value)} placeholder="—" /></td><td style={td({ background: COL_COLORS[r.cat] || "#eee", textAlign: "center" })}><select style={sel({ fontWeight: 600, textAlign: "center" })} value={r.cat || ""} onChange={(e) => updCOL(i, "cat", e.target.value)}>{CATEGORIE_COL.map((o) => <option key={o}>{o}</option>)}</select></td><td style={td({ background: rowBg })}><AC value={r.produs || ""} options={PRODUSE_DYN} onChange={(v) => updCOL(i, "produs", v)} /></td><td style={td({ background: rowBg })}><div style={{ display: "flex", gap: 2, alignItems: "center" }}><input style={inp({ textAlign: "right" })} type="number" value={r.cant || ""} onChange={(e) => updCOL(i, "cant", e.target.value)} />{scalePort && <button onClick={() => useScaleWeight(v => updCOL(i, "cant", v))} title="Citește din cantar" style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 3, padding: "1px 4px", cursor: "pointer", fontSize: 11 }}>⚖️</button>}</div></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "right" })} type="number" value={r.pret || ""} onChange={(e) => updCOL(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 600 })}>{tot > 0 ? fmt(tot) : "0,00"}</td><td style={td({ textAlign: "right", background: "#fce4d6", fontWeight: 600, color: "#bf360c" })}>{faraImp > 0 ? fmt(faraImp) : "0,00"}</td><td style={td({ background: achBg })}><select style={sel({ color: r.ach === "Da" ? G : r.ach === "Nu" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.ach || ""} onChange={(e) => updCOL(i, "ach", e.target.value)}><option value=""></option><option>Da</option><option>Nu</option></select></td><td style={td({ background: r.ach_de ? "#ffe0b2" : "#fff" })}><AC value={r.ach_de || ""} options={achitatOptions} onChange={(v) => updCOL(i, "ach_de", v)} placeholder="—" /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delCOL(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={8} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(colFiltered.reduce((s, r) => s + (parseFloat(r.cant) || 0), 0))} kg</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(colFiltered.reduce((s, r) => s + (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0), 0))}</td><td colSpan={4}></td></tr></tfoot>
               </table>
             </div>
             <AddBtn onClick={addCOL} label="+ Adaugă colectare" />
@@ -3765,7 +3791,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
             return true;
           });
           const totNet = filtrate.reduce((s, t) => s + (parseFloat(t.net) || 0), 0);
-          const partenerOpts = [...new Set([...pfList.map(f => f.denumire), ...pjList.map(f => f.denumire), ...TIC_TRANSPORTATORI].filter(Boolean))];
+          const partenerOpts = [...new Set([...pfList.map(f => f.denumire), ...pjList.map(f => f.denumire), ...TIC_TRANSPORTATORI, ...ticheteList.map(t => t.partener)].filter(Boolean))];
           const transpOpts = [...new Set(["GREEN KRAFT SRL", ...TIC_TRANSPORTATORI, ...partenerOpts, ...ticheteList.map(t => t.transportator)].filter(Boolean))];
           const masiniOpts = [...new Set([...TIC_MASINI, ...ticheteList.map(t => t.nr_masina)].filter(Boolean))].sort();
           const soferiOpts = [...new Set([...TIC_DELEGATI, ...delegatiList.map(d => (d.nume || "").toUpperCase()), ...ticheteList.map(t => (t.sofer || "").toUpperCase())].filter(Boolean))].sort();
@@ -4050,7 +4076,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
               <table style={{ borderCollapse: "collapse", width: "100%" }}>
                 <thead><tr><th style={th({ width: 28 })}>#</th><th style={th({ textAlign: "left" })}>Material</th><th style={th()}>Cost Alocat</th><th style={th()}>Preț Ach.(lei/kg)</th><th style={th()}>Preț Vânz.(lei/kg)</th><th style={{ ...th(), background: "#155a35" }}>Marjă</th><th style={{ ...th(), background: "#0d4a2a" }}>Cantitate(kg)</th><th style={th({ width: 28 })}></th></tr></thead>
                 <tbody>{calRows.map((r, i) => (<tr key={i} style={{ background: i % 2 === 0 ? "#fff" : "#f9fbf9" }}><td style={td({ textAlign: "center", color: "#999" })}>{i + 1}</td><td style={td()}><input style={inp()} value={r.material} onChange={(e) => updCal(i, "material", e.target.value)} /></td><td style={td()}><input style={inp({ textAlign: "right" })} type="number" value={r.cost} onChange={(e) => updCal(i, "cost", e.target.value)} /></td><td style={td()}><input style={inp({ textAlign: "right" })} type="number" value={r.pa} onChange={(e) => updCal(i, "pa", e.target.value)} /></td><td style={td()}><input style={inp({ textAlign: "right" })} type="number" value={r.pv} onChange={(e) => updCal(i, "pv", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#e8f5e9", color: r.marja > 0 ? G : "#c62828", fontWeight: 600 })}>{r.marja !== 0 ? fmt(r.marja) : "—"}</td><td style={td({ textAlign: "right", background: "#d4edda", fontWeight: 700, color: "#0d4a2a" })}>{r.cant > 0 ? fmt(r.cant) : "—"}</td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => setCalRows((p) => p.filter((_, j) => j !== i))} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>))}</tbody>
-                <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={6} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(calRows.reduce((s, r) => s + (parseFloat(r.cant) || 0), 0))} kg</td><td></td></tr></tfoot>
+                <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={8} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(calRows.reduce((s, r) => s + (parseFloat(r.cant) || 0), 0))} kg</td><td></td></tr></tfoot>
               </table>
             </div>
             <AddBtn onClick={() => setCalRows((p) => [...p, calcRow({ material: "", pa: "", pv: "" }, parseFloat(costAl) || 0)])} label="+ Adaugă material" />
@@ -4471,11 +4497,20 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                 </button>
               </div>
 
+              <div style={{ background: "#fff", border: "2px solid #2e7d32", borderRadius: 10, padding: 16, textAlign: "center" }}>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>🚛</div>
+                <div style={{ fontWeight: 700, color: "#2e7d32", fontSize: 14, marginBottom: 4 }}>Colectări</div>
+                <div style={{ fontSize: 11, color: "#666", marginBottom: 12 }}>Doar cele cu Serie + Nr. document<br/>{colRows.filter(r => r.serie && r.nr_doc).length} din {colRows.length} eligibile</div>
+                <button onClick={() => exportExcel("col")} disabled={rapLoading || colRows.filter(r => r.serie && r.nr_doc).length === 0} style={{ width: "100%", padding: "10px", background: rapLoading ? "#ccc" : "#2e7d32", color: "#fff", border: "none", borderRadius: 6, cursor: rapLoading ? "wait" : "pointer", fontSize: 13, fontWeight: 700 }}>
+                  {rapLoading ? "⏳ Generez..." : "📥 Descarcă Excel Colectări"}
+                </button>
+              </div>
+
               <div style={{ background: "#fff", border: "2px solid #6a1b9a", borderRadius: 10, padding: 16, textAlign: "center" }}>
                 <div style={{ fontSize: 32, marginBottom: 8 }}>📊</div>
                 <div style={{ fontWeight: 700, color: "#6a1b9a", fontSize: 14, marginBottom: 4 }}>Raport Complet</div>
-                <div style={{ fontSize: 11, color: "#666", marginBottom: 12 }}>PF + PJ în 2 sheet-uri<br/>{registru.length + pvList.length} înregistrări</div>
-                <button onClick={() => exportExcel("all")} disabled={rapLoading || (registru.length === 0 && pvList.length === 0)} style={{ width: "100%", padding: "10px", background: rapLoading ? "#ccc" : "#6a1b9a", color: "#fff", border: "none", borderRadius: 6, cursor: rapLoading ? "wait" : "pointer", fontSize: 13, fontWeight: 700 }}>
+                <div style={{ fontSize: 11, color: "#666", marginBottom: 12 }}>PF + PJ + Colectări eligibile<br/>{registru.length + pvList.length + colRows.filter(r => r.serie && r.nr_doc).length} înregistrări</div>
+                <button onClick={() => exportExcel("all")} disabled={rapLoading || (registru.length === 0 && pvList.length === 0 && colRows.filter(r => r.serie && r.nr_doc).length === 0)} style={{ width: "100%", padding: "10px", background: rapLoading ? "#ccc" : "#6a1b9a", color: "#fff", border: "none", borderRadius: 6, cursor: rapLoading ? "wait" : "pointer", fontSize: 13, fontWeight: 700 }}>
                   {rapLoading ? "⏳ Generez..." : "📥 Descarcă Excel Complet"}
                 </button>
               </div>
