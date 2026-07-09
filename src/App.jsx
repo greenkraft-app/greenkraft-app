@@ -194,6 +194,11 @@ const TIC_DELEGATI = ["ANDREI ALEXANDRU","BALESCU DUMITRU","BALTAC CONSTANTIN","
 const TIC_TRANSPORTATORI = ["GREEN KRAFT SRL","AUTO HOFF TECHNOLOGY SRL","AWR GREEN POINT SRL","BEFIN SRL","BRAVA EVE SRL","CIUCA SORIN DANIEL","COSTEA DANIEL MIHAI","COSTELO SPEED SRL","DIMAR SRL","DINU TITI","DOM & LUK SRL","DSE WEST TRANS SOLUTIONS SRL","ECO METAL COLECT SRL","ECOSAL SERV DOBROESTI SRL","ECOSFERA COLECT SRL","EUROPE WASTE MANAGEMENT SRL","FRANCESCA WEN TRUCK SRL","GABIONEL MARFURI TRANS SRL","GREEN PACK SRL","GREEN RESPO RECYCLING SRL","GREENWEEE INTERNATIONAL SA","IULIAN","MANY SPEED TRANS SRL","MARADIN ANDREI","MARCU DRAGOS IANIS SRL","MARILU EXPRESS SRL","MARIMAR BEST SPEDITION SRL","MEGA ACTIV SRL","METAL TURAL SRL","MITICA CORNELIU","ND CORNELIO SRL","OGLEJA GROUP TRANS SRL","OMEGA MET CONSTRUCT SRL","PATRIKI TRANS LOGISTIC SRL","PAVIS DENIS AUTO SRL","PRO AUTO COLLINI SRL","RADU IULIAN","RALEX TRANZIT SRL","REMAT BUCURESTI SUD SA","REMAT ECO METAL SRL","RFC CLAUS INTER TRANS SRL","RNC IDEAL LOGISTIC INT SRL","RODI DOR SPEED SRL","ROMCARBON SA","ROMRECYCLING SRL","SANDEL","SD STEELMET SRL","SILPIN EUROTRANS SRL","SKY DAA TRANS SRL","SORGETI SRL","STAICU TRANS SRL","STEP ONE AGRO SRL","TD TYA CONCEPT TRANS SRL","TEH 2001 SERVICE SRL","TRANS TIMIABI LEVI SRL","YASMI MAR LOGISTIC SRL","YULIAF TRANS SRL","ZERO WASTE CONCEPT SRL"];
 const TIC_MASINI = ["34GF2212","B06SUN","B113CKM","B131RRY","B150YRS","B158RSA","B16GPC B07GPC","B170RHO","B199DAR","B204EMC","B223RHO","B232MDI","B23RRY","B305ATU IL05DBJ","B305ATU IL30DBJ","B35ATU IL33DBJ","B35RRY","B580MST IF17HJH","B707MCI","B750MIT","B80LUY","B82DYR","B898EST DJ64EST","B900WIP","B90JTR","B90LUY","BZ04MCD","BZ05AST","BZ10JNN","BZ16LPP","BZ21UTE","BZ26SKY","BZ28SKY","BZ29AKM","BZ33TIA","BZ41MDI","BZ46MDI","BZ52MCD","BZ52RNC","BZ65CST","BZ75KAT","BZ76MAZ","CL02DCS CL24DCS","CL23BYA CL23SAF","CT88RFC","DB11ULB DB11UCN","DB17WEN DB20WEN","DB24BFN","DB89PST DB90PST","DJ21STH","DJ36EST","DJ56EST","DJ87EST","GR26PKV GR30PKV","GR88ECS","IF03JFJ","IF057673","IF06EMC","IF06TRE","IF11UYK","IF12VXT","IF15DSW","IF20KFT","IF31RAL","IF35WSD","IF39WSD","IF43EVE","IF44WTW B02WIA","IF49ECS","IF50LAF","IF55KFT","IF71EXA","IF81PDA","IF85PDA","IF88HLP","IF88KFT","IF90RRY","IF95WTW","IL04DBJ TR32MAS","IL41VAN","IL41VAN IL14VAN","IL41VAN IL18VAN","IL99BRV IL05DBJ","IL99BRV IL30DBJ","MH09TOX MH80TOX","MH24LTC","PH76MMR","PH93MRD","PH94TAS PH85TRS","SB17PMY CT19XKR","TL05FWU","TR32MAS IL04DBJ"];
 const TIC_CLIENTI = ["GREEN KRAFT SRL","AWR GREEN POINT SRL","BALAN VASILE","BALTAC CONSTANTIN","BURLACU PAVEL-ANDREI","CALIN GHEORGHE-BOGDAN","CAN PACK RECYCLING SRL","CASE CALDUROASE SRL","CIUCA SORIN-DANIEL","COSTEA DANIEL-MIHAI","COTAN CODRIN","DGASPC IALOMITA","DINU IORDAN","ECO METAL COLECT","ECOFRIEND RECYCLING","ECOSAL SERV DOBROESTI","ECOVOL ILFOV SA","EDIL MAR NORD EST SRL","EUROPE WASTE MANAGEMENT","EVEREST","FUTURE INSPIRED TRAINING SRL","GENERAL CONCRETE CERNAVODA SRL","GHEORGHE CRISTINA-MIRELA","GLINTA LUCIAN","GREEN CITY VOLUNTARI SA","GREEN KRAFT SRL / ENVIRON","GREENWEEE INTERNATIONAL SA","INCD-IBA BUCURESTI","LUCICA","MANOLACHE MARCEL","MARADIN ANDREI","MORARU DORIN-CLAUDIU","OMEGA MET CONSTRUCT","PAS SERVICE SRL","PAUZA DE DULCE SRL","PERCA RAZVAN-FLORIN","POP CONSTANTIN-LIVIU","PREMIUM STORE SRL","REMAT BUCURESTI","REMAT BUCURESTI SUD","REMAT ECO METAL SRL","RETURO SISTEM SA","ROCK STAR CONSTRUCT","ROMCARBON SA","ROMRECYCLING SRL","RUS ELECTRONIC RECYCLING","SANDU MARIAN","SD STEELMET SRL","SERVICE CICLOP SA","STANCIU MARIAN-ALEXANDRU","STOICA GEORGE-ALEXANDRU","STOOK CONCEPT SRL","TAURUS TEHNOLOGII MEDIU","TEH 2001 SERVICE SRL","TEHNO INVEST BALKAN","TEMPOS SERV","TEO TODICA","TOPORAN FLORIN","TOTAL PRO ACHIZITII SRL","VIRSARU MARIAN-AUREL","WASTE RECYCLING INVESTMENT SRL","WOWSTEP CONCEPT SRL","ZUHUR IMPORT SRL"];
+
+// ── Categorii deseuri Anexa 3 (formular incarcare-descarcare HG 1061/2008) ──
+const ANEXA3_CATEGORII = ["ACUMULATORI  - COD 16 06 01","ALTE BATERII - COD 16 06 05","ALUMINIU - COD 15 01 04","ALUMINIU - COD 16 02 16","ALUMINIU - COD 17 04 02","ALUMINIU DIN CABLURI - COD 17 04 02","BETON - COD 19 12 09","CARTON - COD 15 01 01","CARTUSE, TONERE - COD: 08 03 18","CAUCIUC - COD: 16 02 16","CAUCIUC DIN DEEE-COD: 19 12 04","COMPONENTE ELECTRONICE - COD 16 02 16","CONDENSATORI - COD 16 02 15*","CUPRU - COD 16 02 16","CUPRU - COD 17 04 01","CUPRU DIN CABLURI - COD 17 04 01","DEEE - COD 16 02 14","DESEU PLASTIC AMESTEC DIN CABLU","DESEURI DIN CONSTRUCTII","EUROPALETI","FIER - COD 16 01 17","FIER - COD 16 02 16","FIER - COD 17 04 05","FIER DIN DEEE - COD 16 02 16","FIER DIN DEEE - COD 19 12 02","FOLIE COLOR - COD 15 01 02","FOLIE TRANSPARENTA - COD 15 01 02","HARTIE - COD 20 01 01","HDD/SSD - COD: 16 02 16","HDPE - COD 15 01 02","IMPURITATI FARA COMPUSI PERICULOSI - COD 19 12 12","INOX - COD 17 04 05","INOX - COD: 16 02 16","LEMN - COD 15 01 03","LEMN DIN DEEE-COD: 19 12 07","MATERIAL ABSORBANT - COD: 19 12 04","MATERIAL IZOLANT DIN DEEE-COD: 19 12 04","MATERIALE PLASTICE - COD 16 01 19","MOTOARE/TRANSFORMATOARE - COD: 16 02 16","Marfuri neconforme 20 01 99","Metale 20 01 40","PET - COD 15 01 02","PLACI CU CIRCUITE IMPRIMATE - COD 16 02 16","PLASTIC (AFARA DE PET)- COD 15 01 02","PLASTIC DIN DEEE-COD: 19 12 04","PLASTIC NESORTAT - COD 16 02 16","POMPE DRC 80-400","POMPE MV 253","POMPE NC 200","SPUMA POLIURITERMICA DIN DEEE-COD: 19 12 04","SPUMA POLIUTERMICA - COD: 16 02 16","STICLA - COD 15 01 07","STICLA - COD 16 02 16","SURSE ALIMENTARE - COD 16 02 16","ULEI SI GRASIMI COMESTIBILE - COD 20 01 25","VATA DE STICLA DIN DEEE-COD: 19 12 12","VENTILATOARE - COD: 16 02 16"];
+const ANEXA3_SERII = ["GK", "GKF", "KFT"];
+const ANEXA3_DESTINATII = ["Colectare", "Stocare temporara", "Tratare", "Valorificare", "Eliminare"];
 const LUNI = ["Ian","Feb","Mar","Apr","Mai","Iun","Iul","Aug","Sep","Oct","Nov","Dec"];
 const SERII = ["GK","GKR"];
 const CAT_PAROLE = ["Email","Bancă","Card","Platformă","WiFi","Altele"];
@@ -962,6 +967,19 @@ export default function App() {
   const [ticTaraInput, setTicTaraInput] = useState({}); // { [id]: valoare }
   const [ticNou, setTicNou] = useState({ tip: "Intrare", prima: "plin", partener: "", partener_cui: "", client: "GREEN KRAFT SRL", transportator: "", nr_masina: "", sofer: "", material: "", greutate: "", factura: "", aviz: "", obs: "" });
   const [ticEdit, setTicEdit] = useState(null); // { id, nr_tichet, factura, aviz, brut_la, tara_la, ora_intrare, ora_iesire }
+  const [anexa3List, setAnexa3List] = useState([]);
+  const [a3SubTab, setA3SubTab] = useState("nou");
+  const [a3Modal, setA3Modal] = useState(null);
+  const [a3Filter, setA3Filter] = useState("");
+  const [a3Luna, setA3Luna] = useState("");
+  const [a3KgInput, setA3KgInput] = useState({});
+  const [a3Nou, setA3Nou] = useState({
+    serie: "GK", numar: "",
+    transportator: "", data_incarcare: today(),
+    categorie: "", kg_cunoscut: true, kilograme: "",
+    expeditor: "", data_descarcare: today(), destinatar: "GREEN KRAFT SRL",
+    descriere_destinatie: "Valorificare", obs: "",
+  });
 
   useSupaTable("registru", setRegistru);
   useSupaTable("cheltuieli", setChRows);
@@ -981,6 +999,7 @@ export default function App() {
   useSupaTable("tichete_cantar", setTicheteList);
   useSupaTable("cantar_live", setCantarLiveRows);
   useSupaTable("print_queue", setPrintQueue);
+  useSupaTable("anexa3", setAnexa3List);
 
   // Effective produse list: from DB if loaded, else fallback to hardcoded constant
   const produseList = produseLista.length > 0 ? produseLista : PRODUSE_LIST;
@@ -1501,6 +1520,113 @@ export default function App() {
     setPvBorderouri(p => { const n = [...p]; n[activePV] = newPV([...pvList, ...(ins || [row])], pv.serie); return n; });
     setPjSearchPV("");
     setPvSubTab("registru");
+  };
+
+
+  // ── Anexa 3 helpers ────────────────────────────────────────
+  const a3FirmaInfo = (denumire) => {
+    const f = pjList.find((x) => x.denumire === denumire);
+    return f ? { cui: f.cod_fiscal || "", adresa: f.adresa || "", ...(f.anexa3 || {}) } : null;
+  };
+  const salveazaA3 = async () => {
+    if (!a3Nou.serie || !a3Nou.numar) { alert("Completați Seria și Numărul (de pe carnetul fizic)!"); return; }
+    if (!a3Nou.transportator) { alert("Selectați Transportatorul!"); return; }
+    if (!a3Nou.expeditor) { alert("Selectați Expeditorul!"); return; }
+    if (!a3Nou.destinatar) { alert("Selectați Destinatarul!"); return; }
+    if (!a3Nou.categorie) { alert("Selectați Categoria de deșeu!"); return; }
+    if (anexa3List.some((x) => x.serie === a3Nou.serie && String(x.numar) === String(a3Nou.numar))) {
+      alert("Anexa 3 seria " + a3Nou.serie + " nr. " + a3Nou.numar + " există deja!"); return;
+    }
+    const tr = a3FirmaInfo(a3Nou.transportator) || {};
+    const exp = a3FirmaInfo(a3Nou.expeditor) || {};
+    const dest = a3FirmaInfo(a3Nou.destinatar) || {};
+    const kgCunoscut = a3Nou.kg_cunoscut && a3Nou.kilograme !== "";
+    const row = {
+      serie: a3Nou.serie, numar: a3Nou.numar,
+      transportator: a3Nou.transportator, transportator_cui: tr.cui || "",
+      delegat_nume: tr.delegat_nume || "", delegat_ci: tr.delegat_ci || "", delegat_auto: tr.delegat_auto || "",
+      licenta: tr.licenta || "", licenta_expira: tr.licenta_expira || "",
+      data_incarcare: a3Nou.data_incarcare, categorie: a3Nou.categorie,
+      kilograme: kgCunoscut ? parseFloat(a3Nou.kilograme) || 0 : null,
+      expeditor: a3Nou.expeditor, expeditor_cui: exp.cui || "", expeditor_adresa: exp.adresa || "",
+      expeditor_aut_mediu: exp.aut_mediu || "", expeditor_aut_revizuita: exp.aut_mediu_revizuita || "", expeditor_aut_expira: exp.aut_mediu_expira || "",
+      data_descarcare: a3Nou.data_descarcare,
+      destinatar: a3Nou.destinatar, destinatar_cui: dest.cui || "", destinatar_adresa: dest.adresa || "",
+      destinatar_aut_mediu: dest.aut_mediu || "", destinatar_aut_revizuita: dest.aut_mediu_revizuita || "", destinatar_aut_expira: dest.aut_mediu_expira || "",
+      descriere_destinatie: a3Nou.descriere_destinatie,
+      operator: currentUser || "", obs: a3Nou.obs || "",
+    };
+    const { data, error } = await sb.from("anexa3").insert(row).select();
+    if (error) { alert("Eroare la salvare: " + error.message); return; }
+    if (data) setAnexa3List((p) => [...p, data[0]]);
+    logAction("Creare", "Anexa 3", row.serie + " " + row.numar, row.transportator + " • " + row.categorie + (kgCunoscut ? " • " + row.kilograme + " kg" : " • greutate in asteptare"));
+    setA3Nou((p) => ({ ...p, numar: "", categorie: "", kilograme: "", obs: "" }));
+    setA3SubTab(kgCunoscut ? "registru" : "asteptare");
+  };
+  const completeazaA3Kg = async (a3) => {
+    const v = parseFloat(a3KgInput[a3.id]);
+    if (!v || v <= 0) { alert("Introduceți greutatea!"); return; }
+    const { error } = await sb.from("anexa3").update({ kilograme: v }).eq("id", a3.id);
+    if (error) { alert("Eroare: " + error.message); return; }
+    setAnexa3List((p) => p.map((x) => (x.id === a3.id ? { ...x, kilograme: v } : x)));
+    logAction("Completare greutate", "Anexa 3", a3.serie + " " + a3.numar, v + " kg");
+    setA3KgInput((p) => { const n = { ...p }; delete n[a3.id]; return n; });
+  };
+  const delA3 = async (a3) => {
+    if (!confirmDel("Anexa 3 seria " + a3.serie + " nr. " + a3.numar)) return;
+    await sb.from("anexa3").delete().eq("id", a3.id);
+    setAnexa3List((p) => p.filter((x) => x.id !== a3.id));
+    logAction("Ștergere", "Anexa 3", a3.serie + " " + a3.numar, a3.transportator);
+  };
+  const salveazaA3Modal = async () => {
+    const anexa3Data = {
+      delegat_nume: a3Modal.delegat_nume || "", delegat_ci: a3Modal.delegat_ci || "", delegat_auto: a3Modal.delegat_auto || "",
+      licenta: a3Modal.licenta || "", licenta_expira: a3Modal.licenta_expira || "",
+      aut_mediu: a3Modal.aut_mediu || "", aut_mediu_revizuita: a3Modal.aut_mediu_revizuita || "", aut_mediu_expira: a3Modal.aut_mediu_expira || "",
+    };
+    updPJ(a3Modal.idx, "anexa3", anexa3Data);
+    setA3Modal(null);
+  };
+  const printA3 = (a3) => {
+    const R = (lbl, val) => "<div style=\"margin:0.5mm 0;font-size:8pt;\"><b>" + lbl + ":</b> " + (val || "—") + "</div>";
+    const destBoxes = ANEXA3_DESTINATII.map((d) => "<div style=\"font-size:8pt;\">" + (d === a3.descriere_destinatie ? "\u2611" : "\u2610") + " " + d + "</div>").join("");
+    const html =
+      "<div style=\"font-family:Arial,sans-serif;font-size:9pt;color:#111;\">" +
+        "<div style=\"display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1d6f42;padding-bottom:2mm;margin-bottom:2mm;\">" +
+          "<div><div style=\"font-size:11pt;font-weight:bold;\">ANEXA Nr. 3</div><div style=\"font-size:9pt;\">Formular de incarcare - descarcare deseuri nepericuloase</div></div>" +
+          "<div style=\"text-align:right;\"><div style=\"font-size:11pt;font-weight:bold;\">Seria " + a3.serie + " Nr. " + a3.numar + "</div></div>" +
+        "</div>" +
+        "<table style=\"width:100%;border-collapse:collapse;font-size:9pt;margin-bottom:2mm;\"><tr>" +
+          "<td style=\"width:50%;vertical-align:top;padding:2mm;border:1px solid #bbb;background:#f7f7f7;\"><b>TRANSPORTATOR</b><br/>" +
+            R("Denumire", a3.transportator) + R("CUI", a3.transportator_cui) + R("Delegat", a3.delegat_nume) + R("CI Delegat", a3.delegat_ci) + R("Auto", a3.delegat_auto) + R("Licenta", a3.licenta) + R("Licenta expira", a3.licenta_expira) +
+          "</td>" +
+          "<td style=\"width:50%;vertical-align:top;padding:2mm;border:1px solid #bbb;\"><b>DESCRIERE DESTINATIE</b><br/>" + destBoxes +
+            (a3.obs ? "<div style=\"margin-top:2mm;font-size:8pt;\"><b>Obs:</b> " + a3.obs + "</div>" : "") +
+          "</td>" +
+        "</tr></table>" +
+        "<table style=\"width:100%;border-collapse:collapse;font-size:9pt;\">" +
+          "<tr style=\"background:#1d6f42;color:#fff;text-align:center;font-weight:bold;\"><td style=\"padding:1.5mm;border:1px solid #1d6f42;width:50%;\">INCARCARE</td><td style=\"padding:1.5mm;border:1px solid #1d6f42;width:50%;\">DESCARCARE</td></tr>" +
+          "<tr>" +
+            "<td style=\"vertical-align:top;padding:2mm;border:1px solid #bbb;\">" +
+              R("Data", a3.data_incarcare) + R("Categorie deseu", a3.categorie) + R("Kilograme", a3.kilograme != null ? fmt(a3.kilograme) + " kg" : "* se cantareste la destinatie") +
+              "<div style=\"margin-top:2mm;\"><b>Date identificare Expeditor</b></div>" +
+              R("Denumire", a3.expeditor) + R("CUI", a3.expeditor_cui) + R("Adresa", a3.expeditor_adresa) + R("Aut. mediu", a3.expeditor_aut_mediu) + R("Revizuita", a3.expeditor_aut_revizuita) + R("Expira", a3.expeditor_aut_expira) +
+            "</td>" +
+            "<td style=\"vertical-align:top;padding:2mm;border:1px solid #bbb;\">" +
+              R("Data", a3.data_descarcare) + R("Categorie deseu", a3.categorie) + R("Kilograme", a3.kilograme != null ? fmt(a3.kilograme) + " kg" : "* se cantareste la destinatie") +
+              "<div style=\"margin-top:2mm;\"><b>Date identificare Destinatar</b></div>" +
+              R("Denumire", a3.destinatar) + R("CUI", a3.destinatar_cui) + R("Adresa", a3.destinatar_adresa) + R("Aut. mediu", a3.destinatar_aut_mediu) + R("Revizuita", a3.destinatar_aut_revizuita) + R("Expira", a3.destinatar_aut_expira) +
+            "</td>" +
+          "</tr>" +
+        "</table>" +
+        "<div style=\"display:flex;justify-content:space-between;margin-top:6mm;font-size:9pt;\">" +
+          "<div style=\"text-align:center;width:45%;\">Semnatura si stampila<br/>(Expeditor / Transportator),<br/><br/>__________________</div>" +
+          "<div style=\"text-align:center;width:45%;\">Semnatura si stampila<br/>(Destinatar),<br/><br/>__________________</div>" +
+        "</div>" +
+      "</div>";
+    const w = window.open("", "_blank");
+    w.document.write("<html><head><title>Anexa 3 " + a3.serie + " " + a3.numar + "</title><style>html,body{margin:0;padding:0;} body{padding:6mm;box-sizing:border-box;} *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;} @page{size:A4 portrait;margin:8mm;}</style></head><body>" + html + "<scr" + "ipt>window.onload=function(){setTimeout(function(){window.print();},300);};</scr" + "ipt></body></html>");
+    w.document.close(); w.focus();
   };
 
   const handlePrintPV = () => {
@@ -2700,6 +2826,44 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
         </div>
       )}
 
+      {/* Modal Date Anexa 3 per firma PJ (delegat, licenta, autorizatie mediu) */}
+      {a3Modal && (
+        <div onClick={() => setA3Modal(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 10, width: "min(96vw,480px)", display: "flex", flexDirection: "column", boxShadow: "0 8px 40px rgba(0,0,0,0.35)", overflow: "hidden" }}>
+            <div style={{ background: "linear-gradient(135deg,#4a148c,#6a1b9a)", color: "#fff", padding: "12px 18px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>Date Anexa 3</div>
+                <div style={{ fontSize: 11, opacity: 0.85, marginTop: 2 }}>{a3Modal.den} — folosite la generarea automata</div>
+              </div>
+              <button onClick={() => setA3Modal(null)} style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.4)", color: "#fff", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 16 }}>✕</button>
+            </div>
+            <div style={{ padding: "14px 18px", display: "flex", flexDirection: "column", gap: 10, maxHeight: "70vh", overflowY: "auto" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#6a1b9a", textTransform: "uppercase" }}>Delegat (sofer firma)</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ flex: 1.4 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Nume complet</label><input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, boxSizing: "border-box" }} value={a3Modal.delegat_nume} onChange={(e) => setA3Modal((p) => ({ ...p, delegat_nume: e.target.value }))} /></div>
+                <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>CI</label><input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, boxSizing: "border-box" }} value={a3Modal.delegat_ci} onChange={(e) => setA3Modal((p) => ({ ...p, delegat_ci: e.target.value }))} /></div>
+                <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Auto</label><input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, boxSizing: "border-box" }} value={a3Modal.delegat_auto} onChange={(e) => setA3Modal((p) => ({ ...p, delegat_auto: e.target.value }))} /></div>
+              </div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#6a1b9a", textTransform: "uppercase", marginTop: 4 }}>Licenta transport</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Numar licenta</label><input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, boxSizing: "border-box" }} value={a3Modal.licenta} onChange={(e) => setA3Modal((p) => ({ ...p, licenta: e.target.value }))} placeholder="ex: 217631 sau sub 3.5 t" /></div>
+                <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Expira la</label><input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, boxSizing: "border-box" }} value={a3Modal.licenta_expira} onChange={(e) => setA3Modal((p) => ({ ...p, licenta_expira: e.target.value }))} placeholder="DD.MM.YYYY" /></div>
+              </div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#6a1b9a", textTransform: "uppercase", marginTop: 4 }}>Autorizatie de mediu</div>
+              <div><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Numar</label><input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, boxSizing: "border-box" }} value={a3Modal.aut_mediu} onChange={(e) => setA3Modal((p) => ({ ...p, aut_mediu: e.target.value }))} placeholder="ex: 233/22.12.2021" /></div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Revizuita</label><input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, boxSizing: "border-box" }} value={a3Modal.aut_mediu_revizuita} onChange={(e) => setA3Modal((p) => ({ ...p, aut_mediu_revizuita: e.target.value }))} /></div>
+                <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Expira / Viza anuala</label><input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, boxSizing: "border-box" }} value={a3Modal.aut_mediu_expira} onChange={(e) => setA3Modal((p) => ({ ...p, aut_mediu_expira: e.target.value }))} /></div>
+              </div>
+            </div>
+            <div style={{ padding: "10px 18px", background: "#f5f5f5", borderTop: "1px solid #ddd", display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button onClick={() => setA3Modal(null)} style={{ padding: "6px 16px", border: "1px solid #ccc", borderRadius: 6, background: "#fff", cursor: "pointer", fontSize: 13 }}>Anuleaza</button>
+              <button onClick={salveazaA3Modal} style={{ padding: "6px 20px", border: "none", borderRadius: 6, background: "#6a1b9a", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 700 }}>✔ Salveaza</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal Editare Tichet (factura/aviz/ore) */}
       {ticEdit && (
         <div onClick={() => setTicEdit(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
@@ -3214,6 +3378,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
               <button style={{ padding: "5px 13px", cursor: "pointer", border: "none", fontWeight: 600, fontSize: 12, borderBottom: pvSubTab === "editor" ? `2px solid ${G}` : "2px solid transparent", background: pvSubTab === "editor" ? "#f0faf4" : "transparent", color: pvSubTab === "editor" ? G : "#666", marginRight: 3 }} onClick={() => setPvSubTab("editor")}>✏️ Editor PV</button>
               <button style={{ padding: "5px 13px", cursor: "pointer", border: "none", fontWeight: 600, fontSize: 12, borderBottom: pvSubTab === "registru" ? `2px solid ${G}` : "2px solid transparent", background: pvSubTab === "registru" ? "#f0faf4" : "transparent", color: pvSubTab === "registru" ? G : "#666", marginRight: 3 }} onClick={() => setPvSubTab("registru")}>📋 Registru PJ <span style={{ marginLeft: 4, background: "#e65100", color: "#fff", borderRadius: 10, padding: "1px 5px", fontSize: 10, fontWeight: 700 }}>{pvList.length}</span></button>
               <button style={{ padding: "5px 13px", cursor: "pointer", border: "none", fontWeight: 600, fontSize: 12, borderBottom: pvSubTab === "pj" ? `2px solid ${G}` : "2px solid transparent", background: pvSubTab === "pj" ? "#f0faf4" : "transparent", color: pvSubTab === "pj" ? G : "#666", marginRight: 3 }} onClick={() => setPvSubTab("pj")}>🏢 Pers. Juridice <span style={{ marginLeft: 4, background: "#e65100", color: "#fff", borderRadius: 10, padding: "1px 5px", fontSize: 10, fontWeight: 700 }}>{pjList.length}</span></button>
+              <button style={{ padding: "5px 13px", cursor: "pointer", border: "none", fontWeight: 600, fontSize: 12, borderBottom: pvSubTab === "anexa3" ? `2px solid ${G}` : "2px solid transparent", background: pvSubTab === "anexa3" ? "#f0faf4" : "transparent", color: pvSubTab === "anexa3" ? G : "#666", marginRight: 3 }} onClick={() => setPvSubTab("anexa3")}>📜 Anexa 3 <span style={{ marginLeft: 4, background: "#6a1b9a", color: "#fff", borderRadius: 10, padding: "1px 5px", fontSize: 10, fontWeight: 700 }}>{anexa3List.length}</span></button>
             </div>
 
             {pvSubTab === "editor" && (
@@ -3447,11 +3612,193 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 900 }}>
                     <thead><tr><th style={th({ background: "#b71c1c", width: 28 })}></th>{[{ l: "Cod", w: 55 }, { l: "Denumire", w: 185 }, { l: "CUI", w: 105 }, { l: "Analitic", w: 82 }, { l: "Jud.", w: 45 }, { l: "Adresa", w: 180 }, { l: "Cont Bancă", w: 165 }, { l: "Bancă", w: 130 }, { l: "Reg.Com.", w: 100 }, { l: "Tel.", w: 90 }].map((c) => <th key={c.l} style={{ ...th({ background: "#e65100" }), width: c.w, textAlign: "left" }}>{c.l}</th>)}<th style={th({ background: "#e65100", width: 30 })}></th></tr></thead>
-                    <tbody>{pjList.filter((r) => !pjFilter || r.denumire?.toLowerCase().includes(pjFilter.toLowerCase()) || r.cod?.includes(pjFilter) || r.cod_fiscal?.toLowerCase().includes(pjFilter.toLowerCase())).map((r, i) => { const rowBg = i % 2 === 0 ? "#fff" : "#fff8f5"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 2}</td><td style={td({ background: "#fff3e0", fontWeight: 700, color: "#e65100", textAlign: "center" })}><input style={inp({ textAlign: "center", fontWeight: 700, color: "#e65100" })} value={r.cod || ""} onChange={(e) => updPJ(i, "cod", e.target.value)} /></td><td style={td({ fontWeight: 600 })}><input style={inp({ fontWeight: 600, fontSize: 11 })} value={r.denumire || ""} onChange={(e) => updPJ(i, "denumire", e.target.value)} /></td><td style={td({ background: "#fff8e1" })}><input style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.cod_fiscal || ""} onChange={(e) => updPJ(i, "cod_fiscal", e.target.value)} /></td><td style={td()}><input style={inp({ fontSize: 11 })} value={r.analitic || ""} onChange={(e) => updPJ(i, "analitic", e.target.value)} /></td><td style={td({ background: "#e8f5e9", textAlign: "center", fontWeight: 600, color: G })}><input style={inp({ textAlign: "center", fontWeight: 600, color: G })} value={r.judet || ""} onChange={(e) => updPJ(i, "judet", e.target.value)} /></td><td style={td({ fontSize: 11 })}><div style={{ display: "flex", gap: 4 }}><input style={inp({ fontSize: 11 })} value={r.adresa || ""} onChange={(e) => updPJ(i, "adresa", e.target.value)} /><button onClick={() => { setPuncteModal({ idx: i, adrese: [...(r.puncte_lucru || [])] }); }} style={{ background: (r.puncte_lucru?.length || 0) > 0 ? "#e3f2fd" : "#fff", border: "1px solid #1565c0", borderRadius: 3, padding: "2px 6px", cursor: "pointer", fontSize: 10, color: "#1565c0", whiteSpace: "nowrap" }} title="Puncte de lucru (adrese suplimentare ridicare)">📍 {r.puncte_lucru?.length || 0}</button><button onClick={() => { setMatTipiceModal({ idx: i, den: r.denumire || "", items: JSON.parse(JSON.stringify(r.mat_tipice || [])) }); }} style={{ background: (r.mat_tipice?.length || 0) > 0 ? "#fff8e1" : "#fff", border: "1px solid #e65100", borderRadius: 3, padding: "2px 6px", cursor: "pointer", fontSize: 10, color: "#e65100", whiteSpace: "nowrap" }} title="Materiale tipice (auto-completare PV)">🗂️ {r.mat_tipice?.length || 0}</button></div></td><td style={td({ background: r.cont_banca ? "#e8f5e9" : "#fff", fontFamily: "monospace", fontSize: 10 })}><input style={inp({ fontFamily: "monospace", fontSize: 10 })} value={r.cont_banca || ""} onChange={(e) => updPJ(i, "cont_banca", e.target.value)} /></td><td style={td({ fontSize: 11 })}><input style={inp({ fontSize: 11 })} value={r.banca || ""} onChange={(e) => updPJ(i, "banca", e.target.value)} /></td><td style={td({ fontFamily: "monospace", fontSize: 11 })}><input style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.reg_com || ""} onChange={(e) => updPJ(i, "reg_com", e.target.value)} /></td><td style={td({ fontSize: 11 })}><input style={inp({ fontSize: 11 })} value={r.tel || ""} onChange={(e) => updPJ(i, "tel", e.target.value)} /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delPJ(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                    <tbody>{pjList.filter((r) => !pjFilter || r.denumire?.toLowerCase().includes(pjFilter.toLowerCase()) || r.cod?.includes(pjFilter) || r.cod_fiscal?.toLowerCase().includes(pjFilter.toLowerCase())).map((r, i) => { const rowBg = i % 2 === 0 ? "#fff" : "#fff8f5"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 2}</td><td style={td({ background: "#fff3e0", fontWeight: 700, color: "#e65100", textAlign: "center" })}><input style={inp({ textAlign: "center", fontWeight: 700, color: "#e65100" })} value={r.cod || ""} onChange={(e) => updPJ(i, "cod", e.target.value)} /></td><td style={td({ fontWeight: 600 })}><input style={inp({ fontWeight: 600, fontSize: 11 })} value={r.denumire || ""} onChange={(e) => updPJ(i, "denumire", e.target.value)} /></td><td style={td({ background: "#fff8e1" })}><input style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.cod_fiscal || ""} onChange={(e) => updPJ(i, "cod_fiscal", e.target.value)} /></td><td style={td()}><input style={inp({ fontSize: 11 })} value={r.analitic || ""} onChange={(e) => updPJ(i, "analitic", e.target.value)} /></td><td style={td({ background: "#e8f5e9", textAlign: "center", fontWeight: 600, color: G })}><input style={inp({ textAlign: "center", fontWeight: 600, color: G })} value={r.judet || ""} onChange={(e) => updPJ(i, "judet", e.target.value)} /></td><td style={td({ fontSize: 11 })}><div style={{ display: "flex", gap: 4 }}><input style={inp({ fontSize: 11 })} value={r.adresa || ""} onChange={(e) => updPJ(i, "adresa", e.target.value)} /><button onClick={() => { setPuncteModal({ idx: i, adrese: [...(r.puncte_lucru || [])] }); }} style={{ background: (r.puncte_lucru?.length || 0) > 0 ? "#e3f2fd" : "#fff", border: "1px solid #1565c0", borderRadius: 3, padding: "2px 6px", cursor: "pointer", fontSize: 10, color: "#1565c0", whiteSpace: "nowrap" }} title="Puncte de lucru (adrese suplimentare ridicare)">📍 {r.puncte_lucru?.length || 0}</button><button onClick={() => { setMatTipiceModal({ idx: i, den: r.denumire || "", items: JSON.parse(JSON.stringify(r.mat_tipice || [])) }); }} style={{ background: (r.mat_tipice?.length || 0) > 0 ? "#fff8e1" : "#fff", border: "1px solid #e65100", borderRadius: 3, padding: "2px 6px", cursor: "pointer", fontSize: 10, color: "#e65100", whiteSpace: "nowrap" }} title="Materiale tipice (auto-completare PV)">🗂️ {r.mat_tipice?.length || 0}</button><button onClick={() => { const a3 = r.anexa3 || {}; setA3Modal({ idx: i, den: r.denumire || "", delegat_nume: a3.delegat_nume || "", delegat_ci: a3.delegat_ci || "", delegat_auto: a3.delegat_auto || "", licenta: a3.licenta || "", licenta_expira: a3.licenta_expira || "", aut_mediu: a3.aut_mediu || "", aut_mediu_revizuita: a3.aut_mediu_revizuita || "", aut_mediu_expira: a3.aut_mediu_expira || "" }); }} style={{ background: r.anexa3?.delegat_nume ? "#f3e5f5" : "#fff", border: "1px solid #6a1b9a", borderRadius: 3, padding: "2px 6px", cursor: "pointer", fontSize: 10, color: "#6a1b9a", whiteSpace: "nowrap" }} title="Date Anexa 3 (delegat, licenta, autorizatie mediu)">📜</button></div></td><td style={td({ background: r.cont_banca ? "#e8f5e9" : "#fff", fontFamily: "monospace", fontSize: 10 })}><input style={inp({ fontFamily: "monospace", fontSize: 10 })} value={r.cont_banca || ""} onChange={(e) => updPJ(i, "cont_banca", e.target.value)} /></td><td style={td({ fontSize: 11 })}><input style={inp({ fontSize: 11 })} value={r.banca || ""} onChange={(e) => updPJ(i, "banca", e.target.value)} /></td><td style={td({ fontFamily: "monospace", fontSize: 11 })}><input style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.reg_com || ""} onChange={(e) => updPJ(i, "reg_com", e.target.value)} /></td><td style={td({ fontSize: 11 })}><input style={inp({ fontSize: 11 })} value={r.tel || ""} onChange={(e) => updPJ(i, "tel", e.target.value)} /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delPJ(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
                   </table>
                 </div>
               </div>
             )}
+
+            {pvSubTab === "anexa3" && (() => {
+              const firmeOpts = pjList.map((f) => f.denumire).filter(Boolean);
+              const trInfo = a3FirmaInfo(a3Nou.transportator);
+              const expInfo = a3FirmaInfo(a3Nou.expeditor);
+              const destInfo = a3FirmaInfo(a3Nou.destinatar);
+              const asteptare = anexa3List.filter((x) => x.kilograme == null);
+              const inchise = sortByDateAsc(anexa3List.filter((x) => x.kilograme != null));
+              const a3LunaOpts = [...new Set(anexa3List.map((x) => monthOf(x.data_incarcare)).filter(Boolean))].sort();
+              const a3Filtrate = inchise.filter((x) => {
+                if (a3Luna && monthOf(x.data_incarcare) !== a3Luna) return false;
+                if (a3Filter) { const q = a3Filter.toLowerCase(); if (!(x.transportator?.toLowerCase().includes(q) || x.expeditor?.toLowerCase().includes(q) || x.destinatar?.toLowerCase().includes(q) || x.categorie?.toLowerCase().includes(q) || String(x.numar).includes(q))) return false; }
+                return true;
+              });
+              const totKg = a3Filtrate.reduce((s, x) => s + (parseFloat(x.kilograme) || 0), 0);
+              const FL = { fontSize: 11, fontWeight: 600, color: "#555", display: "block", marginBottom: 2 };
+              const FI = { width: "100%", padding: "7px 9px", border: "1px solid #d5d5d5", borderRadius: 6, fontSize: 13, boxSizing: "border-box" };
+              const ACB = { border: "1px solid #d5d5d5", borderRadius: 6, padding: "3px 4px", background: "#fff" };
+              const Preview = (info) => !info ? null : (
+                <div style={{ marginTop: 4, background: "#faf5ff", border: "1px solid #e1bee7", borderRadius: 5, padding: "5px 8px", fontSize: 10, color: "#6a1b9a", lineHeight: 1.5 }}>
+                  {info.cui && <div>CUI: <b>{info.cui}</b></div>}
+                  {info.delegat_nume && <div>Delegat: <b>{info.delegat_nume}</b> {info.delegat_auto && `• ${info.delegat_auto}`}</div>}
+                  {info.aut_mediu && <div>Aut. mediu: <b>{info.aut_mediu}</b></div>}
+                  {!info.cui && !info.delegat_nume && !info.aut_mediu && <div style={{ color: "#aaa" }}>Fără date Anexa 3 salvate — completează din 🏢 Pers. Juridice → 📜</div>}
+                </div>
+              );
+              return (
+                <div>
+                  <div style={{ display: "flex", gap: 6, marginBottom: 14, borderBottom: "2px solid #eee" }}>
+                    {[["nou", "➕ Anexa 3 Nouă"], ["asteptare", `⏳ Greutate în așteptare${asteptare.length ? ` (${asteptare.length})` : ""}`], ["registru", "📒 Registru"]].map(([k, l]) => (
+                      <button key={k} onClick={() => setA3SubTab(k)} style={{ padding: "7px 16px", cursor: "pointer", border: "none", fontWeight: 600, fontSize: 12, borderBottom: a3SubTab === k ? "2px solid #6a1b9a" : "2px solid transparent", background: a3SubTab === k ? "#faf5ff" : "transparent", color: a3SubTab === k ? "#6a1b9a" : "#666" }}>{l}</button>
+                    ))}
+                  </div>
+
+                  {a3SubTab === "nou" && (
+                    <div style={{ maxWidth: 900 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 0, marginBottom: 14, fontSize: 11, color: "#777", flexWrap: "wrap" }}>
+                        {[["1", "Serie+Nr de pe carnet", "#6a1b9a"], ["2", "Transportator+Expeditor+Destinatar", "#1565c0"], ["3", "Categorie deșeu", "#e65100"], ["4", "Greutate (dacă o știi acum)", G]].map(([n, txt, c], i) => (
+                          <Fragment key={n}>
+                            {i > 0 && <span style={{ margin: "0 8px", color: "#ccc" }}>→</span>}
+                            <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                              <span style={{ background: c, color: "#fff", borderRadius: "50%", width: 17, height: 17, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700 }}>{n}</span>
+                              {txt}
+                            </span>
+                          </Fragment>
+                        ))}
+                      </div>
+                      <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+                        <div style={{ flex: "1 1 420px", background: "#fff", border: "1px solid #e0e0e0", borderRadius: 10, padding: 16 }}>
+                          <div style={{ fontWeight: 700, color: "#444", fontSize: 12, marginBottom: 12, textTransform: "uppercase", letterSpacing: 0.5 }}>Document</div>
+                          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                            <div style={{ flex: 1 }}>
+                              <label style={FL}>Serie <span style={{ color: "#c62828" }}>*</span></label>
+                              <select style={FI} value={a3Nou.serie} onChange={(e) => setA3Nou((p) => ({ ...p, serie: e.target.value }))}>
+                                {ANEXA3_SERII.map((s) => <option key={s} value={s}>{s}</option>)}
+                              </select>
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <label style={FL}>Număr (de pe carnet) <span style={{ color: "#c62828" }}>*</span></label>
+                              <input style={{ ...FI, fontFamily: "monospace", fontWeight: 700 }} value={a3Nou.numar} onChange={(e) => setA3Nou((p) => ({ ...p, numar: e.target.value }))} placeholder="ex: 246" />
+                            </div>
+                          </div>
+                          <div style={{ marginBottom: 10 }}>
+                            <label style={FL}>Transportator <span style={{ color: "#c62828" }}>*</span></label>
+                            <div style={ACB}><AC value={a3Nou.transportator} options={firmeOpts} placeholder="Caută firmă..." onChange={(v) => setA3Nou((p) => ({ ...p, transportator: v }))} /></div>
+                            {Preview(trInfo)}
+                          </div>
+                          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                            <div style={{ flex: 1 }}><label style={FL}>Data Încărcare</label><DateInput value={a3Nou.data_incarcare} onChange={(v) => setA3Nou((p) => ({ ...p, data_incarcare: v }))} style={{ border: "1px solid #d5d5d5" }} /></div>
+                            <div style={{ flex: 1 }}><label style={FL}>Data Descărcare</label><DateInput value={a3Nou.data_descarcare} onChange={(v) => setA3Nou((p) => ({ ...p, data_descarcare: v }))} style={{ border: "1px solid #d5d5d5" }} /></div>
+                          </div>
+                          <div style={{ marginBottom: 10 }}>
+                            <label style={FL}>Categorie deșeu <span style={{ color: "#c62828" }}>*</span></label>
+                            <div style={ACB}><AC value={a3Nou.categorie} options={ANEXA3_CATEGORII} placeholder="Selectează sau scrie..." onChange={(v) => setA3Nou((p) => ({ ...p, categorie: v }))} /></div>
+                          </div>
+                          <div style={{ marginBottom: 10 }}>
+                            <label style={FL}>Expeditor (cine predă marfa) <span style={{ color: "#c62828" }}>*</span></label>
+                            <div style={ACB}><AC value={a3Nou.expeditor} options={firmeOpts} placeholder="Caută firmă..." onChange={(v) => setA3Nou((p) => ({ ...p, expeditor: v }))} /></div>
+                            {Preview(expInfo)}
+                          </div>
+                          <div style={{ marginBottom: 10 }}>
+                            <label style={FL}>Destinatar (cine primește marfa) <span style={{ color: "#c62828" }}>*</span></label>
+                            <div style={ACB}><AC value={a3Nou.destinatar} options={firmeOpts} placeholder="Caută firmă..." onChange={(v) => setA3Nou((p) => ({ ...p, destinatar: v }))} /></div>
+                            {Preview(destInfo)}
+                          </div>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <div style={{ flex: 1 }}>
+                              <label style={FL}>Descriere destinație</label>
+                              <select style={FI} value={a3Nou.descriere_destinatie} onChange={(e) => setA3Nou((p) => ({ ...p, descriere_destinatie: e.target.value }))}>
+                                {ANEXA3_DESTINATII.map((d) => <option key={d} value={d}>{d}</option>)}
+                              </select>
+                            </div>
+                            <div style={{ flex: 1 }}><label style={FL}>Observații</label><input style={FI} value={a3Nou.obs} onChange={(e) => setA3Nou((p) => ({ ...p, obs: e.target.value }))} placeholder="opțional" /></div>
+                          </div>
+                        </div>
+                        <div style={{ flex: "1 1 260px", background: "#fff", border: "1px solid #6a1b9a", borderRadius: 10, padding: 16, display: "flex", flexDirection: "column" }}>
+                          <div style={{ fontWeight: 700, color: "#6a1b9a", fontSize: 12, marginBottom: 12, textTransform: "uppercase", letterSpacing: 0.5 }}>Greutate</div>
+                          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                            <button onClick={() => setA3Nou((p) => ({ ...p, kg_cunoscut: true }))} style={{ flex: 1, padding: "8px", border: a3Nou.kg_cunoscut ? "2px solid #6a1b9a" : "2px solid #ddd", borderRadius: 7, background: a3Nou.kg_cunoscut ? "#f3e5f5" : "#fff", cursor: "pointer", fontWeight: 700, color: a3Nou.kg_cunoscut ? "#6a1b9a" : "#999", fontSize: 11 }}>⚖️ O știu acum</button>
+                            <button onClick={() => setA3Nou((p) => ({ ...p, kg_cunoscut: false }))} style={{ flex: 1, padding: "8px", border: !a3Nou.kg_cunoscut ? "2px solid #6a1b9a" : "2px solid #ddd", borderRadius: 7, background: !a3Nou.kg_cunoscut ? "#f3e5f5" : "#fff", cursor: "pointer", fontWeight: 700, color: !a3Nou.kg_cunoscut ? "#6a1b9a" : "#999", fontSize: 11 }}>⏳ La destinație</button>
+                          </div>
+                          {a3Nou.kg_cunoscut ? (
+                            <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+                              <input style={{ flex: 1, padding: "12px", border: "2px solid #6a1b9a", borderRadius: 8, fontSize: 22, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="number" value={a3Nou.kilograme} onChange={(e) => setA3Nou((p) => ({ ...p, kilograme: e.target.value }))} placeholder="0" />
+                              <span style={{ alignSelf: "center", fontSize: 13, color: "#888" }}>kg</span>
+                            </div>
+                          ) : (
+                            <div style={{ background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 8, padding: 12, fontSize: 11, color: "#795548", marginBottom: 8 }}>
+                              Documentul va apărea în <b>⏳ Greutate în așteptare</b> până completezi cântărirea (ex: la sosirea în Tichete Cântar).
+                            </div>
+                          )}
+                          <button onClick={salveazaA3} style={{ marginTop: "auto", padding: "13px", background: "linear-gradient(135deg,#4a148c,#6a1b9a)", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 14, fontWeight: 700 }}>💾 Salvează Anexa 3</button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {a3SubTab === "asteptare" && (
+                    <div>
+                      {asteptare.length === 0 && <div style={{ color: "#999", fontSize: 13, padding: "40px 0", textAlign: "center" }}>Nicio Anexă 3 cu greutate în așteptare.</div>}
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+                        {asteptare.map((a3) => (
+                          <div key={a3.id} style={{ width: 300, background: "#fff", border: "1px solid #e0e0e0", borderLeft: "4px solid #ffa726", borderRadius: 10, padding: 14 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                              <span style={{ fontWeight: 700, fontSize: 14 }}>{a3.serie} #{a3.numar}</span>
+                              <span style={{ fontSize: 10, color: "#999" }}>{a3.data_incarcare}</span>
+                            </div>
+                            <div style={{ fontSize: 11, color: "#777", marginBottom: 2 }}>🚚 {a3.transportator}</div>
+                            <div style={{ fontSize: 11, color: "#777", marginBottom: 2 }}>📤 {a3.expeditor} → 📥 {a3.destinatar}</div>
+                            <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{a3.categorie}</div>
+                            <div style={{ display: "flex", gap: 6 }}>
+                              <input style={{ flex: 1, padding: "7px", border: "1.5px solid #ffa726", borderRadius: 6, fontSize: 14, fontWeight: 700, textAlign: "right", fontFamily: "monospace", boxSizing: "border-box" }} type="number" value={a3KgInput[a3.id] || ""} onChange={(e) => setA3KgInput((p) => ({ ...p, [a3.id]: e.target.value }))} placeholder="kg" />
+                              <button onClick={() => completeazaA3Kg(a3)} style={{ padding: "7px 12px", background: "#6a1b9a", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>✔</button>
+                              <button onClick={() => delA3(a3)} style={{ padding: "7px 10px", background: "#fff", color: "#e53935", border: "1px solid #ef9a9a", borderRadius: 6, cursor: "pointer", fontSize: 12 }}>✕</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {a3SubTab === "registru" && (
+                    <div>
+                      <div style={{ display: "flex", gap: 10, marginBottom: 10, alignItems: "center", flexWrap: "wrap" }}>
+                        <select style={{ padding: "6px 10px", border: "1px solid #ccc", borderRadius: 5, fontSize: 12 }} value={a3Luna} onChange={(e) => setA3Luna(e.target.value)}>
+                          <option value="">Toate lunile</option>
+                          {a3LunaOpts.map((l) => <option key={l} value={l}>{l}</option>)}
+                        </select>
+                        <input style={{ padding: "6px 10px", border: "1px solid #ccc", borderRadius: 5, fontSize: 12, width: 240 }} value={a3Filter} onChange={(e) => setA3Filter(e.target.value)} placeholder="🔍 Caută transportator / firmă / categorie..." />
+                        {(a3Luna || a3Filter) && <button onClick={() => { setA3Luna(""); setA3Filter(""); }} style={{ padding: "5px 10px", border: "1px solid #ccc", borderRadius: 5, background: "#fff", cursor: "pointer", fontSize: 11 }}>↺ Reset</button>}
+                        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+                          <SC label="Documente" value={String(a3Filtrate.length)} c="#6a1b9a" bg="#f3e5f5" />
+                          <SC label="Total kg" value={fmt(totKg) + " kg"} c="#e65100" bg="#fff3e0" />
+                        </div>
+                      </div>
+                      <div style={{ overflowX: "auto" }}>
+                        <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12 }}>
+                          <thead><tr>{["Serie/Nr", "Data Înc.", "Transportator", "Expeditor", "Destinatar", "Categorie", "Kg", "Operator", "🖨️", ""].map((h, i) => <th key={i} style={th({ background: "#6a1b9a" })}>{h}</th>)}</tr></thead>
+                          <tbody>
+                            {a3Filtrate.map((a3, idx) => (
+                              <tr key={a3.id} style={{ background: idx % 2 === 0 ? "#fff" : "#faf5ff" }}>
+                                <td style={td({ textAlign: "center", fontWeight: 700, color: "#6a1b9a" })}>{a3.serie} {a3.numar}</td>
+                                <td style={td({ textAlign: "center" })}>{a3.data_incarcare}</td>
+                                <td style={td({ fontWeight: 600 })}>{a3.transportator}</td>
+                                <td style={td()}>{a3.expeditor}</td>
+                                <td style={td()}>{a3.destinatar}</td>
+                                <td style={td({ fontSize: 11 })}>{a3.categorie}</td>
+                                <td style={td({ textAlign: "right", fontWeight: 700 })}>{fmt(a3.kilograme)}</td>
+                                <td style={td({ textAlign: "center", fontSize: 10 })}>{a3.operator || "—"}</td>
+                                <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => printA3(a3)} style={{ background: "#f3e5f5", border: "1px solid #ce93d8", borderRadius: 4, cursor: "pointer", color: "#6a1b9a", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>🖨️</button></td>
+                                <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => delA3(a3)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
+                              </tr>
+                            ))}
+                            {a3Filtrate.length === 0 && <tr><td colSpan={10} style={{ padding: 20, textAlign: "center", color: "#999", fontSize: 12 }}>Nicio Anexă 3 {a3Luna || a3Filter ? "pentru filtrele alese" : "încă"}.</td></tr>}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -3576,11 +3923,11 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   <col style={{ width: 28 }} />
                   <col style={{ width: 122 }} />
                   <col style={{ width: 85 }} />
-                  <col style={{ width: 160 }} />
+                  <col style={{ width: 95 }} />
                   <col style={{ width: 62 }} />
                   <col style={{ width: 78 }} />
                   <col style={{ width: 80 }} />
-                  <col style={{ width: 330 }} />
+                  <col />
                   <col style={{ width: 98 }} />
                   <col style={{ width: 65 }} />
                   <col style={{ width: 78 }} />
