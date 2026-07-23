@@ -4102,7 +4102,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                 <thead><tr>
                   <th style={th({})}></th>
                   <th style={th({ textAlign: "center" })}>Data</th>
-                  <th style={th({ textAlign: "center" })}>Nr.</th>
+                  <th style={th({ textAlign: "center" })}>Nr. doc.</th>
                   <th style={th({ textAlign: "center" })}>Client</th>
                   <th style={th({})}>Produs</th>
                   <th style={th({ textAlign: "center" })}>Cant.(kg)</th>
