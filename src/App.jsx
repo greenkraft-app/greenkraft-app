@@ -3961,7 +3961,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
               {(colSearch || colMonth || colCat || colAgent || colAchitat) && <button onClick={() => { setColSearch(""); setColMonth(""); setColCat(""); setColAgent(""); setColAchitat(""); }} style={{ background: "#e53935", color: "#fff", border: "none", borderRadius: 5, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕ Reset</button>}
             </div>
             <div style={{ overflowX: "auto" }}>
-              <table style={{ borderCollapse: "collapse", width: "100%" }}>
+              <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 1290 }}>
                 <colgroup>
                   <col style={{ width: 28 }} />
                   <col style={{ width: 122 }} />
@@ -3970,7 +3970,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   <col style={{ width: 70 }} />
                   <col style={{ width: 70 }} />
                   <col style={{ width: 80 }} />
-                  <col />
+                  <col style={{ width: 220 }} />
                   <col style={{ width: 98 }} />
                   <col style={{ width: 65 }} />
                   <col style={{ width: 78 }} />
