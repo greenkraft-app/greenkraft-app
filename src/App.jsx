@@ -343,7 +343,7 @@ function ACStrict({ value, onChange, options, placeholder = "", style, strict = 
         }}
       />
       <datalist id={idRef.current}>
-        {options.map((o) => <option key={o} value={o} />)}
+        {[...new Set(options)].map((o) => <option key={o} value={o} />)}
       </datalist>
     </>
   );
@@ -4036,7 +4036,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
             </div>
             <div style={{ overflowX: "auto" }}>
               <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed" }}>
-                <colgroup><col style={{ width: 28 }} /><col style={{ width: 130 }} /><col style={{ width: 55 }} /><col style={{ width: 200 }} /><col /><col style={{ width: 75 }} /><col style={{ width: 65 }} /><col style={{ width: 85 }} /><col style={{ width: 80 }} /><col style={{ width: 80 }} /><col style={{ width: 130 }} /><col style={{ width: 28 }} /></colgroup>
+                <colgroup><col style={{ width: 28 }} /><col style={{ width: 130 }} /><col style={{ width: 55 }} /><col style={{ width: 280 }} /><col /><col style={{ width: 75 }} /><col style={{ width: 65 }} /><col style={{ width: 85 }} /><col style={{ width: 80 }} /><col style={{ width: 80 }} /><col style={{ width: 130 }} /><col style={{ width: 28 }} /></colgroup>
                 <thead><tr>
                   <th style={th({})}></th>
                   <th style={th({ textAlign: "center" })}>Data</th>
