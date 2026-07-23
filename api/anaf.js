@@ -5,7 +5,7 @@ export default async function handler(req, res) {
   const data = new Date().toISOString().slice(0, 10);
 
   try {
-    const response = await fetch("https://webservicesp.anaf.ro/PlatitorTvaRest/api/v9/ws/tva", {
+    const response = await fetch("https://webservicesp.anaf.ro/api/PlatitorTvaRest/v9/tva", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify([{ cui: parseInt(cui, 10), data }]),
