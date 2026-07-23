@@ -1330,9 +1330,26 @@ export default function App() {
     setTicheteList((p) => p.map((x) => (x.id === t.id ? { ...x, ...upd } : x)));
     logAction("Închidere", "Tichet cântar", t.serie + " " + t.nr_tichet, `NET ${netV} kg`);
     setTicTaraInput((p) => { const n = { ...p }; delete n[t.id]; return n; });
+    if (t.tip === "Intrare") await creeazaAchizitieDinTichet({ ...t, ...upd });
+  };
+  // ── Creează automat o înregistrare în Achiziții pornind de la un tichet de cântar închis (tip Intrare) ──
+  const creeazaAchizitieDinTichet = async (t) => {
+    const row = {
+      data: t.data, agent: t.operator || "", furn: t.partener || "",
+      serie: t.factura ? "FACT" : t.aviz ? "AVIZ" : "", nr_doc: t.factura || t.aviz || "",
+      cat: "Curte", produs: t.material || "", cant: t.net || 0, pret: 0, ach: "", ach_de: "",
+      tichet_id: String(t.id),
+    };
+    const { data, error } = await sb.from("colectari").insert(row).select();
+    if (error) { alert("Tichetul a fost închis, dar înregistrarea automată în Achiziții a eșuat: " + error.message); return; }
+    if (data) setColRows((p) => [...p, data[0]]);
   };
   const delTichet = async (t) => {
-    if (!confirmDel("acest tichet de cântar")) return;
+    const legata = colRows.find((r) => r.tichet_id === String(t.id));
+    const ok = legata
+      ? window.confirm(`⚠️ Sigur vrei să ștergi acest tichet de cântar?\n\nAcțiunea NU poate fi anulată.\n\nAtenție: acest tichet are o achiziție legată (creată automat în Achiziții) — NU va fi ștearsă, rămâne acolo ca înregistrare independentă.`)
+      : confirmDel("acest tichet de cântar");
+    if (!ok) return;
     await sb.from("tichete_cantar").delete().eq("id", t.id);
     setTicheteList((p) => p.filter((x) => x.id !== t.id));
     logAction("Ștergere", "Tichet cântar", t.serie + " " + t.nr_tichet, `${t.partener}`);
@@ -1358,6 +1375,17 @@ export default function App() {
     if (error) { alert("Eroare: " + error.message); return; }
     setTicheteList((p) => p.map((x) => (x.id === ticEdit.id ? { ...x, ...upd } : x)));
     logAction("Editare", "Tichet cântar", "TC " + ticEdit.nr_tichet, `NET recalculat: ${netV} kg`);
+    if (ticEdit.tip === "Intrare") {
+      const legata = colRows.find((r) => r.tichet_id === String(ticEdit.id));
+      if (legata) {
+        const colUpd = {
+          furn: upd.partener, produs: upd.material, cant: netV,
+          serie: upd.factura ? "FACT" : upd.aviz ? "AVIZ" : "", nr_doc: upd.factura || upd.aviz || "",
+        };
+        const { error: colErr } = await sb.from("colectari").update(colUpd).eq("id", legata.id);
+        if (!colErr) setColRows((p) => p.map((r) => (r.id === legata.id ? { ...r, ...colUpd } : r)));
+      }
+    }
     setTicEdit(null);
   };
   const buildTichetHTML = (t) => {
