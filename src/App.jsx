@@ -3886,14 +3886,14 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
               {(chSearch || chMonth || chCat || chAchitat || chAchDe) && <button onClick={() => { setChSearch(""); setChMonth(""); setChCat(""); setChAchitat(""); setChAchDe(""); }} style={{ background: "#e53935", color: "#fff", border: "none", borderRadius: 5, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕ Reset</button>}
             </div>
             <div style={{ overflowX: "auto" }}>
-              <table style={{ borderCollapse: "collapse", width: "100%" }}>
+              <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 1010 }}>
                 <colgroup>
                   <col style={{ width: 28 }} />
                   <col style={{ width: 130 }} />
                   <col style={{ width: 82 }} />
                   <col style={{ width: 90 }} />
                   <col style={{ width: 100 }} />
-                  <col />
+                  <col style={{ width: 190 }} />
                   <col style={{ width: 75 }} />
                   <col style={{ width: 90 }} />
                   <col style={{ width: 200 }} />
@@ -4035,8 +4035,8 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
               {(livSearch || livMonth || livClient) && <button onClick={() => { setLivSearch(""); setLivMonth(""); setLivClient(""); }} style={{ background: "#e53935", color: "#fff", border: "none", borderRadius: 5, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕ Reset</button>}
             </div>
             <div style={{ overflowX: "auto" }}>
-              <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed" }}>
-                <colgroup><col style={{ width: 28 }} /><col style={{ width: 130 }} /><col style={{ width: 55 }} /><col style={{ width: 280 }} /><col /><col style={{ width: 75 }} /><col style={{ width: 65 }} /><col style={{ width: 85 }} /><col style={{ width: 80 }} /><col style={{ width: 80 }} /><col style={{ width: 130 }} /><col style={{ width: 28 }} /></colgroup>
+              <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 1310 }}>
+                <colgroup><col style={{ width: 28 }} /><col style={{ width: 130 }} /><col style={{ width: 55 }} /><col style={{ width: 280 }} /><col style={{ width: 220 }} /><col style={{ width: 75 }} /><col style={{ width: 65 }} /><col style={{ width: 85 }} /><col style={{ width: 80 }} /><col style={{ width: 80 }} /><col style={{ width: 130 }} /><col style={{ width: 28 }} /></colgroup>
                 <thead><tr>
                   <th style={th({})}></th>
                   <th style={th({ textAlign: "center" })}>Data</th>
@@ -4140,8 +4140,8 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                     <button onClick={addProdus} style={{ background: G, color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Adaugă Produs</button>
                   </div>
                   <div style={{ overflowX: "auto" }}>
-                    <table style={{ borderCollapse: "collapse", width: "100%" }}>
-                      <colgroup><col style={{ width: 48 }} /><col /><col style={{ width: 110 }} /><col style={{ width: 110 }} /><col style={{ width: 30 }} /></colgroup>
+                    <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 580 }}>
+                      <colgroup><col style={{ width: 48 }} /><col style={{ width: 280 }} /><col style={{ width: 110 }} /><col style={{ width: 110 }} /><col style={{ width: 30 }} /></colgroup>
                       <thead><tr style={{ background: "#1565c0" }}>
                         <th style={th({ background: "#0d47a1", textAlign: "center" })}>#</th>
                         <th style={th({ background: "#1565c0", textAlign: "center" })}>Denumire</th>
@@ -4172,8 +4172,8 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                     <button onClick={addDelegat} style={{ background: "#e65100", color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Adaugă Delegat</button>
                   </div>
                   <div style={{ overflowX: "auto" }}>
-                    <table style={{ borderCollapse: "collapse", width: "100%" }}>
-                      <colgroup><col style={{ width: 48 }} /><col /><col style={{ width: 80 }} /><col style={{ width: 110 }} /><col style={{ width: 130 }} /><col style={{ width: 30 }} /></colgroup>
+                    <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 620 }}>
+                      <colgroup><col style={{ width: 48 }} /><col style={{ width: 220 }} /><col style={{ width: 80 }} /><col style={{ width: 110 }} /><col style={{ width: 130 }} /><col style={{ width: 30 }} /></colgroup>
                       <thead><tr style={{ background: "#e65100" }}>
                         <th style={th({ background: "#bf360c", textAlign: "center" })}>#</th>
                         <th style={th({ background: "#e65100", textAlign: "center" })}>Nume Complet</th>
@@ -4560,8 +4560,8 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
               </div>
             </div>
             <div style={{ overflowX: "auto" }}>
-              <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 800 }}>
-                <colgroup><col style={{ width: 28 }} /><col style={{ width: 28 }} /><col style={{ width: 110 }} /><col style={{ width: 140 }} /><col style={{ width: 95 }} /><col style={{ width: 95 }} /><col style={{ width: 95 }} /><col style={{ width: 100 }} /><col style={{ width: 95 }} /><col /><col style={{ width: 30 }} /></colgroup>
+              <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 960 }}>
+                <colgroup><col style={{ width: 28 }} /><col style={{ width: 28 }} /><col style={{ width: 110 }} /><col style={{ width: 140 }} /><col style={{ width: 95 }} /><col style={{ width: 95 }} /><col style={{ width: 95 }} /><col style={{ width: 100 }} /><col style={{ width: 95 }} /><col style={{ width: 140 }} /><col style={{ width: 30 }} /></colgroup>
                 <thead><tr style={{ background: G }}>
                   <th style={th({ background: "#155a35" })}></th>
                   <th style={th({ background: "#155a35" })}></th>
