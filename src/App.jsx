@@ -5102,13 +5102,13 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
             <div style={{ background: "linear-gradient(135deg,#e8f5e9,#f0faf4)", border: "2px solid #a5d6a7", borderRadius: 10, padding: 16, marginBottom: 16 }}>
               <div style={{ fontWeight: 700, color: G, fontSize: 13, marginBottom: 12 }}>📅 Filtru perioadă (opțional)</div>
               <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
-                <div style={{ flex: "0 0 140px" }}>
+                <div style={{ flex: "0 0 160px" }}>
                   <label style={LSt}>Data început</label>
-                  <input style={IFS} value={rapDateStart} onChange={(e) => setRapDateStart(e.target.value)} placeholder="DD.MM.YYYY" />
+                  <DateInput value={rapDateStart} onChange={setRapDateStart} style={{ border: "1px solid #ccc", borderRadius: 4, padding: "4px 8px", background: "#fff", textAlign: "left" }} />
                 </div>
-                <div style={{ flex: "0 0 140px" }}>
+                <div style={{ flex: "0 0 160px" }}>
                   <label style={LSt}>Data sfârșit</label>
-                  <input style={IFS} value={rapDateEnd} onChange={(e) => setRapDateEnd(e.target.value)} placeholder="DD.MM.YYYY" />
+                  <DateInput value={rapDateEnd} onChange={setRapDateEnd} style={{ border: "1px solid #ccc", borderRadius: 4, padding: "4px 8px", background: "#fff", textAlign: "left" }} />
                 </div>
                 {(rapDateStart || rapDateEnd) && (
                   <button onClick={() => { setRapDateStart(""); setRapDateEnd(""); }} style={{ padding: "5px 12px", background: "#f5f5f5", border: "1px solid #ccc", borderRadius: 6, cursor: "pointer", fontSize: 12 }}>✕ Resetează</button>
