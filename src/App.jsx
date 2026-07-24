@@ -1090,7 +1090,7 @@ export default function App() {
 
   // Colectari
   const updCOL = mkUpd(colRows, setColRows, "colectari");
-  const delCOL = mkDel(setColRows, "colectari", "această colectare");
+  const delCOL = mkDel(setColRows, "colectari", "această achiziție");
   const addCOL = async () => {
     const row = { data: today(), agent: "", furn: "", nr_doc: "", cat: "Curte", produs: "", cant: 0, pret: 0, ach: "", ach_de: "" };
     const { data } = await sb.from("colectari").insert(row).select();
@@ -1099,7 +1099,7 @@ export default function App() {
 
   // Livrari
   const updLIV = mkUpd(livRows, setLivRows, "livrari");
-  const delLIV = mkDel(setLivRows, "livrari", "această livrare");
+  const delLIV = mkDel(setLivRows, "livrari", "această vânzare");
   const addLIV = async () => {
     const row = { data: today(), nr: "", client: "", produs: "", cant: 0, pret: 0, fact: "", inc: "", det: "" };
     const { data } = await sb.from("livrari").insert(row).select();
@@ -1826,6 +1826,7 @@ export default function App() {
   };
 
   const RAP_HEADERS = ["Serie borderou/PV", "NrBorderou/PV", "Data", "Furnizor", "Adresa", "CNP/CUI", "Denumire", "CodSAGA", "Cantitate", "PU", "CodFSaga", "Trasabilitate", "Nr NIR", "Denumire Deseu", "Impozit 10%", "Taxa Mediu 2%", "Valoare"];
+  const RAP_HEADERS_VANZARI = ["Nr. doc.", "Data", "Client", "Denumire", "CodSAGA", "Cantitate", "PU", "Valoare", "Facturat", "Încasat"];
 
   const buildPFRows = () => registru.filter(r => inRange(r.data)).map(r => {
     const cant = parseSuma(r.cantitate) || 0;
@@ -1859,6 +1860,16 @@ export default function App() {
     const codSaga = fd?.cod_art || "";
     const denSaga = fd?.den || r.produs || "";
     return [r.serie || "", r.nr_doc || "", r.data || "", r.furn || "", "", "", denSaga, codSaga, cant, pu, "", "", "", r.produs || "", imp, tax, v];
+  });
+
+  const buildLivRows = () => livRows.filter(r => r.nr && inRange(r.data)).map(r => {
+    const cant = parseSuma(r.cant) || 0;
+    const pu = parseSuma(r.pret) || 0;
+    const v = cant * pu;
+    const fd = produseList.find(p => p.den === r.produs);
+    const codSaga = fd?.cod_art || "";
+    const denSaga = fd?.den || r.produs || "";
+    return [r.nr || "", r.data || "", r.client || "", denSaga, codSaga, cant, pu, v, r.fact || "", r.inc || ""];
   });
 
   const loadXLSX = async () => {
@@ -1898,6 +1909,13 @@ export default function App() {
         ws["!cols"] = RAP_HEADERS.map(h => ({ wch: Math.max(12, h.length + 2) }));
         XLSX.utils.book_append_sheet(wb, ws, "Achiziții");
         if (type === "col") fileName = `raport_Achizitii_${today().replace(/\./g, "-")}.xlsx`;
+      }
+      if (type === "liv" || type === "all") {
+        const rows = buildLivRows();
+        const ws = XLSX.utils.aoa_to_sheet([RAP_HEADERS_VANZARI, ...rows]);
+        ws["!cols"] = RAP_HEADERS_VANZARI.map(h => ({ wch: Math.max(12, h.length + 2) }));
+        XLSX.utils.book_append_sheet(wb, ws, "Vânzări");
+        if (type === "liv") fileName = `raport_Vanzari_${today().replace(/\./g, "-")}.xlsx`;
       }
       if (type === "all") fileName = `raport_complet_${today().replace(/\./g, "-")}.xlsx`;
       XLSX.writeFile(wb, fileName);
@@ -4118,7 +4136,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                 <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={6} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(colFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0), 0))} kg</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(colFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0))}</td><td colSpan={4}></td></tr></tfoot>
               </table>
             </div>
-            <AddBtn onClick={addCOL} label="+ Adaugă colectare" />
+            <AddBtn onClick={addCOL} label="+ Adaugă achiziție" />
           </div>
           );
         })()}
@@ -4173,7 +4191,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                 <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={5} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(livFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0), 0))} kg</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(livFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0))}</td><td colSpan={4}></td></tr></tfoot>
               </table>
             </div>
-            <AddBtn onClick={addLIV} label="+ Adaugă livrare" />
+            <AddBtn onClick={addLIV} label="+ Adaugă vânzare" />
           </div>
           );
         })()}
@@ -5128,10 +5146,19 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
               </div>
 
               <div style={{ background: "#fff", border: "2px solid #6a1b9a", borderRadius: 10, padding: 16, textAlign: "center" }}>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>📤</div>
+                <div style={{ fontWeight: 700, color: "#6a1b9a", fontSize: 14, marginBottom: 4 }}>Vânzări</div>
+                <div style={{ fontSize: 11, color: "#666", marginBottom: 12 }}>Doar cele cu Nr. document<br/>{livRows.filter(r => r.nr).length} din {livRows.length} eligibile</div>
+                <button onClick={() => exportExcel("liv")} disabled={rapLoading || livRows.filter(r => r.nr).length === 0} style={{ width: "100%", padding: "10px", background: rapLoading ? "#ccc" : "#6a1b9a", color: "#fff", border: "none", borderRadius: 6, cursor: rapLoading ? "wait" : "pointer", fontSize: 13, fontWeight: 700 }}>
+                  {rapLoading ? "⏳ Generez..." : "📥 Descarcă Excel Vânzări"}
+                </button>
+              </div>
+
+              <div style={{ background: "#fff", border: "2px solid #455a64", borderRadius: 10, padding: 16, textAlign: "center" }}>
                 <div style={{ fontSize: 32, marginBottom: 8 }}>📊</div>
-                <div style={{ fontWeight: 700, color: "#6a1b9a", fontSize: 14, marginBottom: 4 }}>Raport Complet</div>
-                <div style={{ fontSize: 11, color: "#666", marginBottom: 12 }}>PF + PJ + Achiziții eligibile<br/>{registru.length + pvList.length + colRows.filter(r => r.nr_doc).length} înregistrări</div>
-                <button onClick={() => exportExcel("all")} disabled={rapLoading || (registru.length === 0 && pvList.length === 0 && colRows.filter(r => r.nr_doc).length === 0)} style={{ width: "100%", padding: "10px", background: rapLoading ? "#ccc" : "#6a1b9a", color: "#fff", border: "none", borderRadius: 6, cursor: rapLoading ? "wait" : "pointer", fontSize: 13, fontWeight: 700 }}>
+                <div style={{ fontWeight: 700, color: "#455a64", fontSize: 14, marginBottom: 4 }}>Raport Complet</div>
+                <div style={{ fontSize: 11, color: "#666", marginBottom: 12 }}>PF + PJ + Achiziții + Vânzări eligibile<br/>{registru.length + pvList.length + colRows.filter(r => r.nr_doc).length + livRows.filter(r => r.nr).length} înregistrări</div>
+                <button onClick={() => exportExcel("all")} disabled={rapLoading || (registru.length === 0 && pvList.length === 0 && colRows.filter(r => r.nr_doc).length === 0 && livRows.filter(r => r.nr).length === 0)} style={{ width: "100%", padding: "10px", background: rapLoading ? "#ccc" : "#455a64", color: "#fff", border: "none", borderRadius: 6, cursor: rapLoading ? "wait" : "pointer", fontSize: 13, fontWeight: 700 }}>
                   {rapLoading ? "⏳ Generez..." : "📥 Descarcă Excel Complet"}
                 </button>
               </div>
