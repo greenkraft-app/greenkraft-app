@@ -362,7 +362,12 @@ function ACStrict({ value, onChange, options, placeholder = "", style, strict = 
           if (!strict) return;
           const exact = findExact(q);
           if (exact) { if (exact !== q) setQ(exact); }
-          else setQ(value || ""); // strict + text invalid -> revenim silentios
+          else {
+            if (q.trim() && q !== (value || "")) {
+              alert("„" + q.trim() + "\" nu este înregistrat ca partener.\n\nAdaugă-l mai întâi în Variabile → Parteneri, apoi va apărea aici în sugestii.");
+            }
+            setQ(value || ""); // strict + text invalid -> revenim
+          }
         }}
       />
       <datalist id={idRef.current}>
