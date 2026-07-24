@@ -227,9 +227,12 @@ const fmt = (v, dec = 2) => {
   if (v === "" || v === null || v === undefined || isNaN(v)) return "";
   return Number(v).toLocaleString("ro-RO", { minimumFractionDigits: dec, maximumFractionDigits: dec });
 };
+// Acceptă atât "457,89" (virgulă = zecimale, ca în RO) cât și "457.89" (punct = zecimale) cât și "1.234,56" (punct = mii, virgulă = zecimale)
 const parseSuma = (s) => {
   if (!s) return 0;
-  return parseFloat(String(s).replace(/\./g, "").replace(",", ".")) || 0;
+  const str = String(s).trim();
+  if (str.includes(",")) return parseFloat(str.replace(/\./g, "").replace(",", ".")) || 0;
+  return parseFloat(str) || 0;
 };
 async function lookupAnaf(cui) {
   const clean = String(cui || "").replace(/\D/g, "");
@@ -286,8 +289,8 @@ function calcStoc(miscari = []) {
     const k = m.produs;
     if (!map[k]) map[k] = { produs: m.produs, cod: m.cod || "", cod_art: m.cod_art || "", cant: 0, val: 0, intrari: 0, iesiri: 0, data: m.data || "" };
     if (m.cod_art && !map[k].cod_art) map[k].cod_art = m.cod_art;
-    if (m.tip === "intrare") { map[k].val += (parseFloat(m.cant) || 0) * (parseFloat(m.pu) || 0); map[k].cant += parseFloat(m.cant) || 0; map[k].intrari += parseFloat(m.cant) || 0; }
-    else { map[k].cant -= parseFloat(m.cant) || 0; map[k].iesiri += parseFloat(m.cant) || 0; }
+    if (m.tip === "intrare") { map[k].val += (parseSuma(m.cant) || 0) * (parseSuma(m.pu) || 0); map[k].cant += parseSuma(m.cant) || 0; map[k].intrari += parseSuma(m.cant) || 0; }
+    else { map[k].cant -= parseSuma(m.cant) || 0; map[k].iesiri += parseSuma(m.cant) || 0; }
     if ((m.data || "") > (map[k].data || "")) map[k].data = m.data;
   });
   return Object.values(map).map((r) => ({ ...r, pm: r.intrari > 0 ? r.val / r.intrari : 0 }));
@@ -378,7 +381,7 @@ function ACStrict({ value, onChange, options, placeholder = "", style, strict = 
 }
 // ── Borderou Print ────────────────────────────────────────────
 function BordPrint({ b }) {
-  const tot = b.produse.reduce((s, p) => s + (parseFloat(p.cant) || 0) * (parseFloat(p.pret) || 0), 0);
+  const tot = b.produse.reduce((s, p) => s + (parseSuma(p.cant) || 0) * (parseSuma(p.pret) || 0), 0);
   const imp = Math.round(tot * 0.1), tax = Math.round(tot * 0.02), rest = tot - imp - tax;
   const tS = { width: "100%", borderCollapse: "collapse", margin: "8px 0", fontSize: 11 };
   const thP = (x = {}) => ({ border: "1px solid #000", padding: "4px 6px", fontWeight: "bold", textAlign: "center", background: "#f5f5f5", ...x });
@@ -402,7 +405,7 @@ function BordPrint({ b }) {
           <tr>{["1","2","","","","5=3x4"].map((h, i) => <td key={i} style={tdP({ fontSize: 10, background: "#f9f9f9" })}>{h}</td>)}</tr>
         </thead>
         <tbody>
-          {b.produse.map((p, i) => { const v = (parseFloat(p.cant) || 0) * (parseFloat(p.pret) || 0); return (<tr key={i}><td style={tdP({ textAlign: "left" })}>{p.den.toUpperCase()}</td><td style={tdP()}>{p.cod}</td><td style={tdP()}>KG</td><td style={tdP()}>{p.cant || ""}</td><td style={tdP()}>{p.pret || ""}</td><td style={tdP()}>{v > 0 ? fmt(v) : ""}</td></tr>); })}
+          {b.produse.map((p, i) => { const v = parseSuma(p.cant) * parseSuma(p.pret); return (<tr key={i}><td style={tdP({ textAlign: "left" })}>{p.den.toUpperCase()}</td><td style={tdP()}>{p.cod}</td><td style={tdP()}>KG</td><td style={tdP()}>{p.cant || ""}</td><td style={tdP()}>{p.pret || ""}</td><td style={tdP()}>{v > 0 ? fmt(v) : ""}</td></tr>); })}
           {Array(Math.max(0, 5 - b.produse.length)).fill(0).map((_, i) => <tr key={"e" + i}><td style={{ ...tdP(), height: 18 }} colSpan={6}>&nbsp;</td></tr>)}
         </tbody>
       </table>
@@ -628,21 +631,21 @@ export default function App() {
     // The weight follows a status keyword (ST/US/GS/NT)
     const stMatch = line.match(/\b(ST|US|GS|NT)\b[,\s]*([+-]?\s*\d+(?:[.,]\d+)?)/i);
     if (stMatch) {
-      const val = parseFloat(stMatch[2].replace(/\s+/g, "").replace(",", "."));
+      const val = parseSuma(stMatch[2].replace(/\s+/g, "").replace(",", "."));
       if (!isNaN(val)) return { value: val, stable, raw: line };
     }
 
     // METHOD 2: number followed by "kg"
     let m = line.match(/([+-]?\s*\d+(?:[.,]\d+)?)\s*kg/i);
     if (m) {
-      const val = parseFloat(m[1].replace(/\s+/g, "").replace(",", "."));
+      const val = parseSuma(m[1].replace(/\s+/g, "").replace(",", "."));
       if (!isNaN(val)) return { value: val, stable, raw: line };
     }
 
     // METHOD 3: any number with decimal
     m = line.match(/([+-]?\d+[.,]\d+)/);
     if (m) {
-      const val = parseFloat(m[1].replace(",", "."));
+      const val = parseSuma(m[1].replace(",", "."));
       if (!isNaN(val)) return { value: val, stable, raw: line };
     }
 
@@ -967,7 +970,7 @@ export default function App() {
   const updB = (f, v) => setB((b) => f === "serie" ? { ...b, serie: v, nr: getNextNr(v, registru) } : { ...b, [f]: v });
   const lastRegLen = useRef(0);
   const updP = (i, f, v) => setB((b) => { const ps = [...b.produse]; ps[i] = { ...ps[i], [f]: v }; if (f === "den") { const fd = produseList.find((p) => p.den === v); if (fd) { ps[i].cod = fd.cod; ps[i].cod_art = fd.cod_art; } } return { ...b, produse: ps }; });
-  const bTot = b.produse.reduce((s, p) => s + (parseFloat(p.cant) || 0) * (parseFloat(p.pret) || 0), 0);
+  const bTot = b.produse.reduce((s, p) => s + (parseSuma(p.cant) || 0) * (parseSuma(p.pret) || 0), 0);
   const bImp = Math.round(bTot * 0.1), bTax = Math.round(bTot * 0.02), bRest = bTot - bImp - bTax;
 
   // ── Supabase-backed data ──────────────────────────────────
@@ -1239,9 +1242,9 @@ export default function App() {
     if (!pr.length) { alert("Completați cel puțin un produs!"); return; }
     if (registru.some(x => x.serie === b.serie && String(x.nr) === String(b.nr))) { alert(`⚠️ Borderou ${b.serie} ${b.nr} există deja în Registru!`); return; }
     const newEntries = pr.map((p) => {
-      const v = (parseFloat(p.cant) || 0) * (parseFloat(p.pret) || 0);
+      const v = (parseSuma(p.cant) || 0) * (parseSuma(p.pret) || 0);
       const imp = Math.round(v * 0.1), tx = Math.round(v * 0.02);
-      return { serie: b.serie, nr: b.nr, data: b.data, furnizor: b.det, adresa: b.dom, cnp: b.cnp, denumire: p.den.toUpperCase(), cantitate: parseFloat(p.cant) || 0, pu: parseFloat(p.pret) || 0, valoare: Math.round(v - imp - tx) };
+      return { serie: b.serie, nr: b.nr, data: b.data, furnizor: b.det, adresa: b.dom, cnp: b.cnp, denumire: p.den.toUpperCase(), cantitate: parseSuma(p.cant) || 0, pu: parseSuma(p.pret) || 0, valoare: Math.round(v - imp - tx) };
     });
     const { data: ins, error } = await sb.from("registru").insert(newEntries).select();
     if (error) { alert("❌ Eroare salvare Borderou: " + error.message); return; }
@@ -1271,8 +1274,8 @@ export default function App() {
   const salveazaTichet1 = async () => {
     if (!ticNou.partener) { alert("Completați furnizorul (cine aduce marfa)!"); return; }
     if (!ticNou.nr_masina) { alert("Completați nr. de înmatriculare!"); return; }
-    if (!ticNou.greutate || parseFloat(ticNou.greutate) <= 0) { alert("Completați greutatea primei cântăriri!"); return; }
-    const g = parseFloat(ticNou.greutate) || 0;
+    if (!ticNou.greutate || parseSuma(ticNou.greutate) <= 0) { alert("Completați greutatea primei cântăriri!"); return; }
+    const g = parseSuma(ticNou.greutate);
     const ePlin = ticNou.prima === "plin";
     const ts = timestampAcum();
     const row = {
@@ -1313,17 +1316,17 @@ export default function App() {
     setTicSubTab("deschise");
   };
   const inchideTichet = async (t) => {
-    const v = parseFloat(ticTaraInput[t.id]);
+    const v = parseSuma(ticTaraInput[t.id]);
     if (!v || v <= 0) { alert("Introduceți greutatea celei de-a doua cântăriri!"); return; }
     const areBrut = t.brut != null && t.brut !== "";
     const ts = timestampAcum();
     let brutV, taraV, upd;
     if (areBrut) {
-      brutV = parseFloat(t.brut) || 0; taraV = v;
+      brutV = parseSuma(t.brut); taraV = v;
       if (taraV >= brutV) { alert(`TARA (${taraV} kg) trebuie să fie mai mică decât BRUT (${brutV} kg)!`); return; }
       upd = { tara: taraV, tara_la: ts };
     } else {
-      taraV = parseFloat(t.tara) || 0; brutV = v;
+      taraV = parseSuma(t.tara); brutV = v;
       if (brutV <= taraV) { alert(`BRUT (${brutV} kg) trebuie să fie mai mare decât TARA (${taraV} kg)!`); return; }
       upd = { brut: brutV, brut_la: ts };
     }
@@ -1373,8 +1376,8 @@ export default function App() {
     logAction("Ștergere", "Tichet cântar", t.serie + " " + t.nr_tichet, `${t.partener}`);
   };
   const salveazaTicEdit = async () => {
-    const brutV = parseFloat(ticEdit.brut);
-    const taraV = parseFloat(ticEdit.tara);
+    const brutV = parseSuma(ticEdit.brut);
+    const taraV = parseSuma(ticEdit.tara);
     if (!ticEdit.partener) { alert("Furnizorul nu poate fi gol!"); return; }
     if (!brutV || brutV <= 0) { alert("Brut trebuie să fie un număr pozitiv!"); return; }
     if (!taraV || taraV <= 0) { alert("Tara trebuie să fie un număr pozitiv!"); return; }
@@ -1583,8 +1586,8 @@ export default function App() {
     const tipice = f.mat_tipice || [];
     const materialeAuto = tipice.length > 0
       ? tipice.map((t) => {
-          const minV = parseFloat(t.min_kg) || 0;
-          const maxV = parseFloat(t.max_kg) || 0;
+          const minV = parseSuma(t.min_kg) || 0;
+          const maxV = parseSuma(t.max_kg) || 0;
           const cant = minV >= maxV ? (minV || "") : Math.round(minV + Math.random() * (maxV - minV));
           return { den: t.den || "", cod: "", cod_art: t.cod_art || "", cant: cant ? String(cant) : "" };
         })
@@ -1647,7 +1650,7 @@ export default function App() {
       delegat_nume: tr.delegat_nume || "", delegat_ci: tr.delegat_ci || "", delegat_auto: tr.delegat_auto || "",
       licenta: tr.licenta || "", licenta_expira: tr.licenta_expira || "",
       data_incarcare: a3Nou.data_incarcare, categorie: a3Nou.categorie,
-      kilograme: kgCunoscut ? parseFloat(a3Nou.kilograme) || 0 : null,
+      kilograme: kgCunoscut ? parseSuma(a3Nou.kilograme) : null,
       expeditor: a3Nou.expeditor, expeditor_cui: exp.cui || "", expeditor_adresa: exp.adresa || "",
       expeditor_aut_mediu: exp.aut_mediu || "", expeditor_aut_revizuita: exp.aut_mediu_revizuita || "", expeditor_aut_expira: exp.aut_mediu_expira || "",
       data_descarcare: a3Nou.data_descarcare,
@@ -1664,7 +1667,7 @@ export default function App() {
     setA3SubTab(kgCunoscut ? "registru" : "asteptare");
   };
   const completeazaA3Kg = async (a3) => {
-    const v = parseFloat(a3KgInput[a3.id]);
+    const v = parseSuma(a3KgInput[a3.id]);
     if (!v || v <= 0) { alert("Introduceți greutatea!"); return; }
     const { error } = await sb.from("anexa3").update({ kilograme: v }).eq("id", a3.id);
     if (error) { alert("Eroare: " + error.message); return; }
@@ -1825,15 +1828,15 @@ export default function App() {
   const RAP_HEADERS = ["Serie borderou/PV", "NrBorderou/PV", "Data", "Furnizor", "Adresa", "CNP/CUI", "Denumire", "CodSAGA", "Cantitate", "PU", "CodFSaga", "Trasabilitate", "Nr NIR", "Denumire Deseu", "Impozit 10%", "Taxa Mediu 2%", "Valoare"];
 
   const buildPFRows = () => registru.filter(r => inRange(r.data)).map(r => {
-    const cant = parseFloat(r.cantitate) || 0;
-    const pu = parseFloat(r.pu) || 0;
+    const cant = parseSuma(r.cantitate) || 0;
+    const pu = parseSuma(r.pu) || 0;
     const v = cant * pu;
     const imp = Math.round(v * 0.1);
     const tax = Math.round(v * 0.02);
     const fd = produseList.find(p => p.den === r.denumire || p.den.toUpperCase() === r.denumire);
     const codSaga = fd?.cod_art || "";
     const denSaga = fd?.den || r.denumire || "";
-    return [r.serie || "", r.nr || "", r.data || "", r.furnizor || "", r.adresa || "", r.cnp || "", denSaga, codSaga, cant, pu, "", "", "", r.denumire || "", imp, tax, parseFloat(r.valoare) || 0];
+    return [r.serie || "", r.nr || "", r.data || "", r.furnizor || "", r.adresa || "", r.cnp || "", denSaga, codSaga, cant, pu, "", "", "", r.denumire || "", imp, tax, parseSuma(r.valoare) || 0];
   });
 
   const buildPJRows = () => pvList.filter(p => inRange(p.data)).flatMap(p => {
@@ -1842,13 +1845,13 @@ export default function App() {
       const fd = produseList.find(x => x.den === m.den);
       const codSaga = m.cod_art || fd?.cod_art || "";
       const denSaga = fd?.den || m.den || "";
-      return [p.serie || "", p.nr_pv || "", p.data || "", p.client_denumire || "", p.client_adresa || "", p.client_cui || "", denSaga, codSaga, parseFloat(m.cant) || 0, "", "", "", "", m.den || "", "", "", ""];
+      return [p.serie || "", p.nr_pv || "", p.data || "", p.client_denumire || "", p.client_adresa || "", p.client_cui || "", denSaga, codSaga, parseSuma(m.cant) || 0, "", "", "", "", m.den || "", "", "", ""];
     });
   });
 
   const buildColRows = () => colRows.filter(r => r.nr_doc && inRange(r.data)).map(r => {
-    const cant = parseFloat(r.cant) || 0;
-    const pu = parseFloat(r.pret) || 0;
+    const cant = parseSuma(r.cant) || 0;
+    const pu = parseSuma(r.pret) || 0;
     const v = cant * pu;
     const imp = Math.round(v * 0.1);
     const tax = Math.round(v * 0.02);
@@ -2126,7 +2129,7 @@ export default function App() {
               den: fd?.den || denStr,
               cod: row["Material Cod HG"] || fd?.cod || "",
               cod_art: row["Material Cod SAGA"] || fd?.cod_art || "",
-              cant: parseFloat(String(row["Material Cantitate (kg)"]).replace(/,/g, ".")) || 0,
+              cant: parseSuma(String(row["Material Cantitate (kg)"]).replace(/,/g, ".")) || 0,
             });
           }
         }
@@ -2149,7 +2152,7 @@ export default function App() {
             if (col.field === "data") {
               val = toDateRO(val);
             } else if (col.type === "number") {
-              val = parseFloat(String(val).replace(/,/g, ".")) || 0;
+              val = parseSuma(String(val).replace(/,/g, ".")) || 0;
             } else {
               val = String(val).trim();
             }
@@ -2160,8 +2163,8 @@ export default function App() {
 
           // ── AUTO-CALCULATE VALOARE for Registru PF ──
           if (key === "registru_pf") {
-            const cant = parseFloat(record.cantitate) || 0;
-            const pu = parseFloat(record.pu) || 0;
+            const cant = parseSuma(record.cantitate) || 0;
+            const pu = parseSuma(record.pu) || 0;
             const v = cant * pu;
             const imp = Math.round(v * 0.1);
             const tx = Math.round(v * 0.02);
@@ -2194,7 +2197,7 @@ export default function App() {
     const pfEntries = registru.map(r => ({
       type: "PF", id: r.id, refId: r.id, serie: r.serie, nr: r.nr, data: r.data,
       furnizor: r.furnizor || "", cui_cnp: r.cnp || "", denumire: r.denumire || "",
-      cant: parseFloat(r.cantitate) || 0, trasabilitate: r.trasabilitate || ""
+      cant: parseSuma(r.cantitate) || 0, trasabilitate: r.trasabilitate || ""
     }));
     const pjEntries = pvList.flatMap(p => {
       const mats = (p.materiale || []).filter(m => m.den);
@@ -2202,7 +2205,7 @@ export default function App() {
         type: "PJ", id: `${p.id}__${mi}`, refId: p.id, matIndex: mi,
         serie: p.serie, nr: p.nr_pv, data: p.data,
         furnizor: p.client_denumire || "", cui_cnp: p.client_cui || "", denumire: m.den || "",
-        cant: parseFloat(m.cant) || 0, trasabilitate: p.trasabilitate || ""
+        cant: parseSuma(m.cant) || 0, trasabilitate: p.trasabilitate || ""
       }));
     });
     return [...pfEntries, ...pjEntries];
@@ -2622,9 +2625,9 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
   // Stoc computed
   const getMiscari = () => {
     const r = [];
-    colRows.forEach((x, i) => { if (!x.produs || !x.cant) return; const fd = produseList.find((p) => p.den === x.produs); r.push({ id: `col-${i}`, data: x.data, tip: "intrare", produs: x.produs, cod: fd?.cod || "", cod_art: fd?.cod_art || "", cant: parseFloat(x.cant) || 0, pu: parseFloat(x.pret) || 0, sursa: `Colectare${x.agent ? " - " + x.agent : ""}` }); });
-    registru.forEach((x, i) => { if (!x.denumire || !x.cantitate) return; const fd = produseList.find((p) => p.den === x.denumire || p.den.toUpperCase() === x.denumire); r.push({ id: `bord-${i}`, data: x.data, tip: "intrare", produs: x.denumire, cod: fd?.cod || "", cod_art: fd?.cod_art || "", cant: parseFloat(x.cantitate) || 0, pu: parseFloat(x.pu) || 0, sursa: `Borderou ${x.serie} ${x.nr} - ${x.furnizor}` }); });
-    livRows.forEach((x, i) => { if (!x.produs || !x.cant) return; const fd = produseList.find((p) => p.den === x.produs); r.push({ id: `liv-${i}`, data: x.data, tip: "iesire", produs: x.produs, cod: fd?.cod || "", cod_art: fd?.cod_art || "", cant: parseFloat(x.cant) || 0, pu: parseFloat(x.pret) || 0, sursa: `Livrare ${x.client || ""} ${x.nr ? "nr." + x.nr : ""}`.trim() }); });
+    colRows.forEach((x, i) => { if (!x.produs || !x.cant) return; const fd = produseList.find((p) => p.den === x.produs); r.push({ id: `col-${i}`, data: x.data, tip: "intrare", produs: x.produs, cod: fd?.cod || "", cod_art: fd?.cod_art || "", cant: parseSuma(x.cant) || 0, pu: parseSuma(x.pret) || 0, sursa: `Colectare${x.agent ? " - " + x.agent : ""}` }); });
+    registru.forEach((x, i) => { if (!x.denumire || !x.cantitate) return; const fd = produseList.find((p) => p.den === x.denumire || p.den.toUpperCase() === x.denumire); r.push({ id: `bord-${i}`, data: x.data, tip: "intrare", produs: x.denumire, cod: fd?.cod || "", cod_art: fd?.cod_art || "", cant: parseSuma(x.cantitate) || 0, pu: parseSuma(x.pu) || 0, sursa: `Borderou ${x.serie} ${x.nr} - ${x.furnizor}` }); });
+    livRows.forEach((x, i) => { if (!x.produs || !x.cant) return; const fd = produseList.find((p) => p.den === x.produs); r.push({ id: `liv-${i}`, data: x.data, tip: "iesire", produs: x.produs, cod: fd?.cod || "", cod_art: fd?.cod_art || "", cant: parseSuma(x.cant) || 0, pu: parseSuma(x.pret) || 0, sursa: `Livrare ${x.client || ""} ${x.nr ? "nr." + x.nr : ""}`.trim() }); });
     manMisc.forEach((m) => r.push(m));
     return r;
   };
@@ -2635,8 +2638,8 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
   const totStocKg = stocAg.reduce((s, r) => s + Math.max(0, r.cant), 0);
 
   // Calculator
-  const updCost = (v) => { const c = parseFloat(v) || 0; setCostAl(v); setCalRows((p) => p.map((r) => calcRow(r, c))); };
-  const updCal = (i, f, v) => setCalRows((p) => { const n = [...p]; const u = { ...n[i], [f]: v }; const pa = parseFloat(u.pa) || 0, pv = parseFloat(u.pv) || 0, cost = parseFloat(u.cost) || 0; u.marja = pv && pa ? +(pv - pa).toFixed(4) : 0; u.cant = u.marja > 0 ? +(cost / u.marja).toFixed(2) : 0; n[i] = u; return n; });
+  const updCost = (v) => { const c = parseSuma(v) || 0; setCostAl(v); setCalRows((p) => p.map((r) => calcRow(r, c))); };
+  const updCal = (i, f, v) => setCalRows((p) => { const n = [...p]; const u = { ...n[i], [f]: v }; const pa = parseSuma(u.pa) || 0, pv = parseSuma(u.pv) || 0, cost = parseSuma(u.cost) || 0; u.marja = pv && pa ? +(pv - pa).toFixed(4) : 0; u.cant = u.marja > 0 ? +(cost / u.marja).toFixed(2) : 0; n[i] = u; return n; });
 
   // Datorii computed
   const numeUnici = [...new Set(datRows.map((r) => r.nume))];
@@ -2919,7 +2922,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                         <td style={{ padding: "4px 6px" }}>
                           <input
                             style={{ width: "100%", padding: "4px 6px", border: "1px solid #a5d6a7", borderRadius: 4, fontSize: 12, textAlign: "center", background: "#f1f8e9", boxSizing: "border-box" }}
-                            type="number" min="0"
+                            type="text" inputMode="decimal"
                             value={it.min_kg || ""}
                             onChange={(e) => { const nou = [...matTipiceModal.items]; nou[ai] = { ...nou[ai], min_kg: e.target.value }; setMatTipiceModal(p => ({ ...p, items: nou })); }}
                             placeholder="0"
@@ -2928,7 +2931,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                         <td style={{ padding: "4px 6px" }}>
                           <input
                             style={{ width: "100%", padding: "4px 6px", border: "1px solid #ef9a9a", borderRadius: 4, fontSize: 12, textAlign: "center", background: "#fce4ec", boxSizing: "border-box" }}
-                            type="number" min="0"
+                            type="text" inputMode="decimal"
                             value={it.max_kg || ""}
                             onChange={(e) => { const nou = [...matTipiceModal.items]; nou[ai] = { ...nou[ai], max_kg: e.target.value }; setMatTipiceModal(p => ({ ...p, items: nou })); }}
                             placeholder="0"
@@ -2952,7 +2955,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
               <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={() => setMatTipiceModal(null)} style={{ padding: "6px 16px", border: "1px solid #ccc", borderRadius: 6, background: "#fff", cursor: "pointer", fontSize: 13 }}>Anulează</button>
                 <button onClick={() => {
-                  const curate = matTipiceModal.items.filter(i => i.den).map(i => ({ den: i.den, cod_art: i.cod_art || "", min_kg: parseFloat(i.min_kg) || 0, max_kg: parseFloat(i.max_kg) || 0 }));
+                  const curate = matTipiceModal.items.filter(i => i.den).map(i => ({ den: i.den, cod_art: i.cod_art || "", min_kg: parseSuma(i.min_kg) || 0, max_kg: parseSuma(i.max_kg) || 0 }));
                   updPJ(matTipiceModal.idx, "mat_tipice", curate);
                   setMatTipiceModal(null);
                 }} style={{ padding: "6px 20px", border: "none", borderRadius: 6, background: "#e65100", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 700 }}>✔ Salvează</button>
@@ -3016,12 +3019,12 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
               </div>
               <div><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Material / Deșeu</label><div style={{ border: "1px solid #ccc", borderRadius: 5, padding: "2px 4px" }}><ACStrict value={ticEdit.material} options={PRODUSE_DYN} placeholder="Selectează..." style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, boxSizing: "border-box" }} onChange={(v) => setTicEdit((p) => ({ ...p, material: v }))} /></div></div>
               <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-                <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 700, color: G }}>Brut (kg)</label><input style={{ width: "100%", padding: "7px 8px", border: `1.5px solid ${G}`, borderRadius: 5, fontSize: 14, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="number" value={ticEdit.brut} onChange={(e) => setTicEdit((p) => ({ ...p, brut: e.target.value }))} /></div>
-                <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 700, color: "#e65100" }}>Tara (kg)</label><input style={{ width: "100%", padding: "7px 8px", border: "1.5px solid #ffa726", borderRadius: 5, fontSize: 14, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="number" value={ticEdit.tara} onChange={(e) => setTicEdit((p) => ({ ...p, tara: e.target.value }))} /></div>
+                <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 700, color: G }}>Brut (kg)</label><input style={{ width: "100%", padding: "7px 8px", border: `1.5px solid ${G}`, borderRadius: 5, fontSize: 14, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="text" inputMode="decimal" value={ticEdit.brut} onChange={(e) => setTicEdit((p) => ({ ...p, brut: e.target.value }))} /></div>
+                <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 700, color: "#e65100" }}>Tara (kg)</label><input style={{ width: "100%", padding: "7px 8px", border: "1.5px solid #ffa726", borderRadius: 5, fontSize: 14, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="text" inputMode="decimal" value={ticEdit.tara} onChange={(e) => setTicEdit((p) => ({ ...p, tara: e.target.value }))} /></div>
                 <div style={{ flex: 1, textAlign: "center", background: "#eef7f0", border: `1.5px solid ${G}`, borderRadius: 5, padding: "5px 4px" }}>
                   <div style={{ fontSize: 10, color: "#777" }}>NET (auto)</div>
                   {(() => {
-                    const b = parseFloat(ticEdit.brut), tr = parseFloat(ticEdit.tara);
+                    const b = parseSuma(ticEdit.brut), tr = parseSuma(ticEdit.tara);
                     if (!b || !tr) return <div style={{ fontSize: 14, fontWeight: 700, color: "#bbb" }}>—</div>;
                     if (b <= tr) return <div style={{ fontSize: 11, fontWeight: 700, color: "#c62828" }}>Brut ≤ Tara!</div>;
                     return <div style={{ fontSize: 15, fontWeight: 700, color: G, fontFamily: "monospace" }}>{fmt(Math.round((b - tr) * 100) / 100)}</div>;
@@ -3083,22 +3086,22 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
 
           // BORDEROURI luna curentă
           const bordCountMonth = new Set(bordMonth.map(r => `${r.serie}__${r.nr}`)).size; // unique borderouri
-          const bordKgMonth = bordMonth.reduce((s, r) => s + (parseFloat(r.cantitate) || 0), 0);
-          const bordValMonth = bordMonth.reduce((s, r) => s + (parseFloat(r.cantitate) || 0) * (parseFloat(r.pu) || 0), 0);
+          const bordKgMonth = bordMonth.reduce((s, r) => s + (parseSuma(r.cantitate) || 0), 0);
+          const bordValMonth = bordMonth.reduce((s, r) => s + (parseSuma(r.cantitate) || 0) * (parseSuma(r.pu) || 0), 0);
 
           // PV luna curentă
-          const pvKgMonth = pvMonth.reduce((s, p) => s + (p.materiale || []).reduce((ss, m) => ss + (parseFloat(m.cant) || 0), 0), 0);
+          const pvKgMonth = pvMonth.reduce((s, p) => s + (p.materiale || []).reduce((ss, m) => ss + (parseSuma(m.cant) || 0), 0), 0);
 
           // COLECTARI luna curentă
-          const colValMonth = colMonth.reduce((s, r) => s + (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0), 0);
-          const colValAchitat = colMonth.filter(r => r.ach === "Da").reduce((s, r) => s + (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0), 0);
-          const colValNeachitat = colMonth.filter(r => r.ach === "Nu").reduce((s, r) => s + (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0), 0);
+          const colValMonth = colMonth.reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0);
+          const colValAchitat = colMonth.filter(r => r.ach === "Da").reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0);
+          const colValNeachitat = colMonth.filter(r => r.ach === "Nu").reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0);
 
           // LIVRARI luna curentă
-          const livValMonth = livMonth.reduce((s, r) => s + (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0), 0);
+          const livValMonth = livMonth.reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0);
 
           // CHELTUIELI luna curentă
-          const chTotalMonth = chMonth.reduce((s, c) => s + (parseFloat(c.suma) || 0), 0);
+          const chTotalMonth = chMonth.reduce((s, c) => s + (parseSuma(c.suma) || 0), 0);
 
           // SITUATIE LUNA = Vânzări - (Achiziții + Cheltuieli)
           const profitMonth = livValMonth - colValMonth - chTotalMonth;
@@ -3407,7 +3410,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                         <div style={{ fontWeight: 700, color: "#e65100", marginBottom: 8, fontSize: 12 }}>📦 Produse / Deșeuri</div>
                         <table style={{ borderCollapse: "collapse", width: "100%" }}>
                           <thead><tr><th style={th({ background: "#e65100", minWidth: 170 })}>Denumire</th><th style={th({ width: 85, background: "#e65100" })}>CodSAGA</th><th style={th({ width: 96, background: "#e65100" })}>Cant.(kg)</th><th style={th({ width: 68, background: "#e65100" })}>Preț</th><th style={th({ width: 72, background: "#e65100" })}>Valoare</th><th style={th({ width: 26, background: "#e65100" })}></th></tr></thead>
-                          <tbody>{b.produse.map((p, i) => { const v = (parseFloat(p.cant) || 0) * (parseFloat(p.pret) || 0); return (<tr key={i} style={{ background: i % 2 === 0 ? "#fff" : "#fffde7" }}><td style={td()}><ACStrict value={p.den} options={PRODUSE_DYN} placeholder="Selectează..." onChange={(v) => updP(i, "den", v)} /></td><td style={td()}><input style={inp({ textAlign: "center" })} value={p.cod_art || ""} onChange={(e) => updP(i, "cod_art", e.target.value)} /></td><td style={td()}><div style={{ display: "flex", gap: 2, alignItems: "center" }}><input style={inpNum({ textAlign: "right", minWidth: 34 })} type="number" value={p.cant} onChange={(e) => updP(i, "cant", e.target.value)} />{scalePort && <button onClick={() => useScaleWeight(v => updP(i, "cant", v))} title="Citește din cantar" style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 3, padding: "1px 3px", cursor: "pointer", fontSize: 10, flexShrink: 0 }}>⚖️</button>}</div></td><td style={td()}><input style={inpNum({ textAlign: "right" })} type="number" value={p.pret} onChange={(e) => updP(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", fontWeight: 600, background: "#fff8e1" })}>{v > 0 ? fmt(v) : "—"}</td><td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => setB((b) => ({ ...b, produse: b.produse.filter((_, j) => j !== i) }))} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                          <tbody>{b.produse.map((p, i) => { const v = parseSuma(p.cant) * parseSuma(p.pret); return (<tr key={i} style={{ background: i % 2 === 0 ? "#fff" : "#fffde7" }}><td style={td()}><ACStrict value={p.den} options={PRODUSE_DYN} placeholder="Selectează..." onChange={(v) => updP(i, "den", v)} /></td><td style={td()}><input style={inp({ textAlign: "center" })} value={p.cod_art || ""} onChange={(e) => updP(i, "cod_art", e.target.value)} /></td><td style={td()}><div style={{ display: "flex", gap: 2, alignItems: "center" }}><input style={inpNum({ textAlign: "right", minWidth: 34 })} type="text" inputMode="decimal" value={p.cant} onChange={(e) => updP(i, "cant", e.target.value)} />{scalePort && <button onClick={() => useScaleWeight(v => updP(i, "cant", v))} title="Citește din cantar" style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 3, padding: "1px 3px", cursor: "pointer", fontSize: 10, flexShrink: 0 }}>⚖️</button>}</div></td><td style={td()}><input style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={p.pret} onChange={(e) => updP(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", fontWeight: 600, background: "#fff8e1" })}>{v > 0 ? fmt(v) : "—"}</td><td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => setB((b) => ({ ...b, produse: b.produse.filter((_, j) => j !== i) }))} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
                         </table>
                         <button onClick={() => setB((b) => ({ ...b, produse: [...b.produse, { den: "", cod: "", cod_art: "", cant: "", pret: "" }] }))} style={{ marginTop: 6, background: "#e65100", color: "#fff", border: "none", borderRadius: 4, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Adaugă produs</button>
                       </div>
@@ -3437,8 +3440,8 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
               <div>
                 <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
                   <SC label="Total" value={filteredReg.length + " / " + registru.length + " buc."} c={G} bg="#e8f5e9" />
-                  <SC label="Cant." value={fmt(filteredReg.reduce((s, r) => s + (parseFloat(r.cantitate) || 0), 0)) + " kg"} c="#1565c0" bg="#e3f2fd" />
-                  <SC label="Valoare" value={fmt(filteredReg.reduce((s, r) => s + (parseFloat(r.valoare) || 0), 0)) + " lei"} c="#6a1b9a" bg="#f3e5f5" />
+                  <SC label="Cant." value={fmt(filteredReg.reduce((s, r) => s + (parseSuma(r.cantitate) || 0), 0)) + " kg"} c="#1565c0" bg="#e3f2fd" />
+                  <SC label="Valoare" value={fmt(filteredReg.reduce((s, r) => s + (parseSuma(r.valoare) || 0), 0)) + " lei"} c="#6a1b9a" bg="#f3e5f5" />
                   <button onClick={() => setBordSubTab("editor")} style={{ marginLeft: "auto", padding: "6px 14px", background: G, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Borderou nou</button>
                 </div>
                 <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
@@ -3477,7 +3480,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                         </tr>
                       );
                     })}</tbody>
-                    <tfoot><tr style={{ background: G, color: "#fff" }}><td></td><td colSpan={6} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(filteredReg.reduce((s, r) => s + (parseFloat(r.cantitate) || 0), 0))}</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(filteredReg.reduce((s, r) => s + (parseFloat(r.valoare) || 0), 0))}</td><td></td><td></td></tr></tfoot>
+                    <tfoot><tr style={{ background: G, color: "#fff" }}><td></td><td colSpan={6} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(filteredReg.reduce((s, r) => s + (parseSuma(r.cantitate) || 0), 0))}</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(filteredReg.reduce((s, r) => s + (parseSuma(r.valoare) || 0), 0))}</td><td></td><td></td></tr></tfoot>
                   </table>
                 </div>
               </div>
@@ -3608,8 +3611,8 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                               <button onClick={() => {
                                 const tipice = selC.mat_tipice || [];
                                 const materialeNoi = tipice.map((t) => {
-                                  const minV = parseFloat(t.min_kg) || 0;
-                                  const maxV = parseFloat(t.max_kg) || 0;
+                                  const minV = parseSuma(t.min_kg) || 0;
+                                  const maxV = parseSuma(t.max_kg) || 0;
                                   const cant = minV >= maxV ? (minV || "") : Math.round(minV + Math.random() * (maxV - minV));
                                   return { den: t.den || "", cod: "", cod_art: t.cod_art || "", cant: cant ? String(cant) : "" };
                                 });
@@ -3624,7 +3627,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                             <tr key={i} style={{ background: i % 2 === 0 ? "#fff" : "#fffde7" }}>
                               <td style={td()}><ACStrict value={m.den} options={PRODUSE_DYN} placeholder="Selectează..." onChange={(v) => updPVMat(i, "den", v)} /></td>
                               <td style={td()}><input style={inp({ textAlign: "center" })} value={m.cod_art || ""} onChange={(e) => updPVMat(i, "cod_art", e.target.value)} /></td>
-                              <td style={td()}><div style={{ display: "flex", gap: 2, alignItems: "center" }}><input style={inpNum({ textAlign: "right", minWidth: 34 })} type="number" value={m.cant} onChange={(e) => updPVMat(i, "cant", e.target.value)} />{scalePort && <button onClick={() => useScaleWeight(v => updPVMat(i, "cant", v))} title="Citește din cantar" style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 3, padding: "1px 3px", cursor: "pointer", fontSize: 10, flexShrink: 0 }}>⚖️</button>}</div></td>
+                              <td style={td()}><div style={{ display: "flex", gap: 2, alignItems: "center" }}><input style={inpNum({ textAlign: "right", minWidth: 34 })} type="text" inputMode="decimal" value={m.cant} onChange={(e) => updPVMat(i, "cant", e.target.value)} />{scalePort && <button onClick={() => useScaleWeight(v => updPVMat(i, "cant", v))} title="Citește din cantar" style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 3, padding: "1px 3px", cursor: "pointer", fontSize: 10, flexShrink: 0 }}>⚖️</button>}</div></td>
                               <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => setPV((p) => ({ ...p, materiale: p.materiale.filter((_, j) => j !== i) }))} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
                             </tr>
                           ))}</tbody>
@@ -3654,7 +3657,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                 }
                 return true;
               });
-              const totKgFilt = filteredPV.reduce((s, p) => s + (p.materiale || []).reduce((ss, m) => ss + (parseFloat(m.cant) || 0), 0), 0);
+              const totKgFilt = filteredPV.reduce((s, p) => s + (p.materiale || []).reduce((ss, m) => ss + (parseSuma(m.cant) || 0), 0), 0);
               return (
               <div>
                 <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
@@ -3767,7 +3770,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                 if (a3Filter) { const q = a3Filter.toLowerCase(); if (!(x.transportator?.toLowerCase().includes(q) || x.expeditor?.toLowerCase().includes(q) || x.destinatar?.toLowerCase().includes(q) || x.categorie?.toLowerCase().includes(q) || String(x.numar).includes(q))) return false; }
                 return true;
               });
-              const totKg = a3Filtrate.reduce((s, x) => s + (parseFloat(x.kilograme) || 0), 0);
+              const totKg = a3Filtrate.reduce((s, x) => s + (parseSuma(x.kilograme) || 0), 0);
               const FL = { fontSize: 11, fontWeight: 600, color: "#555", display: "block", marginBottom: 2 };
               const FI = { width: "100%", padding: "7px 9px", border: "1px solid #d5d5d5", borderRadius: 6, fontSize: 13, boxSizing: "border-box" };
               const ACB = { border: "1px solid #d5d5d5", borderRadius: 6, padding: "3px 4px", background: "#fff" };
@@ -3856,7 +3859,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                           </div>
                           {a3Nou.kg_cunoscut ? (
                             <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-                              <input style={{ flex: 1, padding: "12px", border: "2px solid #6a1b9a", borderRadius: 8, fontSize: 22, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="number" value={a3Nou.kilograme} onChange={(e) => setA3Nou((p) => ({ ...p, kilograme: e.target.value }))} placeholder="0" />
+                              <input style={{ flex: 1, padding: "12px", border: "2px solid #6a1b9a", borderRadius: 8, fontSize: 22, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="text" inputMode="decimal" value={a3Nou.kilograme} onChange={(e) => setA3Nou((p) => ({ ...p, kilograme: e.target.value }))} placeholder="0" />
                               <span style={{ alignSelf: "center", fontSize: 13, color: "#888" }}>kg</span>
                             </div>
                           ) : (
@@ -3884,7 +3887,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                             <div style={{ fontSize: 11, color: "#777", marginBottom: 2 }}>📤 {a3.expeditor} → 📥 {a3.destinatar}</div>
                             <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{a3.categorie}</div>
                             <div style={{ display: "flex", gap: 6 }}>
-                              <input style={{ flex: 1, padding: "7px", border: "1.5px solid #ffa726", borderRadius: 6, fontSize: 14, fontWeight: 700, textAlign: "right", fontFamily: "monospace", boxSizing: "border-box" }} type="number" value={a3KgInput[a3.id] || ""} onChange={(e) => setA3KgInput((p) => ({ ...p, [a3.id]: e.target.value }))} placeholder="kg" />
+                              <input style={{ flex: 1, padding: "7px", border: "1.5px solid #ffa726", borderRadius: 6, fontSize: 14, fontWeight: 700, textAlign: "right", fontFamily: "monospace", boxSizing: "border-box" }} type="text" inputMode="decimal" value={a3KgInput[a3.id] || ""} onChange={(e) => setA3KgInput((p) => ({ ...p, [a3.id]: e.target.value }))} placeholder="kg" />
                               <button onClick={() => completeazaA3Kg(a3)} style={{ padding: "7px 12px", background: "#6a1b9a", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>✔</button>
                               <button onClick={() => delA3(a3)} style={{ padding: "7px 10px", background: "#fff", color: "#e53935", border: "1px solid #ef9a9a", borderRadius: 6, cursor: "pointer", fontSize: 12 }}>✕</button>
                             </div>
@@ -4026,8 +4029,8 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
           return (
           <div>
             <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
-              <SC label="Total Cant." value={fmt(colFiltered.reduce((s, r) => s + (parseFloat(r.cant) || 0), 0)) + " kg"} c="#1565c0" bg="#e3f2fd" />
-              <SC label="Total Valoare" value={fmt(colFiltered.reduce((s, r) => s + (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0), 0)) + " lei"} c={G} bg="#e8f5e9" />
+              <SC label="Total Cant." value={fmt(colFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0), 0)) + " kg"} c="#1565c0" bg="#e3f2fd" />
+              <SC label="Total Valoare" value={fmt(colFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0)) + " lei"} c={G} bg="#e8f5e9" />
               <SC label="Înregistrări" value={colFiltered.length + " / " + colRows.length} c="#6a1b9a" bg="#f3e5f5" />
               <SC label="✓ Eligibile Raport (Nr. doc.)" value={String(colRows.filter(r => r.nr_doc).length)} c={G} bg="#e8f5e9" />
             </div>
@@ -4080,8 +4083,8 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   <th style={th({ textAlign: "center" })}>Achitat De</th>
                   <th style={th({})}></th>
                 </tr></thead>
-                <tbody>{colFiltered.map((r, idx) => { const i = colRows.indexOf(r); const tot = (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0); const faraImp = tot ? +(tot * 0.88).toFixed(2) : 0; const rowBg = idx % 2 === 0 ? "#fff" : "#f8fbf9"; const achBg = r.ach === "Da" ? "#e8f5e9" : r.ach === "Nu" ? "#ffebee" : "#fff"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 1}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updCOL(i, "data", v)} /></td><td style={td({ background: rowBg })}><ACStrict value={r.furn || ""} options={furnOptions} onChange={(v) => updCOL(i, "furn", v)} placeholder="—" strict /></td><td style={td({ background: r.nr_doc ? "#e8f5e9" : "#fff3e0" })}><input style={inp({ textAlign: "center", fontWeight: 600 })} value={r.nr_doc || ""} onChange={(e) => updCOL(i, "nr_doc", e.target.value)} placeholder="—" /></td><td style={td({ background: COL_COLORS[r.cat] || "#eee", textAlign: "center" })}><select style={sel({ fontWeight: 600, textAlign: "center" })} value={r.cat || ""} onChange={(e) => updCOL(i, "cat", e.target.value)}>{CATEGORIE_COL.map((o) => <option key={o}>{o}</option>)}</select></td><td style={td({ background: rowBg })}><ACStrict value={r.produs || ""} options={PRODUSE_DYN} onChange={(v) => updCOL(i, "produs", v)} /></td><td style={td({ background: rowBg })}><div style={{ display: "flex", gap: 2, alignItems: "center" }}><input style={inpNum({ textAlign: "right", minWidth: 34 })} type="number" value={r.cant || ""} onChange={(e) => updCOL(i, "cant", e.target.value)} />{scalePort && <button onClick={() => useScaleWeight(v => updCOL(i, "cant", v))} title="Citește din cantar" style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 3, padding: "1px 3px", cursor: "pointer", fontSize: 10, flexShrink: 0 }}>⚖️</button>}</div></td><td style={td({ background: rowBg })}><input style={inpNum({ textAlign: "right" })} type="number" value={r.pret || ""} onChange={(e) => updCOL(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 600 })}>{tot > 0 ? fmt(tot) : "0,00"}</td><td style={td({ textAlign: "right", background: "#fce4d6", fontWeight: 600, color: "#bf360c" })}>{faraImp > 0 ? fmt(faraImp) : "0,00"}</td><td style={td({ background: achBg })}><select style={sel({ color: r.ach === "Da" ? G : r.ach === "Nu" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.ach || ""} onChange={(e) => updCOL(i, "ach", e.target.value)}><option value=""></option><option>Da</option><option>Nu</option></select></td><td style={td({ background: r.ach_de ? "#ffe0b2" : "#fff" })}><ACStrict value={r.ach_de || ""} options={achitatOptions} onChange={(v) => updCOL(i, "ach_de", v)} placeholder="—" /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delCOL(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
-                <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={6} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(colFiltered.reduce((s, r) => s + (parseFloat(r.cant) || 0), 0))} kg</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(colFiltered.reduce((s, r) => s + (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0), 0))}</td><td colSpan={4}></td></tr></tfoot>
+                <tbody>{colFiltered.map((r, idx) => { const i = colRows.indexOf(r); const tot = parseSuma(r.cant) * parseSuma(r.pret); const faraImp = tot ? +(tot * 0.88).toFixed(2) : 0; const rowBg = idx % 2 === 0 ? "#fff" : "#f8fbf9"; const achBg = r.ach === "Da" ? "#e8f5e9" : r.ach === "Nu" ? "#ffebee" : "#fff"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 1}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updCOL(i, "data", v)} /></td><td style={td({ background: rowBg })}><ACStrict value={r.furn || ""} options={furnOptions} onChange={(v) => updCOL(i, "furn", v)} placeholder="—" strict /></td><td style={td({ background: r.nr_doc ? "#e8f5e9" : "#fff3e0" })}><input style={inp({ textAlign: "center", fontWeight: 600 })} value={r.nr_doc || ""} onChange={(e) => updCOL(i, "nr_doc", e.target.value)} placeholder="—" /></td><td style={td({ background: COL_COLORS[r.cat] || "#eee", textAlign: "center" })}><select style={sel({ fontWeight: 600, textAlign: "center" })} value={r.cat || ""} onChange={(e) => updCOL(i, "cat", e.target.value)}>{CATEGORIE_COL.map((o) => <option key={o}>{o}</option>)}</select></td><td style={td({ background: rowBg })}><ACStrict value={r.produs || ""} options={PRODUSE_DYN} onChange={(v) => updCOL(i, "produs", v)} /></td><td style={td({ background: rowBg })}><div style={{ display: "flex", gap: 2, alignItems: "center" }}><input style={inpNum({ textAlign: "right", minWidth: 34 })} type="text" inputMode="decimal" value={r.cant || ""} onChange={(e) => updCOL(i, "cant", e.target.value)} />{scalePort && <button onClick={() => useScaleWeight(v => updCOL(i, "cant", v))} title="Citește din cantar" style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 3, padding: "1px 3px", cursor: "pointer", fontSize: 10, flexShrink: 0 }}>⚖️</button>}</div></td><td style={td({ background: rowBg })}><input style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.pret || ""} onChange={(e) => updCOL(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 600 })}>{tot > 0 ? fmt(tot) : "0,00"}</td><td style={td({ textAlign: "right", background: "#fce4d6", fontWeight: 600, color: "#bf360c" })}>{faraImp > 0 ? fmt(faraImp) : "0,00"}</td><td style={td({ background: achBg })}><select style={sel({ color: r.ach === "Da" ? G : r.ach === "Nu" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.ach || ""} onChange={(e) => updCOL(i, "ach", e.target.value)}><option value=""></option><option>Da</option><option>Nu</option></select></td><td style={td({ background: r.ach_de ? "#ffe0b2" : "#fff" })}><ACStrict value={r.ach_de || ""} options={achitatOptions} onChange={(v) => updCOL(i, "ach_de", v)} placeholder="—" /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delCOL(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={6} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(colFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0), 0))} kg</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(colFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0))}</td><td colSpan={4}></td></tr></tfoot>
               </table>
             </div>
             <AddBtn onClick={addCOL} label="+ Adaugă colectare" />
@@ -4101,9 +4104,9 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
           return (
           <div>
             <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
-              <SC label="Total Cant." value={fmt(livFiltered.reduce((s, r) => s + (parseFloat(r.cant) || 0), 0)) + " kg"} c="#1565c0" bg="#e3f2fd" />
-              <SC label="Total Valoare" value={fmt(livFiltered.reduce((s, r) => s + (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0), 0)) + " lei"} c={G} bg="#e8f5e9" />
-              <SC label="✅ Încasat" value={fmt(livFiltered.filter((r) => r.inc === "DA").reduce((s, r) => s + (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0), 0)) + " lei"} c="#2e7d32" bg="#c8e6c9" />
+              <SC label="Total Cant." value={fmt(livFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0), 0)) + " kg"} c="#1565c0" bg="#e3f2fd" />
+              <SC label="Total Valoare" value={fmt(livFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0)) + " lei"} c={G} bg="#e8f5e9" />
+              <SC label="✅ Încasat" value={fmt(livFiltered.filter((r) => r.inc === "DA").reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0)) + " lei"} c="#2e7d32" bg="#c8e6c9" />
               <SC label="Înregistrări" value={livFiltered.length + " / " + livRows.length} c="#6a1b9a" bg="#f3e5f5" />
             </div>
             <div style={{ background: "#f5f5f5", border: "1px solid #ddd", borderRadius: 8, padding: 10, marginBottom: 10, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -4135,8 +4138,8 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   <th style={th({})}>Detalii</th>
                   <th style={th({})}></th>
                 </tr></thead>
-                <tbody>{livFiltered.map((r, idx) => { const i = livRows.indexOf(r); const tot = (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0); const rowBg = idx % 2 === 0 ? "#fff" : "#f8fbf9"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 1}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updLIV(i, "data", v)} /></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "center" })} value={r.nr || ""} onChange={(e) => updLIV(i, "nr", e.target.value)} /></td><td style={td({ background: "#fffde7" })}><ACStrict value={r.client || ""} options={clientOptions} onChange={(v) => updLIV(i, "client", v)} placeholder="—" strict /></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.produs}><ACStrict value={r.produs || ""} options={PRODUSE_DYN} onChange={(v) => updLIV(i, "produs", v)} /></td><td style={td({ background: rowBg })}><input style={inpNum({ textAlign: "right" })} type="number" value={r.cant || ""} onChange={(e) => updLIV(i, "cant", e.target.value)} /></td><td style={td({ background: rowBg })}><input style={inpNum({ textAlign: "right" })} type="number" value={r.pret || ""} onChange={(e) => updLIV(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 600 })}>{tot > 0 ? fmt(tot) : "0,00"}</td><td style={td({ background: r.fact === "DA" ? "#e8f5e9" : r.fact === "NU" ? "#ffebee" : "#fff", textAlign: "center" })}><select style={sel({ color: r.fact === "DA" ? G : r.fact === "NU" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.fact || ""} onChange={(e) => updLIV(i, "fact", e.target.value)}><option value=""></option><option>DA</option><option>NU</option></select></td><td style={td({ background: r.inc === "DA" ? "#c8e6c9" : r.inc === "NU" ? "#ffebee" : "#fff", textAlign: "center" })}><select style={sel({ color: r.inc === "DA" ? G : r.inc === "NU" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.inc || ""} onChange={(e) => updLIV(i, "inc", e.target.value)}><option value=""></option><option>DA</option><option>NU</option></select></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><input title={r.det || undefined} style={inp()} value={r.det || ""} onChange={(e) => updLIV(i, "det", e.target.value)} placeholder="..." /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delLIV(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
-                <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={5} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(livFiltered.reduce((s, r) => s + (parseFloat(r.cant) || 0), 0))} kg</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(livFiltered.reduce((s, r) => s + (parseFloat(r.cant) || 0) * (parseFloat(r.pret) || 0), 0))}</td><td colSpan={4}></td></tr></tfoot>
+                <tbody>{livFiltered.map((r, idx) => { const i = livRows.indexOf(r); const tot = parseSuma(r.cant) * parseSuma(r.pret); const rowBg = idx % 2 === 0 ? "#fff" : "#f8fbf9"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 1}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updLIV(i, "data", v)} /></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "center" })} value={r.nr || ""} onChange={(e) => updLIV(i, "nr", e.target.value)} /></td><td style={td({ background: "#fffde7" })}><ACStrict value={r.client || ""} options={clientOptions} onChange={(v) => updLIV(i, "client", v)} placeholder="—" strict /></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.produs}><ACStrict value={r.produs || ""} options={PRODUSE_DYN} onChange={(v) => updLIV(i, "produs", v)} /></td><td style={td({ background: rowBg })}><input style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.cant || ""} onChange={(e) => updLIV(i, "cant", e.target.value)} /></td><td style={td({ background: rowBg })}><input style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.pret || ""} onChange={(e) => updLIV(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 600 })}>{tot > 0 ? fmt(tot) : "0,00"}</td><td style={td({ background: r.fact === "DA" ? "#e8f5e9" : r.fact === "NU" ? "#ffebee" : "#fff", textAlign: "center" })}><select style={sel({ color: r.fact === "DA" ? G : r.fact === "NU" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.fact || ""} onChange={(e) => updLIV(i, "fact", e.target.value)}><option value=""></option><option>DA</option><option>NU</option></select></td><td style={td({ background: r.inc === "DA" ? "#c8e6c9" : r.inc === "NU" ? "#ffebee" : "#fff", textAlign: "center" })}><select style={sel({ color: r.inc === "DA" ? G : r.inc === "NU" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.inc || ""} onChange={(e) => updLIV(i, "inc", e.target.value)}><option value=""></option><option>DA</option><option>NU</option></select></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><input title={r.det || undefined} style={inp()} value={r.det || ""} onChange={(e) => updLIV(i, "det", e.target.value)} placeholder="..." /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delLIV(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={5} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(livFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0), 0))} kg</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(livFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0))}</td><td colSpan={4}></td></tr></tfoot>
               </table>
             </div>
             <AddBtn onClick={addLIV} label="+ Adaugă livrare" />
@@ -4295,40 +4298,10 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   return (r.denumire || "").toLowerCase().includes(q) || (r.cod_fiscal || "").toLowerCase().includes(q);
                 }).sort((a, b) => (a.denumire || "").localeCompare(b.denumire || ""));
 
-                // ── Nume folosite deja în Achiziții/Vânzări/Tichete dar neînregistrate ca partener/delegat ──
-                const regNames = new Set([...pfList, ...pjList].map((f) => normFirma(f.denumire)));
-                const regSoferi = new Set(delegatiList.map((d) => normFirma(d.nume)));
-                const addSursa = (map, name, label) => {
-                  const key = normFirma(name);
-                  if (!key) return;
-                  if (!map.has(key)) map.set(key, { denumire: name, surse: new Set() });
-                  const entry = map.get(key);
-                  if (name.length > entry.denumire.length) entry.denumire = name;
-                  entry.surse.add(label);
-                };
-                const neinregMap = new Map();
-                colRows.forEach((r) => r.furn && addSursa(neinregMap, r.furn, "Achiziții"));
-                livRows.forEach((r) => r.client && addSursa(neinregMap, r.client, "Vânzări"));
-                ticheteList.forEach((t) => {
-                  if (t.partener) addSursa(neinregMap, t.partener, "Tichete-Furnizor");
-                  if (t.transportator) addSursa(neinregMap, t.transportator, "Tichete-Transportator");
-                });
-                const neinregistrati = [...neinregMap.entries()]
-                  .filter(([key]) => !regNames.has(key) && key !== normFirma("GREEN KRAFT SRL"))
-                  .map(([key, v]) => ({ key, denumire: v.denumire, surse: [...v.surse] }))
-                  .sort((a, b) => a.denumire.localeCompare(b.denumire));
-
-                const soferiMap = new Map();
-                ticheteList.forEach((t) => t.sofer && addSursa(soferiMap, t.sofer, "Tichete"));
-                const soferiNeinregistrati = [...soferiMap.entries()]
-                  .filter(([key]) => !regSoferi.has(key))
-                  .map(([key, v]) => ({ key, denumire: v.denumire }))
-                  .sort((a, b) => a.denumire.localeCompare(b.denumire));
-
                 return (
                   <div style={{ background: "#fff", border: "1px solid #ccc", borderTop: "none", padding: 14 }}>
                     <div style={{ padding: 10, background: "#f3e5f5", border: "1px solid #ce93d8", borderRadius: 6, fontSize: 12, color: "#4a148c", marginBottom: 10 }}>
-                      🤝 Lista unifică <strong>persoanele fizice</strong> ({pfList.length}) și <strong>persoanele juridice</strong> ({pjList.length}). Aceasta e lista oficială folosită peste tot în aplicație (Tichete Cântar, Achiziții, Vânzări) — câmpurile de Furnizor/Client/Transportator acceptă DOAR parteneri de aici; ca să adaugi unul nou, îl adaugi mai întâi în lista de mai jos. Documentele deja emise rămân neschimbate. Mai jos apar și numele deja folosite (Achiziții/Vânzări/Tichete) care nu sunt încă înregistrate — le poți adăuga dintr-un click.
+                      🤝 Lista unifică <strong>persoanele fizice</strong> ({pfList.length}) și <strong>persoanele juridice</strong> ({pjList.length}). Aceasta e lista oficială folosită peste tot în aplicație (Tichete Cântar, Achiziții, Vânzări) — câmpurile de Furnizor/Client/Transportator acceptă DOAR parteneri de aici; ca să adaugi unul nou, îl adaugi mai întâi în lista de mai jos. Documentele deja emise rămân neschimbate.
                     </div>
                     <div style={{ background: "linear-gradient(135deg,#fff3e0,#fff8f5)", border: "2px solid #ffcc80", borderRadius: 10, padding: 12, marginBottom: 12 }}>
                       <div style={{ fontWeight: 700, color: "#e65100", fontSize: 13, marginBottom: 10 }}>🔍 Caută firmă după CUI (Persoană Juridică)</div>
@@ -4380,59 +4353,6 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                         </tbody>
                       </table>
                     </div>
-
-                    {neinregistrati.length > 0 && (
-                      <div style={{ marginTop: 22 }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: "#bf360c", marginBottom: 8 }}>🕵️ Nume folosite în Achiziții/Vânzări/Tichete, dar neînregistrate ca partener ({neinregistrati.length})</div>
-                        <div style={{ overflowX: "auto" }}>
-                          <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 620 }}>
-                            <colgroup><col style={{ width: 260 }} /><col style={{ width: 280 }} /><col style={{ width: 160 }} /></colgroup>
-                            <thead><tr style={{ background: "#ff8a65" }}>
-                              <th style={th({ background: "#bf360c", textAlign: "center" })}>Denumire</th>
-                              <th style={th({ background: "#ff8a65", textAlign: "center" })}>Apare în</th>
-                              <th style={th({ background: "#bf360c" })}></th>
-                            </tr></thead>
-                            <tbody>
-                              {neinregistrati.map((r) => (
-                                <tr key={r.key}>
-                                  <td style={td({ fontWeight: 600 })}>{r.denumire}</td>
-                                  <td style={td({ fontSize: 11, color: "#777" })}>{r.surse.join(", ")}</td>
-                                  <td style={td({ textAlign: "center", padding: 3 })}>
-                                    <button onClick={() => addPF(r.denumire)} style={{ background: "#00897b", color: "#fff", border: "none", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 11, fontWeight: 600, marginRight: 4 }}>+ PF</button>
-                                    <button onClick={() => addPJ(r.denumire)} style={{ background: "#6a1b9a", color: "#fff", border: "none", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ PJ</button>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )}
-
-                    {soferiNeinregistrati.length > 0 && (
-                      <div style={{ marginTop: 22 }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: "#e65100", marginBottom: 8 }}>🚚 Șoferi folosiți în Tichete, dar neînregistrați ca delegat ({soferiNeinregistrati.length})</div>
-                        <div style={{ overflowX: "auto" }}>
-                          <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 420 }}>
-                            <colgroup><col style={{ width: 300 }} /><col style={{ width: 160 }} /></colgroup>
-                            <thead><tr style={{ background: "#ffb74d" }}>
-                              <th style={th({ background: "#e65100", textAlign: "center" })}>Nume</th>
-                              <th style={th({ background: "#e65100" })}></th>
-                            </tr></thead>
-                            <tbody>
-                              {soferiNeinregistrati.map((r) => (
-                                <tr key={r.key}>
-                                  <td style={td({ fontWeight: 600 })}>{r.denumire}</td>
-                                  <td style={td({ textAlign: "center", padding: 3 })}>
-                                    <button onClick={() => addDelegat(r.denumire)} style={{ background: "#e65100", color: "#fff", border: "none", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Adaugă ca delegat</button>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 );
               })()}
@@ -4453,7 +4373,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
             }
             return true;
           });
-          const totNet = filtrate.reduce((s, t) => s + (parseFloat(t.net) || 0), 0);
+          const totNet = filtrate.reduce((s, t) => s + (parseSuma(t.net) || 0), 0);
           const partenerOpts = [...new Set([...pfList.map(f => f.denumire), ...pjList.map(f => f.denumire)].filter(Boolean))];
           const transpOpts = [...new Set(["GREEN KRAFT SRL", ...partenerOpts])];
           const masiniOpts = [...new Set([...TIC_MASINI, ...ticheteList.map(t => t.nr_masina)].filter(Boolean))].sort();
@@ -4542,7 +4462,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                     <div style={{ flex: "1 1 280px", background: "#fff", border: `1px solid ${G}`, borderRadius: 10, padding: 16, display: "flex", flexDirection: "column" }}>
                       <div style={{ fontWeight: 700, color: G, fontSize: 12, marginBottom: 12, textTransform: "uppercase", letterSpacing: 0.5 }}>⚖️ Cântărirea 1 — {ticNou.prima === "plin" ? "Brut (plin)" : "Tara (gol)"} <span style={{ color: "#c62828" }}>*</span></div>
                       <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-                        <input style={{ flex: 1, padding: "14px", border: `2px solid ${G}`, borderRadius: 8, fontSize: 26, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="number" value={ticNou.greutate} onChange={(e) => setTicNou((p) => ({ ...p, greutate: e.target.value }))} placeholder="0" />
+                        <input style={{ flex: 1, padding: "14px", border: `2px solid ${G}`, borderRadius: 8, fontSize: 26, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="text" inputMode="decimal" value={ticNou.greutate} onChange={(e) => setTicNou((p) => ({ ...p, greutate: e.target.value }))} placeholder="0" />
                         <span style={{ alignSelf: "center", fontSize: 15, color: "#888", fontWeight: 600 }}>kg</span>
                       </div>
                       {scalePort && <button onClick={() => useScaleWeight((v) => setTicNou((p) => ({ ...p, greutate: v })))} style={{ padding: "10px", background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: `1px solid ${G}`, borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700, color: G, marginBottom: 8 }}>⚖️ Preia din cântar {scaleReading ? `(${fmt(scaleReading.value)} kg)` : ""}</button>}
@@ -4573,7 +4493,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                           </div>
                           <div style={{ flex: 1.3 }}>
                             <div style={{ fontSize: 10, color: "#e65100", fontWeight: 600 }}>{t.brut != null ? "Tara (gol)" : "Brut (plin)"}</div>
-                            <input style={{ width: "100%", padding: "6px", border: "1.5px solid #ffa726", borderRadius: 6, fontSize: 15, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="number" value={ticTaraInput[t.id] || ""} onChange={(e) => setTicTaraInput((p) => ({ ...p, [t.id]: e.target.value }))} placeholder="kg" />
+                            <input style={{ width: "100%", padding: "6px", border: "1.5px solid #ffa726", borderRadius: 6, fontSize: 15, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="text" inputMode="decimal" value={ticTaraInput[t.id] || ""} onChange={(e) => setTicTaraInput((p) => ({ ...p, [t.id]: e.target.value }))} placeholder="kg" />
                           </div>
                         </div>
                         <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
@@ -4581,10 +4501,10 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                           {!scalePort && cantarLive?.fresh && <button onClick={() => useLiveWeight((v) => setTicTaraInput((p) => ({ ...p, [t.id]: v })))} style={{ flex: 1, padding: "5px", background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 5, cursor: "pointer", fontSize: 11, color: "#1565c0", fontWeight: 600 }}>📡 Live birou</button>}
                         </div>
                         {(() => {
-                          const v2 = parseFloat(ticTaraInput[t.id]);
+                          const v2 = parseSuma(ticTaraInput[t.id]);
                           if (!v2 || v2 <= 0) return null;
-                          const brutV = t.brut != null ? parseFloat(t.brut) : v2;
-                          const taraV = t.brut != null ? v2 : parseFloat(t.tara);
+                          const brutV = t.brut != null ? parseSuma(t.brut) : v2;
+                          const taraV = t.brut != null ? v2 : parseSuma(t.tara);
                           if (brutV <= taraV) return <div style={{ textAlign: "center", marginBottom: 8, fontSize: 11, color: "#c62828", fontWeight: 600 }}>⚠️ Brut trebuie să fie mai mare decât Tara</div>;
                           return <div style={{ textAlign: "center", marginBottom: 8, fontSize: 14, color: G, fontWeight: 700, fontFamily: "monospace" }}>NET = {fmt(Math.round((brutV - taraV) * 100) / 100)} kg</div>;
                         })()}
@@ -4677,8 +4597,8 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                     <div><label style={LSt}>Data</label><input value={newM.data} onChange={(e) => setNewM((p) => ({ ...p, data: e.target.value }))} style={{ ...IFS, width: 90 }} /></div>
                     <div><label style={LSt}>Tip</label><select value={newM.tip} onChange={(e) => setNewM((p) => ({ ...p, tip: e.target.value }))} style={{ ...IFS, width: 90, color: newM.tip === "intrare" ? G : "#c62828", fontWeight: 700 }}><option value="intrare">⬆ Intrare</option><option value="iesire">⬇ Ieșire</option></select></div>
                     <div style={{ flex: "0 0 180px" }}><label style={LSt}>Produs</label><ACStrict value={newM.produs} options={PRODUSE_DYN} style={IFS} onChange={(v) => { const fd = produseList.find((p) => p.den === v); setNewM((p) => ({ ...p, produs: v, cod: fd?.cod || "" })); }} /></div>
-                    <div><label style={LSt}>Cant.(kg)</label><input type="number" value={newM.cant} onChange={(e) => setNewM((p) => ({ ...p, cant: e.target.value }))} style={{ ...IFS, width: 80, textAlign: "right" }} /></div>
-                    <div><label style={LSt}>Preț/kg</label><input type="number" value={newM.pu} onChange={(e) => setNewM((p) => ({ ...p, pu: e.target.value }))} style={{ ...IFS, width: 72, textAlign: "right" }} /></div>
+                    <div><label style={LSt}>Cant.(kg)</label><input type="text" inputMode="decimal" value={newM.cant} onChange={(e) => setNewM((p) => ({ ...p, cant: e.target.value }))} style={{ ...IFS, width: 80, textAlign: "right" }} /></div>
+                    <div><label style={LSt}>Preț/kg</label><input type="text" inputMode="decimal" value={newM.pu} onChange={(e) => setNewM((p) => ({ ...p, pu: e.target.value }))} style={{ ...IFS, width: 72, textAlign: "right" }} /></div>
                     <div style={{ flex: 1, minWidth: 120 }}><label style={LSt}>Sursă</label><input value={newM.sursa} onChange={(e) => setNewM((p) => ({ ...p, sursa: e.target.value }))} style={IFS} placeholder="Ajustare stoc..." /></div>
                     <button onClick={addManMisc} style={{ padding: "5px 14px", background: G, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600, marginBottom: 1 }}>+ Adaugă</button>
                   </div>
@@ -4686,7 +4606,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 680 }}>
                     <thead><tr><th style={th({ width: 28 })}>#</th><th style={th({ width: 82 })}>Data</th><th style={th({ width: 72 })}>Tip</th><th style={th({ minWidth: 170 })}>Produs</th><th style={th({ width: 78 })}>Cod</th><th style={th({ width: 80 })}>Cant.(kg)</th><th style={th({ width: 78 })}>Preț/kg</th><th style={th({ width: 80 })}>Valoare</th><th style={th({ minWidth: 150 })}>Sursă</th><th style={th({ width: 28 })}></th></tr></thead>
-                    <tbody>{[...miscari].reverse().map((r, i) => { const v = (parseFloat(r.cant) || 0) * (parseFloat(r.pu) || 0); const isIn = r.tip === "intrare"; const isCol = String(r.id).startsWith("col-"); const isBord = String(r.id).startsWith("bord-"); const isLiv = String(r.id).startsWith("liv-"); const isMan = String(r.id).startsWith("man-"); const rowBg = isCol ? "#f0fff4" : isBord ? "#fffde7" : isLiv ? "#fff5f5" : "#f0f4ff"; const badge = isCol ? { bg: "#c6efce", c: G, l: "🚛" } : isBord ? { bg: "#fff2cc", c: "#e65100", l: "📄" } : isLiv ? { bg: "#fce4d6", c: "#c62828", l: "📤" } : { bg: "#e3f2fd", c: "#1565c0", l: "✏️" }; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{miscari.length - i}</td><td style={td({ background: rowBg, textAlign: "center", fontSize: 11 })}>{r.data}</td><td style={td({ background: isIn ? "#e8f5e9" : "#ffebee", textAlign: "center", fontWeight: 700, color: isIn ? G : "#c62828" })}>{isIn ? "⬆" : "⬇"} {isIn ? "Intrare" : "Ieșire"}</td><td style={td({ background: rowBg, fontSize: 11 })}>{r.produs}</td><td style={td({ background: rowBg, textAlign: "center", fontFamily: "monospace", fontSize: 11 })}>{r.cod}</td><td style={td({ background: rowBg, textAlign: "right", fontWeight: 600, color: isIn ? G : "#c62828" })}>{isIn ? "+" : "-"}{fmt(r.cant)}</td><td style={td({ background: rowBg, textAlign: "right" })}>{fmt(r.pu, 4)}</td><td style={td({ background: rowBg, textAlign: "right", fontWeight: 600 })}>{fmt(v)}</td><td style={td({ background: rowBg, fontSize: 11 })}><span style={{ background: badge.bg, color: badge.c, borderRadius: 4, padding: "1px 5px", fontSize: 10, fontWeight: 700, marginRight: 5 }}>{badge.l}</span>{r.sursa}</td><td style={td({ textAlign: "center", padding: 3 })}>{isMan ? <button onClick={() => delManMisc(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button> : <span style={{ color: "#ccc", fontSize: 11 }} title="Modifică din sursa originală">🔒</span>}</td></tr>); })}</tbody>
+                    <tbody>{[...miscari].reverse().map((r, i) => { const v = (parseSuma(r.cant) || 0) * (parseSuma(r.pu) || 0); const isIn = r.tip === "intrare"; const isCol = String(r.id).startsWith("col-"); const isBord = String(r.id).startsWith("bord-"); const isLiv = String(r.id).startsWith("liv-"); const isMan = String(r.id).startsWith("man-"); const rowBg = isCol ? "#f0fff4" : isBord ? "#fffde7" : isLiv ? "#fff5f5" : "#f0f4ff"; const badge = isCol ? { bg: "#c6efce", c: G, l: "🚛" } : isBord ? { bg: "#fff2cc", c: "#e65100", l: "📄" } : isLiv ? { bg: "#fce4d6", c: "#c62828", l: "📤" } : { bg: "#e3f2fd", c: "#1565c0", l: "✏️" }; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{miscari.length - i}</td><td style={td({ background: rowBg, textAlign: "center", fontSize: 11 })}>{r.data}</td><td style={td({ background: isIn ? "#e8f5e9" : "#ffebee", textAlign: "center", fontWeight: 700, color: isIn ? G : "#c62828" })}>{isIn ? "⬆" : "⬇"} {isIn ? "Intrare" : "Ieșire"}</td><td style={td({ background: rowBg, fontSize: 11 })}>{r.produs}</td><td style={td({ background: rowBg, textAlign: "center", fontFamily: "monospace", fontSize: 11 })}>{r.cod}</td><td style={td({ background: rowBg, textAlign: "right", fontWeight: 600, color: isIn ? G : "#c62828" })}>{isIn ? "+" : "-"}{fmt(r.cant)}</td><td style={td({ background: rowBg, textAlign: "right" })}>{fmt(r.pu, 4)}</td><td style={td({ background: rowBg, textAlign: "right", fontWeight: 600 })}>{fmt(v)}</td><td style={td({ background: rowBg, fontSize: 11 })}><span style={{ background: badge.bg, color: badge.c, borderRadius: 4, padding: "1px 5px", fontSize: 10, fontWeight: 700, marginRight: 5 }}>{badge.l}</span>{r.sursa}</td><td style={td({ textAlign: "center", padding: 3 })}>{isMan ? <button onClick={() => delManMisc(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button> : <span style={{ color: "#ccc", fontSize: 11 }} title="Modifică din sursa originală">🔒</span>}</td></tr>); })}</tbody>
                   </table>
                 </div>
               </div>
@@ -4698,15 +4618,15 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
         {tab === "salariati" && (
           <div>
             <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
-              <SC label="Total Salarii Nete" value={fmt(salRows.reduce((s, r) => s + (parseFloat(r.net) || 0), 0)) + " lei"} c={G} bg="#e8f5e9" />
-              <SC label="Total Taxe Stat" value={fmt(salRows.reduce((s, r) => s + (parseFloat(r.taxe) || 0), 0)) + " lei"} c="#c62828" bg="#ffebee" />
-              <SC label="Total Cost Brut" value={fmt(salRows.reduce((s, r) => s + (parseFloat(r.net) || 0) + (parseFloat(r.taxe) || 0), 0)) + " lei"} c="#1565c0" bg="#e3f2fd" />
+              <SC label="Total Salarii Nete" value={fmt(salRows.reduce((s, r) => s + (parseSuma(r.net) || 0), 0)) + " lei"} c={G} bg="#e8f5e9" />
+              <SC label="Total Taxe Stat" value={fmt(salRows.reduce((s, r) => s + (parseSuma(r.taxe) || 0), 0)) + " lei"} c="#c62828" bg="#ffebee" />
+              <SC label="Total Cost Brut" value={fmt(salRows.reduce((s, r) => s + (parseSuma(r.net) || 0) + (parseSuma(r.taxe) || 0), 0)) + " lei"} c="#1565c0" bg="#e3f2fd" />
             </div>
             <div style={{ overflowX: "auto", marginBottom: 12 }}>
               <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 680 }}>
                 <thead><tr><th style={th({ width: 28 })}>#</th><th style={th({ textAlign: "center", width: 115 })}>Nume</th><th style={th({ textAlign: "center", width: 105 })}>Funcție</th><th style={th({ textAlign: "center", width: 100 })}>Salariu Net</th><th style={th({ textAlign: "center", width: 92 })}>Taxe Stat</th><th style={th({ textAlign: "center", width: 92 })}>Cost Brut</th><th style={th({ textAlign: "center", width: 72 })}>Zile CO</th><th style={th({ textAlign: "center", width: 72 })}>Efectuate</th><th style={th({ textAlign: "center", width: 72 })}>Rămase</th><th style={th({ textAlign: "center", width: 82 })}>Concedii</th><th style={th({ width: 28 })}></th></tr></thead>
-                <tbody>{salRows.map((r, i) => { const brut = (parseFloat(r.net) || 0) + (parseFloat(r.taxe) || 0); const ramase = (parseInt(r.co) || 0) - (parseInt(r.ef) || 0); const rowBg = i % 2 === 0 ? "#fff" : "#f8fbf9"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#888", fontSize: 11, background: "#f5f5f5" })}>{i + 1}</td><td style={td({ background: rowBg, fontWeight: 600 })}><input style={inp({ textAlign: "center", fontWeight: 600 })} value={r.nume || ""} onChange={(e) => updSAL(i, "nume", e.target.value)} /></td><td style={td({ background: "#fffde7" })}><input style={inp({ textAlign: "center" })} value={r.functie || ""} onChange={(e) => updSAL(i, "functie", e.target.value)} /></td><td style={td({ background: rowBg })}><input style={inpNum({ textAlign: "right" })} type="number" value={r.net || ""} onChange={(e) => updSAL(i, "net", e.target.value)} /></td><td style={td({ background: "#ffebee" })}><input style={inpNum({ textAlign: "right", color: "#c62828" })} type="number" value={r.taxe || ""} onChange={(e) => updSAL(i, "taxe", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#e3f2fd", fontWeight: 600, color: "#1565c0" })}>{fmt(brut)}</td><td style={td({ background: rowBg })}><input style={inpNum({ textAlign: "center" })} type="number" value={r.co || ""} onChange={(e) => updSAL(i, "co", e.target.value)} /></td><td style={td({ textAlign: "center", background: "#fff8e1", color: "#e65100", fontWeight: 600 })}>{r.ef}</td><td style={td({ textAlign: "center", background: ramase < 5 ? "#ffebee" : "#e8f5e9", color: ramase < 5 ? "#c62828" : G, fontWeight: 700 })}>{ramase}</td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => setSelSal(selSal === i ? null : i)} style={{ background: selSal === i ? G : "#e8f5e9", color: selSal === i ? "#fff" : G, border: `1px solid ${G}`, borderRadius: 4, padding: "2px 7px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>{(r.conc || []).length > 0 ? `${r.conc.length} per.` : "+ Add"}</button></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delSAL(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
-                <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={3} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(salRows.reduce((s, r) => s + (parseFloat(r.net) || 0), 0))}</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(salRows.reduce((s, r) => s + (parseFloat(r.taxe) || 0), 0))}</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(salRows.reduce((s, r) => s + (parseFloat(r.net) || 0) + (parseFloat(r.taxe) || 0), 0))}</td><td colSpan={5}></td></tr></tfoot>
+                <tbody>{salRows.map((r, i) => { const brut = (parseSuma(r.net) || 0) + (parseSuma(r.taxe) || 0); const ramase = (parseInt(r.co) || 0) - (parseInt(r.ef) || 0); const rowBg = i % 2 === 0 ? "#fff" : "#f8fbf9"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#888", fontSize: 11, background: "#f5f5f5" })}>{i + 1}</td><td style={td({ background: rowBg, fontWeight: 600 })}><input style={inp({ textAlign: "center", fontWeight: 600 })} value={r.nume || ""} onChange={(e) => updSAL(i, "nume", e.target.value)} /></td><td style={td({ background: "#fffde7" })}><input style={inp({ textAlign: "center" })} value={r.functie || ""} onChange={(e) => updSAL(i, "functie", e.target.value)} /></td><td style={td({ background: rowBg })}><input style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.net || ""} onChange={(e) => updSAL(i, "net", e.target.value)} /></td><td style={td({ background: "#ffebee" })}><input style={inpNum({ textAlign: "right", color: "#c62828" })} type="text" inputMode="decimal" value={r.taxe || ""} onChange={(e) => updSAL(i, "taxe", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#e3f2fd", fontWeight: 600, color: "#1565c0" })}>{fmt(brut)}</td><td style={td({ background: rowBg })}><input style={inpNum({ textAlign: "center" })} type="number" value={r.co || ""} onChange={(e) => updSAL(i, "co", e.target.value)} /></td><td style={td({ textAlign: "center", background: "#fff8e1", color: "#e65100", fontWeight: 600 })}>{r.ef}</td><td style={td({ textAlign: "center", background: ramase < 5 ? "#ffebee" : "#e8f5e9", color: ramase < 5 ? "#c62828" : G, fontWeight: 700 })}>{ramase}</td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => setSelSal(selSal === i ? null : i)} style={{ background: selSal === i ? G : "#e8f5e9", color: selSal === i ? "#fff" : G, border: `1px solid ${G}`, borderRadius: 4, padding: "2px 7px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>{(r.conc || []).length > 0 ? `${r.conc.length} per.` : "+ Add"}</button></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delSAL(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={3} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(salRows.reduce((s, r) => s + (parseSuma(r.net) || 0), 0))}</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(salRows.reduce((s, r) => s + (parseSuma(r.taxe) || 0), 0))}</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(salRows.reduce((s, r) => s + (parseSuma(r.net) || 0) + (parseSuma(r.taxe) || 0), 0))}</td><td colSpan={5}></td></tr></tfoot>
               </table>
             </div>
             {selSal !== null && salRows[selSal] && (
@@ -4732,17 +4652,17 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
               <div style={{ background: "#e8f5e9", border: "1px solid #a5d6a7", borderRadius: 6, padding: "8px 14px", display: "flex", alignItems: "center", gap: 10 }}>
                 <label style={{ fontSize: 13, fontWeight: 600, color: G }}>💰 Cost alocat (lei):</label>
-                <input type="number" value={costAl} onChange={(e) => updCost(e.target.value)} style={{ width: 110, padding: "4px 8px", borderRadius: 4, border: "1px solid #a5d6a7", fontSize: 14, fontWeight: 700, textAlign: "right", color: G }} />
+                <input type="text" inputMode="decimal" value={costAl} onChange={(e) => updCost(e.target.value)} style={{ width: 110, padding: "4px 8px", borderRadius: 4, border: "1px solid #a5d6a7", fontSize: 14, fontWeight: 700, textAlign: "right", color: G }} />
               </div>
             </div>
             <div style={{ overflowX: "auto" }}>
               <table style={{ borderCollapse: "collapse", width: "100%" }}>
                 <thead><tr><th style={th({ width: 28 })}>#</th><th style={th({})}>Material</th><th style={th()}>Cost Alocat</th><th style={th()}>Preț Ach.(lei/kg)</th><th style={th()}>Preț Vânz.(lei/kg)</th><th style={{ ...th(), background: "#155a35" }}>Marjă</th><th style={{ ...th(), background: "#0d4a2a" }}>Cantitate(kg)</th><th style={th({ width: 28 })}></th></tr></thead>
-                <tbody>{calRows.map((r, i) => (<tr key={i} style={{ background: i % 2 === 0 ? "#fff" : "#f9fbf9" }}><td style={td({ textAlign: "center", color: "#999" })}>{i + 1}</td><td style={td()}><input style={inp()} value={r.material} onChange={(e) => updCal(i, "material", e.target.value)} /></td><td style={td()}><input style={inpNum({ textAlign: "right" })} type="number" value={r.cost} onChange={(e) => updCal(i, "cost", e.target.value)} /></td><td style={td()}><input style={inpNum({ textAlign: "right" })} type="number" value={r.pa} onChange={(e) => updCal(i, "pa", e.target.value)} /></td><td style={td()}><input style={inpNum({ textAlign: "right" })} type="number" value={r.pv} onChange={(e) => updCal(i, "pv", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#e8f5e9", color: r.marja > 0 ? G : "#c62828", fontWeight: 600 })}>{r.marja !== 0 ? fmt(r.marja) : "—"}</td><td style={td({ textAlign: "right", background: "#d4edda", fontWeight: 700, color: "#0d4a2a" })}>{r.cant > 0 ? fmt(r.cant) : "—"}</td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => setCalRows((p) => p.filter((_, j) => j !== i))} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>))}</tbody>
-                <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={8} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(calRows.reduce((s, r) => s + (parseFloat(r.cant) || 0), 0))} kg</td><td></td></tr></tfoot>
+                <tbody>{calRows.map((r, i) => (<tr key={i} style={{ background: i % 2 === 0 ? "#fff" : "#f9fbf9" }}><td style={td({ textAlign: "center", color: "#999" })}>{i + 1}</td><td style={td()}><input style={inp()} value={r.material} onChange={(e) => updCal(i, "material", e.target.value)} /></td><td style={td()}><input style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.cost} onChange={(e) => updCal(i, "cost", e.target.value)} /></td><td style={td()}><input style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.pa} onChange={(e) => updCal(i, "pa", e.target.value)} /></td><td style={td()}><input style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.pv} onChange={(e) => updCal(i, "pv", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#e8f5e9", color: r.marja > 0 ? G : "#c62828", fontWeight: 600 })}>{r.marja !== 0 ? fmt(r.marja) : "—"}</td><td style={td({ textAlign: "right", background: "#d4edda", fontWeight: 700, color: "#0d4a2a" })}>{r.cant > 0 ? fmt(r.cant) : "—"}</td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => setCalRows((p) => p.filter((_, j) => j !== i))} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>))}</tbody>
+                <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={8} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(calRows.reduce((s, r) => s + (parseSuma(r.cant) || 0), 0))} kg</td><td></td></tr></tfoot>
               </table>
             </div>
-            <AddBtn onClick={() => setCalRows((p) => [...p, calcRow({ material: "", pa: "", pv: "" }, parseFloat(costAl) || 0)])} label="+ Adaugă material" />
+            <AddBtn onClick={() => setCalRows((p) => [...p, calcRow({ material: "", pa: "", pv: "" }, parseSuma(costAl) || 0)])} label="+ Adaugă material" />
           </div>
         )}
 
@@ -5126,8 +5046,8 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
             <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
               <SC label="Registru PF (linii)" value={registru.length + " buc."} c="#1565c0" bg="#e3f2fd" />
               <SC label="Registru PJ (PV-uri)" value={pvList.length + " buc."} c="#e65100" bg="#fff3e0" />
-              <SC label="Total Cant. PF" value={fmt(registru.reduce((s, r) => s + (parseFloat(r.cantitate) || 0), 0)) + " kg"} c={G} bg="#e8f5e9" />
-              <SC label="Total Cant. PJ" value={fmt(pvList.reduce((s, p) => s + (p.materiale || []).reduce((ss, m) => ss + (parseFloat(m.cant) || 0), 0), 0)) + " kg"} c="#6a1b9a" bg="#f3e5f5" />
+              <SC label="Total Cant. PF" value={fmt(registru.reduce((s, r) => s + (parseSuma(r.cantitate) || 0), 0)) + " kg"} c={G} bg="#e8f5e9" />
+              <SC label="Total Cant. PJ" value={fmt(pvList.reduce((s, p) => s + (p.materiale || []).reduce((ss, m) => ss + (parseSuma(m.cant) || 0), 0), 0)) + " kg"} c="#6a1b9a" bg="#f3e5f5" />
             </div>
 
             <div style={{ background: "linear-gradient(135deg,#e8f5e9,#f0faf4)", border: "2px solid #a5d6a7", borderRadius: 10, padding: 16, marginBottom: 16 }}>
