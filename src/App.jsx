@@ -1160,10 +1160,10 @@ export default function App() {
   // Furnizori PF
   const updPF = mkUpd(pfList, setPfList, "furnizori_pf");
   const delPF = mkDel(setPfList, "furnizori_pf", "această persoană fizică");
-  const addPF = async () => {
+  const addPF = async (denumirePrefill = "") => {
     const codes = pfList.map((f) => parseInt(f.cod) || 0);
     const cod = String((codes.length ? Math.max(...codes) : 0) + 1).padStart(5, "0");
-    const row = { cod, denumire: "", cod_fiscal: "", analitic: `401.${cod}`, tara: "RO", judet: "", adresa: "", reg_com: "", inf_supl: "" };
+    const row = { cod, denumire: denumirePrefill, cod_fiscal: "", analitic: `401.${cod}`, tara: "RO", judet: "", adresa: "", reg_com: "", inf_supl: "" };
     const { data } = await sb.from("furnizori_pf").insert(row).select();
     if (data) setPfList((p) => [...p, data[0]]);
   };
@@ -1171,8 +1171,8 @@ export default function App() {
   // Furnizori PJ
   const updPJ = mkUpd(pjList, setPjList, "furnizori_pj");
   const delPJ = mkDel(setPjList, "furnizori_pj", "această persoană juridică");
-  const addPJ = async () => {
-    const row = { cod: "", denumire: "", cod_fiscal: "", analitic: "", tara: "RO", judet: "B", adresa: "", cont_banca: "", banca: "", reg_com: "", grupa: "", tel: "" };
+  const addPJ = async (denumirePrefill = "") => {
+    const row = { cod: "", denumire: denumirePrefill, cod_fiscal: "", analitic: "", tara: "RO", judet: "B", adresa: "", cont_banca: "", banca: "", reg_com: "", grupa: "", tel: "" };
     const { data } = await sb.from("furnizori_pj").insert(row).select();
     if (data) setPjList((p) => [...p, data[0]]);
   };
@@ -3484,7 +3484,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   <SC label="Total" value={pfList.length + " pers."} c="#1565c0" bg="#e3f2fd" />
                   <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
                     <input value={pfFilter} onChange={(e) => setPfFilter(e.target.value)} placeholder="🔍 Caută..." style={{ border: "1px solid #ccc", borderRadius: 6, padding: "5px 10px", fontSize: 12, width: 180 }} />
-                    <button onClick={addPF} style={{ padding: "6px 12px", background: G, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Adaugă</button>
+                    <button onClick={() => addPF()} style={{ padding: "6px 12px", background: G, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Adaugă</button>
                     <button onClick={() => scanInputRef.current.click()} disabled={scanLoading} style={{ padding: "6px 12px", background: scanLoading ? "#ccc" : "#1565c0", color: "#fff", border: "none", borderRadius: 6, cursor: scanLoading ? "wait" : "pointer", fontSize: 12, fontWeight: 600 }}>{scanLoading ? "⏳ Scanez..." : "📷 Scanează Buletin"}</button>
                     <input ref={scanInputRef} type="file" accept="image/*,.pdf" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) scanBuletin(e.target.files[0]); e.target.value = ""; }} />
                   </div>
@@ -3736,7 +3736,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   <SC label="Total Firme" value={pjList.length + " firme"} c="#e65100" bg="#fff3e0" />
                   <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
                     <input value={pjFilter} onChange={(e) => setPjFilter(e.target.value)} placeholder="🔍 Caută..." style={{ border: "1px solid #ccc", borderRadius: 6, padding: "5px 10px", fontSize: 12, width: 180 }} />
-                    <button onClick={addPJ} style={{ padding: "6px 12px", background: "#e65100", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Adaugă</button>
+                    <button onClick={() => addPJ()} style={{ padding: "6px 12px", background: "#e65100", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Adaugă</button>
                   </div>
                 </div>
                 <div style={{ overflowX: "auto" }}>
@@ -4166,12 +4166,12 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
             } catch (e) { alert("Eroare: " + e.message); }
           };
 
-          const addDelegat = async () => {
-            const nume = window.prompt("Nume complet șofer/delegat:");
+          const addDelegat = async (numePrefill = "") => {
+            const nume = numePrefill || window.prompt("Nume complet șofer/delegat:");
             if (!nume || !nume.trim()) return;
-            const ci_serie = window.prompt("Serie CI (opțional, ex: AB):") || "";
-            const ci_numar = window.prompt("Număr CI (opțional, ex: 123456):") || "";
-            const cnp = window.prompt("CNP (opțional):") || "";
+            const ci_serie = numePrefill ? "" : (window.prompt("Serie CI (opțional, ex: AB):") || "");
+            const ci_numar = numePrefill ? "" : (window.prompt("Număr CI (opțional, ex: 123456):") || "");
+            const cnp = numePrefill ? "" : (window.prompt("CNP (opțional):") || "");
             try {
               const { error } = await sb.from("delegati").insert({ nume: nume.trim(), ci_serie: ci_serie.trim(), ci_numar: ci_numar.trim(), cnp: cnp.trim() });
               if (error) alert("Eroare: " + error.message);
@@ -4248,7 +4248,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                 <div style={{ background: "#fff", border: "1px solid #ccc", borderTop: "none", padding: 14 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                     <div style={{ fontSize: 13, color: "#555" }}>🚚 Total: <strong style={{ color: "#e65100" }}>{delegatiList.length} delegați</strong></div>
-                    <button onClick={addDelegat} style={{ background: "#e65100", color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Adaugă Delegat</button>
+                    <button onClick={() => addDelegat()} style={{ background: "#e65100", color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Adaugă Delegat</button>
                   </div>
                   <div style={{ overflowX: "auto" }}>
                     <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 620 }}>
@@ -4288,16 +4288,47 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   if (!q) return true;
                   return (r.denumire || "").toLowerCase().includes(q) || (r.cod_fiscal || "").toLowerCase().includes(q);
                 }).sort((a, b) => (a.denumire || "").localeCompare(b.denumire || ""));
+
+                // ── Nume folosite deja în Achiziții/Vânzări/Tichete dar neînregistrate ca partener/delegat ──
+                const regNames = new Set([...pfList, ...pjList].map((f) => normFirma(f.denumire)));
+                const regSoferi = new Set(delegatiList.map((d) => normFirma(d.nume)));
+                const addSursa = (map, name, label) => {
+                  const key = normFirma(name);
+                  if (!key) return;
+                  if (!map.has(key)) map.set(key, { denumire: name, surse: new Set() });
+                  const entry = map.get(key);
+                  if (name.length > entry.denumire.length) entry.denumire = name;
+                  entry.surse.add(label);
+                };
+                const neinregMap = new Map();
+                colRows.forEach((r) => r.furn && addSursa(neinregMap, r.furn, "Achiziții"));
+                livRows.forEach((r) => r.client && addSursa(neinregMap, r.client, "Vânzări"));
+                ticheteList.forEach((t) => {
+                  if (t.partener) addSursa(neinregMap, t.partener, "Tichete-Furnizor");
+                  if (t.transportator) addSursa(neinregMap, t.transportator, "Tichete-Transportator");
+                });
+                const neinregistrati = [...neinregMap.entries()]
+                  .filter(([key]) => !regNames.has(key))
+                  .map(([key, v]) => ({ key, denumire: v.denumire, surse: [...v.surse] }))
+                  .sort((a, b) => a.denumire.localeCompare(b.denumire));
+
+                const soferiMap = new Map();
+                ticheteList.forEach((t) => t.sofer && addSursa(soferiMap, t.sofer, "Tichete"));
+                const soferiNeinregistrati = [...soferiMap.entries()]
+                  .filter(([key]) => !regSoferi.has(key))
+                  .map(([key, v]) => ({ key, denumire: v.denumire }))
+                  .sort((a, b) => a.denumire.localeCompare(b.denumire));
+
                 return (
                   <div style={{ background: "#fff", border: "1px solid #ccc", borderTop: "none", padding: 14 }}>
                     <div style={{ padding: 10, background: "#f3e5f5", border: "1px solid #ce93d8", borderRadius: 6, fontSize: 12, color: "#4a148c", marginBottom: 10 }}>
-                      🤝 Lista unifică <strong>persoanele fizice</strong> ({pfList.length}) și <strong>persoanele juridice</strong> ({pjList.length}). Editarea de aici actualizează listele de sugestii din Tichete Cântar, Achiziții, Vânzări, Contracte și Anexa 3 — documentele deja emise rămân neschimbate.
+                      🤝 Lista unifică <strong>persoanele fizice</strong> ({pfList.length}) și <strong>persoanele juridice</strong> ({pjList.length}). Editarea de aici actualizează listele de sugestii din Tichete Cântar, Achiziții, Vânzări, Contracte și Anexa 3 — documentele deja emise rămân neschimbate. Mai jos apar și numele deja folosite (Achiziții/Vânzări/Tichete) care nu sunt încă înregistrate — le poți adăuga dintr-un click.
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, gap: 10, flexWrap: "wrap" }}>
                       <input value={parteneriSearch} onChange={(e) => setParteneriSearch(e.target.value)} placeholder="🔍 Caută după denumire sau CUI/CNP..." style={{ ...inp({}), maxWidth: 300 }} />
                       <div style={{ display: "flex", gap: 8 }}>
-                        <button onClick={addPF} style={{ background: "#00897b", color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Persoană Fizică</button>
-                        <button onClick={addPJ} style={{ background: "#6a1b9a", color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Persoană Juridică</button>
+                        <button onClick={() => addPF()} style={{ background: "#00897b", color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Persoană Fizică</button>
+                        <button onClick={() => addPJ()} style={{ background: "#6a1b9a", color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Persoană Juridică</button>
                       </div>
                     </div>
                     <div style={{ overflowX: "auto" }}>
@@ -4330,6 +4361,59 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                         </tbody>
                       </table>
                     </div>
+
+                    {neinregistrati.length > 0 && (
+                      <div style={{ marginTop: 22 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: "#bf360c", marginBottom: 8 }}>🕵️ Nume folosite în Achiziții/Vânzări/Tichete, dar neînregistrate ca partener ({neinregistrati.length})</div>
+                        <div style={{ overflowX: "auto" }}>
+                          <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 620 }}>
+                            <colgroup><col style={{ width: 260 }} /><col style={{ width: 280 }} /><col style={{ width: 160 }} /></colgroup>
+                            <thead><tr style={{ background: "#ff8a65" }}>
+                              <th style={th({ background: "#bf360c", textAlign: "center" })}>Denumire</th>
+                              <th style={th({ background: "#ff8a65", textAlign: "center" })}>Apare în</th>
+                              <th style={th({ background: "#bf360c" })}></th>
+                            </tr></thead>
+                            <tbody>
+                              {neinregistrati.map((r) => (
+                                <tr key={r.key}>
+                                  <td style={td({ fontWeight: 600 })}>{r.denumire}</td>
+                                  <td style={td({ fontSize: 11, color: "#777" })}>{r.surse.join(", ")}</td>
+                                  <td style={td({ textAlign: "center", padding: 3 })}>
+                                    <button onClick={() => addPF(r.denumire)} style={{ background: "#00897b", color: "#fff", border: "none", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 11, fontWeight: 600, marginRight: 4 }}>+ PF</button>
+                                    <button onClick={() => addPJ(r.denumire)} style={{ background: "#6a1b9a", color: "#fff", border: "none", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ PJ</button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {soferiNeinregistrati.length > 0 && (
+                      <div style={{ marginTop: 22 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: "#e65100", marginBottom: 8 }}>🚚 Șoferi folosiți în Tichete, dar neînregistrați ca delegat ({soferiNeinregistrati.length})</div>
+                        <div style={{ overflowX: "auto" }}>
+                          <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 420 }}>
+                            <colgroup><col style={{ width: 300 }} /><col style={{ width: 160 }} /></colgroup>
+                            <thead><tr style={{ background: "#ffb74d" }}>
+                              <th style={th({ background: "#e65100", textAlign: "center" })}>Nume</th>
+                              <th style={th({ background: "#e65100" })}></th>
+                            </tr></thead>
+                            <tbody>
+                              {soferiNeinregistrati.map((r) => (
+                                <tr key={r.key}>
+                                  <td style={td({ fontWeight: 600 })}>{r.denumire}</td>
+                                  <td style={td({ textAlign: "center", padding: 3 })}>
+                                    <button onClick={() => addDelegat(r.denumire)} style={{ background: "#e65100", color: "#fff", border: "none", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Adaugă ca delegat</button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })()}
