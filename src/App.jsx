@@ -1000,7 +1000,8 @@ export default function App() {
   const [produseLista, setProduseLista] = useState([]);
   const [taskuri, setTaskuri] = useState([]);
   const [delegatiList, setDelegatiList] = useState([]);
-  const [varSubTab, setVarSubTab] = useState("produse"); // produse | delegati
+  const [varSubTab, setVarSubTab] = useState("produse"); // produse | delegati | parteneri
+  const [parteneriSearch, setParteneriSearch] = useState("");
   const [ticheteList, setTicheteList] = useState([]);
   const [ticSubTab, setTicSubTab] = useState("nou"); // nou | deschise | registru
   const [ticFilter, setTicFilter] = useState("");
@@ -2663,9 +2664,9 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
   };
 
   // ── Dynamic option lists (predefined + values used) ────────
-  const furnOptions = dedupeFirme(colRows.map(r => r.furn).filter(Boolean));
+  const furnOptions = dedupeFirme([...pfList.map(f => f.denumire), ...pjList.map(f => f.denumire), ...colRows.map(r => r.furn).filter(Boolean)]);
   const achitatOptions = [...new Set([...ACHITAT_DE_OPT, ...colRows.map(r => r.ach_de).filter(Boolean), ...chRows.map(r => r.ach_de).filter(Boolean), ...datRows.map(r => r.ach_de).filter(Boolean)])].sort();
-  const clientOptions = dedupeFirme([...CLIENTI, ...livRows.map(r => r.client).filter(Boolean)]);
+  const clientOptions = dedupeFirme([...CLIENTI, ...pfList.map(f => f.denumire), ...pjList.map(f => f.denumire), ...livRows.map(r => r.client).filter(Boolean)]);
 
   // ── Render helpers ────────────────────────────────────────
   const tabSt = (name) => ({ padding: "7px 13px", cursor: "pointer", border: "none", fontWeight: 600, fontSize: 12, borderBottom: tab === name ? `3px solid ${G}` : "3px solid transparent", background: tab === name ? "#fff" : "#e8f0eb", color: tab === name ? G : "#555", borderRadius: "6px 6px 0 0", marginRight: 2, whiteSpace: "nowrap" });
@@ -4203,6 +4204,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
               <div style={{ borderBottom: "1px solid #ccc", marginBottom: 0 }}>
                 <button style={subTabSt("produse")} onClick={() => setVarSubTab("produse")}>🏷️ Produse <span style={{ marginLeft: 4, background: "#1565c0", color: "#fff", borderRadius: 10, padding: "1px 5px", fontSize: 10, fontWeight: 700 }}>{produseLista.length}</span></button>
                 <button style={subTabSt("delegati")} onClick={() => setVarSubTab("delegati")}>🚚 Delegați (Șoferi) <span style={{ marginLeft: 4, background: "#e65100", color: "#fff", borderRadius: 10, padding: "1px 5px", fontSize: 10, fontWeight: 700 }}>{delegatiList.length}</span></button>
+                <button style={subTabSt("parteneri")} onClick={() => setVarSubTab("parteneri")}>🤝 Parteneri <span style={{ marginLeft: 4, background: "#6a1b9a", color: "#fff", borderRadius: 10, padding: "1px 5px", fontSize: 10, fontWeight: 700 }}>{pfList.length + pjList.length}</span></button>
               </div>
 
               {varSubTab === "produse" && (
@@ -4276,6 +4278,61 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   </div>
                 </div>
               )}
+
+              {varSubTab === "parteneri" && (() => {
+                const parteneri = [
+                  ...pfList.map((f, i) => ({ ...f, _tip: "PF", _idx: i })),
+                  ...pjList.map((f, i) => ({ ...f, _tip: "PJ", _idx: i })),
+                ].filter((r) => {
+                  const q = parteneriSearch.trim().toLowerCase();
+                  if (!q) return true;
+                  return (r.denumire || "").toLowerCase().includes(q) || (r.cod_fiscal || "").toLowerCase().includes(q);
+                }).sort((a, b) => (a.denumire || "").localeCompare(b.denumire || ""));
+                return (
+                  <div style={{ background: "#fff", border: "1px solid #ccc", borderTop: "none", padding: 14 }}>
+                    <div style={{ padding: 10, background: "#f3e5f5", border: "1px solid #ce93d8", borderRadius: 6, fontSize: 12, color: "#4a148c", marginBottom: 10 }}>
+                      🤝 Lista unifică <strong>persoanele fizice</strong> ({pfList.length}) și <strong>persoanele juridice</strong> ({pjList.length}). Editarea de aici actualizează listele de sugestii din Tichete Cântar, Achiziții, Vânzări, Contracte și Anexa 3 — documentele deja emise rămân neschimbate.
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, gap: 10, flexWrap: "wrap" }}>
+                      <input value={parteneriSearch} onChange={(e) => setParteneriSearch(e.target.value)} placeholder="🔍 Caută după denumire sau CUI/CNP..." style={{ ...inp({}), maxWidth: 300 }} />
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button onClick={addPF} style={{ background: "#00897b", color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Persoană Fizică</button>
+                        <button onClick={addPJ} style={{ background: "#6a1b9a", color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Persoană Juridică</button>
+                      </div>
+                    </div>
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 780 }}>
+                        <colgroup><col style={{ width: 50 }} /><col style={{ width: 240 }} /><col style={{ width: 130 }} /><col style={{ width: 220 }} /><col style={{ width: 90 }} /><col style={{ width: 30 }} /></colgroup>
+                        <thead><tr style={{ background: "#6a1b9a" }}>
+                          <th style={th({ background: "#4a148c", textAlign: "center" })}>Tip</th>
+                          <th style={th({ background: "#6a1b9a", textAlign: "center" })}>Denumire</th>
+                          <th style={th({ background: "#6a1b9a", textAlign: "center" })}>CUI / CNP</th>
+                          <th style={th({ background: "#6a1b9a", textAlign: "center" })}>Adresă</th>
+                          <th style={th({ background: "#6a1b9a", textAlign: "center" })}>Județ</th>
+                          <th style={th({ background: "#4a148c" })}></th>
+                        </tr></thead>
+                        <tbody>
+                          {parteneri.length === 0 && <tr><td colSpan={6} style={{ textAlign: "center", padding: 30, color: "#888" }}>Niciun partener încă. Adaugă unul cu butoanele de mai sus.</td></tr>}
+                          {parteneri.map((r) => {
+                            const upd = r._tip === "PF" ? updPF : updPJ;
+                            const del = r._tip === "PF" ? delPF : delPJ;
+                            return (
+                              <tr key={`${r._tip}-${r.id}`} style={{ background: r._tip === "PF" ? "#e0f2f1" : "#f3e5f5" }}>
+                                <td style={td({ textAlign: "center", fontSize: 10, fontWeight: 700, color: r._tip === "PF" ? "#00695c" : "#4a148c" })}>{r._tip}</td>
+                                <td style={td()}><input style={inp({ textAlign: "center", fontWeight: 600 })} value={r.denumire || ""} onChange={(e) => upd(r._idx, "denumire", e.target.value)} /></td>
+                                <td style={td({ background: "#fff8e1" })}><input style={inp({ textAlign: "center", fontFamily: "monospace" })} value={r.cod_fiscal || ""} onChange={(e) => upd(r._idx, "cod_fiscal", e.target.value)} /></td>
+                                <td style={td()}><input style={inp({ textAlign: "center" })} value={r.adresa || ""} onChange={(e) => upd(r._idx, "adresa", e.target.value)} /></td>
+                                <td style={td()}><input style={inp({ textAlign: "center" })} value={r.judet || ""} onChange={(e) => upd(r._idx, "judet", e.target.value)} /></td>
+                                <td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => del(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           );
         })()}
