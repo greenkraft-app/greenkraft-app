@@ -1329,6 +1329,7 @@ export default function App() {
     logAction("Închidere", "Tichet cântar", t.serie + " " + t.nr_tichet, `NET ${netV} kg`);
     setTicTaraInput((p) => { const n = { ...p }; delete n[t.id]; return n; });
     if (t.tip === "Intrare") await creeazaAchizitieDinTichet({ ...t, ...upd });
+    else if (t.tip === "Iesire") await creeazaVanzareDinTichet({ ...t, ...upd });
   };
   // ── Creează automat o înregistrare în Achiziții pornind de la un tichet de cântar închis (tip Intrare) ──
   const creeazaAchizitieDinTichet = async (t) => {
@@ -1342,10 +1343,23 @@ export default function App() {
     if (error) { alert("Tichetul a fost închis, dar înregistrarea automată în Achiziții a eșuat: " + error.message); return; }
     if (data) setColRows((p) => [...p, data[0]]);
   };
+  // ── Creează automat o înregistrare în Vânzări pornind de la un tichet de cântar închis (tip Ieșire) ──
+  // Legătura cu tichetul se face prin câmpul Aviz (regăsit atât în tichet cât și în Nr. doc. din Vânzări) — nu e nevoie de o coloană nouă în Supabase.
+  const creeazaVanzareDinTichet = async (t) => {
+    const row = {
+      data: t.data, client: t.partener || "", nr: t.aviz || "",
+      produs: t.material || "", cant: t.net || 0, pret: 0, fact: "", inc: "", det: "",
+    };
+    const { data, error } = await sb.from("livrari").insert(row).select();
+    if (error) { alert("Tichetul a fost închis, dar înregistrarea automată în Vânzări a eșuat: " + error.message); return; }
+    if (data) setLivRows((p) => [...p, data[0]]);
+  };
   const delTichet = async (t) => {
-    const legata = colRows.find((r) => r.tichet_id === String(t.id));
+    const legataCol = colRows.find((r) => r.tichet_id === String(t.id));
+    const legataLiv = t.aviz ? livRows.find((r) => r.nr === t.aviz) : null;
+    const legata = legataCol || legataLiv;
     const ok = legata
-      ? window.confirm(`⚠️ Sigur vrei să ștergi acest tichet de cântar?\n\nAcțiunea NU poate fi anulată.\n\nAtenție: acest tichet are o achiziție legată (creată automat în Achiziții) — NU va fi ștearsă, rămâne acolo ca înregistrare independentă.`)
+      ? window.confirm(`⚠️ Sigur vrei să ștergi acest tichet de cântar?\n\nAcțiunea NU poate fi anulată.\n\nAtenție: acest tichet are o ${legataCol ? "achiziție" : "vânzare"} legată (creată automat în ${legataCol ? "Achiziții" : "Vânzări"}) — NU va fi ștearsă, rămâne acolo ca înregistrare independentă.`)
       : confirmDel("acest tichet de cântar");
     if (!ok) return;
     await sb.from("tichete_cantar").delete().eq("id", t.id);
@@ -1382,6 +1396,17 @@ export default function App() {
         };
         const { error: colErr } = await sb.from("colectari").update(colUpd).eq("id", legata.id);
         if (!colErr) setColRows((p) => p.map((r) => (r.id === legata.id ? { ...r, ...colUpd } : r)));
+      }
+    } else if (ticEdit.tip === "Iesire") {
+      const avizVechi = ticheteList.find((x) => x.id === ticEdit.id)?.aviz;
+      const legata = avizVechi ? livRows.find((r) => r.nr === avizVechi) : null;
+      if (legata) {
+        const livUpd = {
+          client: upd.partener, produs: upd.material, cant: netV,
+          nr: upd.aviz || "",
+        };
+        const { error: livErr } = await sb.from("livrari").update(livUpd).eq("id", legata.id);
+        if (!livErr) setLivRows((p) => p.map((r) => (r.id === legata.id ? { ...r, ...livUpd } : r)));
       }
     }
     setTicEdit(null);
