@@ -3097,6 +3097,17 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
           const colValAchitat = colMonth.filter(r => r.ach === "Da").reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0);
           const colValNeachitat = colMonth.filter(r => r.ach === "Nu").reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0);
 
+          // TOP 3 FURNIZORI (cantitate achiziționată) luna curentă
+          const furnizoriMap = new Map();
+          colMonth.forEach((r) => {
+            if (!r.furn) return;
+            furnizoriMap.set(r.furn, (furnizoriMap.get(r.furn) || 0) + parseSuma(r.cant));
+          });
+          const topFurnizoriMonth = [...furnizoriMap.entries()]
+            .map(([furn, cant]) => ({ furn, cant }))
+            .sort((a, b) => b.cant - a.cant)
+            .slice(0, 3);
+
           // LIVRARI luna curentă
           const livValMonth = livMonth.reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0);
 
@@ -3169,6 +3180,26 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   <div style={{ fontSize: 22, fontWeight: 800, color: "#c62828", lineHeight: 1.2 }}>{fmt(chTotalMonth)} lei</div>
                   <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>{chMonth.length} înregistrări</div>
                 </div>
+              </div>
+
+              {/* TOP 3 FURNIZORI (cantitate) */}
+              <div style={{ background: "#fff", border: "2px solid #2e7d32", borderRadius: 10, padding: 14, marginBottom: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#2e7d32", marginBottom: 10 }}>🏆 Top 3 Furnizori (Cantitate) — luna asta</div>
+                {topFurnizoriMonth.length === 0 ? (
+                  <div style={{ fontSize: 12, color: "#999", padding: "6px 0" }}>Nicio achiziție înregistrată luna asta.</div>
+                ) : (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12 }}>
+                    {topFurnizoriMonth.map((r, i) => (
+                      <div key={r.furn} style={{ display: "flex", alignItems: "center", gap: 10, background: "#f0faf4", border: "1px solid #c8e6c9", borderRadius: 8, padding: "8px 12px" }}>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: ["#ffb300", "#9e9e9e", "#a1887f"][i] }}>#{i + 1}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: "#333", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={r.furn}>{r.furn}</div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: "#2e7d32" }}>{fmt(r.cant)} kg</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* SITUATIE PROFIT/PIERDERE */}
