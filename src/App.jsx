@@ -1015,7 +1015,7 @@ export default function App() {
   const [ticFilter, setTicFilter] = useState("");
   const [ticLuna, setTicLuna] = useState("");
   const [ticTaraInput, setTicTaraInput] = useState({}); // { [id]: valoare }
-  const [ticNou, setTicNou] = useState({ tip: "Intrare", prima: "plin", partener: "", partener_cui: "", client: "GREEN KRAFT SRL", transportator: "", nr_masina: "", sofer: "", material: "", greutate: "", factura: "", aviz: "", obs: "" });
+  const [ticNou, setTicNou] = useState({ tip: "Intrare", prima: "plin", partener: "", partener_cui: "", client: "GREEN KRAFT SRL", transportator: "", transportator_cui: "", nr_masina: "", sofer: "", material: "", greutate: "", factura: "", aviz: "", obs: "" });
   const [ticEdit, setTicEdit] = useState(null); // { id, nr_tichet, factura, aviz, brut_la, tara_la, ora_intrare, ora_iesire }
   const [anexa3List, setAnexa3List] = useState([]);
   const [a3SubTab, setA3SubTab] = useState("nou");
@@ -1289,6 +1289,7 @@ export default function App() {
       partener_cui: ticNou.partener_cui || "",
       client: ticNou.client || "GREEN KRAFT SRL",
       transportator: ticNou.transportator || "",
+      transportator_cui: ticNou.transportator_cui || "",
       nr_masina: ticNou.nr_masina.toUpperCase(),
       sofer: ticNou.sofer || "",
       material: ticNou.material || "",
@@ -1312,7 +1313,7 @@ export default function App() {
       if (dNou) setDelegatiList((p) => [...p, dNou[0]]);
     }
     logAction("Creare", "Tichet cântar", row.serie + " " + row.nr_tichet, `${row.tip} • ${row.partener} • ${ePlin ? "BRUT" : "TARA"} ${g} kg`);
-    setTicNou({ tip: "Intrare", prima: "plin", partener: "", partener_cui: "", client: "GREEN KRAFT SRL", transportator: "", nr_masina: "", sofer: "", material: "", greutate: "", factura: "", aviz: "", obs: "" });
+    setTicNou({ tip: "Intrare", prima: "plin", partener: "", partener_cui: "", client: "GREEN KRAFT SRL", transportator: "", transportator_cui: "", nr_masina: "", sofer: "", material: "", greutate: "", factura: "", aviz: "", obs: "" });
     setTicSubTab("deschise");
   };
   const inchideTichet = async (t) => {
@@ -1422,7 +1423,7 @@ export default function App() {
   };
   const buildTichetHTML = (t) => {
     const cuiClient = (t.client || "GREEN KRAFT SRL").toUpperCase().includes("GREEN KRAFT") ? "36191378" : "";
-    const cuiTransp = (() => { const tr = (t.transportator || "").toUpperCase(); if (!tr) return ""; if (tr.includes("GREEN KRAFT")) return "36191378"; const fj = pjList.find(x => x.denumire?.toUpperCase() === tr); return fj?.cod_fiscal || ""; })();
+    const cuiTransp = t.transportator_cui || (() => { const tr = (t.transportator || "").toUpperCase(); if (!tr) return ""; if (tr.includes("GREEN KRAFT")) return "36191378"; const f = pjList.find(x => x.denumire?.toUpperCase() === tr) || pfList.find(x => x.denumire?.toUpperCase() === tr); return f?.cod_fiscal || ""; })();
     const R = (lbl, val, lbl2, val2) => `<tr>
       <td style="padding:1.2mm 2.5mm;border:0.5px solid #bbb;background:#f4f4f4;font-weight:bold;width:22%;white-space:nowrap;">${lbl}</td>
       <td style="padding:1.2mm 2.5mm;border:0.5px solid #bbb;width:34%;">${val || "—"}</td>
@@ -4494,7 +4495,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                       <div style={{ marginBottom: 10 }}><label style={FL}>Furnizor (cine aduce marfa) <span style={{ color: "#c62828" }}>*</span></label><div style={ACB}><ACStrict value={ticNou.partener} options={partenerOpts} placeholder="Caută partener înregistrat..." strict onChange={(v) => { const f = pjList.find(x => x.denumire === v) || pfList.find(x => x.denumire === v); setTicNou((p) => ({ ...p, partener: v, partener_cui: f?.cod_fiscal || "" })); }} /></div></div>
                       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
                         <div style={{ flex: 1 }}><label style={FL}>Client</label><div style={{ ...FI, color: G, fontWeight: 700, background: "#f0faf4", border: `1px solid ${G}`, display: "flex", alignItems: "center" }}>GREEN KRAFT SRL</div></div>
-                        <div style={{ flex: 1 }}><label style={FL}>Transportator</label><div style={ACB}><ACStrict value={ticNou.transportator} options={transpOpts} placeholder="noi / PF / PJ" strict onChange={(v) => setTicNou((p) => ({ ...p, transportator: v }))} /></div></div>
+                        <div style={{ flex: 1 }}><label style={FL}>Transportator</label><div style={ACB}><ACStrict value={ticNou.transportator} options={transpOpts} placeholder="noi / PF / PJ" strict onChange={(v) => { const f = pjList.find(x => x.denumire === v) || pfList.find(x => x.denumire === v); const cui = v.toUpperCase().includes("GREEN KRAFT") ? "36191378" : (f?.cod_fiscal || ""); setTicNou((p) => ({ ...p, transportator: v, transportator_cui: cui })); }} /></div></div>
                       </div>
                       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
                         <div style={{ flex: 1 }}><label style={FL}>Nr. auto <span style={{ color: "#c62828" }}>*</span></label><div style={ACB}><ACStrict value={ticNou.nr_masina} options={masiniOpts} placeholder="IF55KFT" onChange={(v) => setTicNou((p) => ({ ...p, nr_masina: v.toUpperCase() }))} /></div></div>
