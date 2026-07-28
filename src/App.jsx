@@ -1424,6 +1424,7 @@ export default function App() {
   const buildTichetHTML = (t) => {
     const cuiClient = (t.client || "GREEN KRAFT SRL").toUpperCase().includes("GREEN KRAFT") ? "36191378" : "";
     const cuiTransp = t.transportator_cui || (() => { const tr = (t.transportator || "").toUpperCase(); if (!tr) return ""; if (tr.includes("GREEN KRAFT")) return "36191378"; const f = pjList.find(x => x.denumire?.toUpperCase() === tr) || pfList.find(x => x.denumire?.toUpperCase() === tr); return f?.cod_fiscal || ""; })();
+    const cuiFurnizor = t.partener_cui || (() => { const pt = (t.partener || "").toUpperCase(); if (!pt) return ""; const f = pjList.find(x => x.denumire?.toUpperCase() === pt) || pfList.find(x => x.denumire?.toUpperCase() === pt); return f?.cod_fiscal || ""; })();
     const R = (lbl, val, lbl2, val2) => `<tr>
       <td style="padding:1.2mm 2.5mm;border:0.5px solid #bbb;background:#f4f4f4;font-weight:bold;width:22%;white-space:nowrap;">${lbl}</td>
       <td style="padding:1.2mm 2.5mm;border:0.5px solid #bbb;width:34%;">${val || "—"}</td>
@@ -1447,7 +1448,7 @@ export default function App() {
         </div>
         <!-- Date partener / transport -->
         <table style="width:100%;border-collapse:collapse;font-size:9pt;">
-          ${R("Furnizor", "<b>" + (t.partener || "").toUpperCase() + "</b>", "CUI/CNP", t.partener_cui)}
+          ${R("Furnizor", "<b>" + (t.partener || "").toUpperCase() + "</b>", "CUI/CNP", cuiFurnizor)}
           ${R("Client", "<b>" + (t.client || "GREEN KRAFT SRL").toUpperCase() + "</b>", "CUI", cuiClient)}
           ${R("Transportator", (t.transportator || "").toUpperCase(), "CUI", cuiTransp)}
           ${R("Nr. auto", "<b>" + (t.nr_masina || "") + "</b>", "Delegat", (t.sofer || "").toUpperCase())}
