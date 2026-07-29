@@ -445,14 +445,16 @@ function BordPrint({ b }) {
   );
 }
 
-// Distribuie grupurile pe toata inaltimea celulei (umple pagina A4 pana jos, ca formularul oficial).
+// Distribuie grupurile in celula (umple pagina A4 pana jos, ca formularul oficial).
 // height:100% nu se rezolva fiabil pe un div din interiorul unui <td> (inaltimea celulei e un rezultat
 // calculat al layout-ului de tabel, nu o valoare CSS "specificata"), asa ca folosim position:absolute;inset,
 // care se ancoreaza direct de cutia reala a celulei parinte (care trebuie sa aiba position:relative).
+// justify-content:space-between pe cateva grupuri scurte intinde spatiul gol intre ele pe sute de pixeli si arata
+// rupt; pastram un gap fix intre grupuri si doar ultimul (de regula Semnatura) se ancoreaza jos cu margin-top:auto.
 function Fill({ groups, inset = 8 }) {
   return (
-    <div style={{ position: "absolute", inset, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-      {groups.map((g, i) => <div key={i}>{g}</div>)}
+    <div style={{ position: "absolute", inset, display: "flex", flexDirection: "column", gap: 16 }}>
+      {groups.map((g, i) => <div key={i} style={i === groups.length - 1 ? { marginTop: "auto" } : undefined}>{g}</div>)}
     </div>
   );
 }
@@ -1746,10 +1748,12 @@ export default function App() {
     const destAutMediu = a3.destinatar_aut_mediu || destInfo.aut_mediu || "";
     const destAutRevizuita = a3.destinatar_aut_revizuita || destInfo.aut_mediu_revizuita || "";
     const destAutExpira = a3.destinatar_aut_expira || destInfo.aut_mediu_expira || "";
-    // Grupuri distribuite pe toata inaltimea celulei. height:100% nu se rezolva fiabil pe un div din interiorul unui <td>
+    // Grupuri distribuite in celula. height:100% nu se rezolva fiabil pe un div din interiorul unui <td>
     // (inaltimea celulei e un rezultat calculat al layout-ului de tabel, nu o valoare CSS "specificata"), asa ca umplem
     // celula cu position:absolute;inset, care se ancoreaza direct de cutia reala a celulei parinte pozitionate relativ.
-    const cellFill = (groups) => "<div style=\"position:absolute;inset:8px;display:flex;flex-direction:column;justify-content:space-between;\">" + groups.map((g) => "<div>" + g + "</div>").join("") + "</div>";
+    // justify-content:space-between pe cateva grupuri scurte intinde spatiul gol intre ele pe sute de pixeli si arata
+    // rupt; pastram un gap fix intre grupuri si doar ultimul (de regula Semnatura) se ancoreaza jos cu margin-top:auto.
+    const cellFill = (groups) => "<div style=\"position:absolute;inset:8px;display:flex;flex-direction:column;gap:16px;\">" + groups.map((g, i) => "<div" + (i === groups.length - 1 ? " style=\"margin-top:auto;\"" : "") + ">" + g + "</div>").join("") + "</div>";
 
     const col1 = cellFill([
       "<div><u>Date identificare:</u></div><div><strong>" + (a3.transportator || "") + "</strong></div>" + (trCuiRegCom ? "<div>" + trCuiRegCom + "</div>" : ""),
