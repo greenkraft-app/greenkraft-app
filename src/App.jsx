@@ -445,10 +445,13 @@ function BordPrint({ b }) {
   );
 }
 
-// Distribuie grupurile pe toata inaltimea celulei (umple pagina A4 pana jos, ca formularul oficial)
-function Fill({ groups }) {
+// Distribuie grupurile pe toata inaltimea celulei (umple pagina A4 pana jos, ca formularul oficial).
+// height:100% nu se rezolva fiabil pe un div din interiorul unui <td> (inaltimea celulei e un rezultat
+// calculat al layout-ului de tabel, nu o valoare CSS "specificata"), asa ca folosim position:absolute;inset,
+// care se ancoreaza direct de cutia reala a celulei parinte (care trebuie sa aiba position:relative).
+function Fill({ groups, inset = 8 }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", height: "100%" }}>
+    <div style={{ position: "absolute", inset, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
       {groups.map((g, i) => <div key={i}>{g}</div>)}
     </div>
   );
@@ -501,8 +504,8 @@ function PVPrint({ pv }) {
         </div>
       </div>
 
-      {/* PAGE 2 — Anexa 3 (landscape, mapped to the @page anexaLandscape rule the print window declares) */}
-      <div style={{ padding: "10px 16px", width: "100%", minHeight: "100vh", boxSizing: "border-box", display: "flex", flexDirection: "column", pageBreakAfter: "always", breakAfter: "page", page: "anexaLandscape" }}>
+      {/* PAGE 2 — Anexa 3 (portret, umple pagina pe toata inaltimea) */}
+      <div style={{ padding: "10px 16px", width: "100%", minHeight: "100vh", boxSizing: "border-box", display: "flex", flexDirection: "column", pageBreakAfter: "always", breakAfter: "page" }}>
         <div style={{ textAlign: "center", marginBottom: 6, fontSize: 14, fontWeight: "bold" }}>Anexa 3 - Seria {pv.serie} Nr. {pv.nr_anexa} din data de {pv.data}</div>
         <div style={{ textAlign: "center", marginBottom: 14 }}>Formular de încărcare – descărcare deşeuri nepericuloase</div>
         <table style={{ width: "100%", flex: 1, borderCollapse: "collapse", border: "1px solid #000", fontSize: 11, tableLayout: "fixed" }}>
@@ -517,7 +520,7 @@ function PVPrint({ pv }) {
           </thead>
           <tbody>
             <tr style={{ height: "100%" }}>
-              <td style={{ border: "1px solid #000", padding: 8, lineHeight: 1.6, height: "100%" }}>
+              <td style={{ border: "1px solid #000", position: "relative", lineHeight: 1.6 }}>
                 <Fill groups={[
                   <>
                     <div><u>Date identificare:</u></div>
@@ -543,13 +546,13 @@ function PVPrint({ pv }) {
                   <div style={{ textAlign: "center" }}>Semnatura și stampila</div>,
                 ]} />
               </td>
-              <td style={{ border: "1px solid #000", padding: 8, height: "100%" }}>
+              <td style={{ border: "1px solid #000", position: "relative" }}>
                 <Fill groups={[
                   <><div><u>Încărcare:</u></div><div><strong>{pv.data}</strong></div></>,
                   <><div><u>Descărcare:</u></div><div><strong>{pv.data}</strong></div></>,
                 ]} />
               </td>
-              <td style={{ border: "1px solid #000", padding: 8, lineHeight: 1.4, height: "100%" }}>
+              <td style={{ border: "1px solid #000", position: "relative", lineHeight: 1.4 }}>
                 <Fill groups={[
                   <>{pv.materiale?.filter(m => m.den && m.cant).map((m, i) => <div key={i}>{m.den}</div>)}</>,
                   <>
@@ -558,12 +561,12 @@ function PVPrint({ pv }) {
                   </>,
                 ]} />
               </td>
-              <td style={{ border: "1px solid #000", padding: 8, lineHeight: 1.4, fontWeight: "bold", height: "100%" }}>
-                <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", height: "100%", textAlign: "center" }}>
+              <td style={{ border: "1px solid #000", position: "relative", lineHeight: 1.4, fontWeight: "bold" }}>
+                <div style={{ position: "absolute", inset: 8, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", textAlign: "center" }}>
                   {pv.materiale?.filter(m => m.den && m.cant).map((m, i) => <div key={i}>{m.cant} Kg</div>)}
                 </div>
               </td>
-              <td style={{ border: "1px solid #000", padding: 8, lineHeight: 1.6, height: "100%" }}>
+              <td style={{ border: "1px solid #000", position: "relative", lineHeight: 1.6 }}>
                 <Fill groups={[
                   <>
                     <div style={{ textAlign: "center", fontWeight: "bold" }}><u>ÎNCĂRCAREA</u></div>
@@ -1743,8 +1746,10 @@ export default function App() {
     const destAutMediu = a3.destinatar_aut_mediu || destInfo.aut_mediu || "";
     const destAutRevizuita = a3.destinatar_aut_revizuita || destInfo.aut_mediu_revizuita || "";
     const destAutExpira = a3.destinatar_aut_expira || destInfo.aut_mediu_expira || "";
-    // Grupuri distribuite pe toata inaltimea celulei (display:flex + space-between), ca sa umple pagina A4 pana jos, ca formularul oficial
-    const cellFill = (groups) => "<div style=\"display:flex;flex-direction:column;justify-content:space-between;height:100%;\">" + groups.map((g) => "<div>" + g + "</div>").join("") + "</div>";
+    // Grupuri distribuite pe toata inaltimea celulei. height:100% nu se rezolva fiabil pe un div din interiorul unui <td>
+    // (inaltimea celulei e un rezultat calculat al layout-ului de tabel, nu o valoare CSS "specificata"), asa ca umplem
+    // celula cu position:absolute;inset, care se ancoreaza direct de cutia reala a celulei parinte pozitionate relativ.
+    const cellFill = (groups) => "<div style=\"position:absolute;inset:8px;display:flex;flex-direction:column;justify-content:space-between;\">" + groups.map((g) => "<div>" + g + "</div>").join("") + "</div>";
 
     const col1 = cellFill([
       "<div><u>Date identificare:</u></div><div><strong>" + (a3.transportator || "") + "</strong></div>" + (trCuiRegCom ? "<div>" + trCuiRegCom + "</div>" : ""),
@@ -1761,7 +1766,7 @@ export default function App() {
       "<div>" + (a3.categorie || "") + "</div>",
       "<div style=\"text-align:center;font-weight:bold;\"><u>Descriere destinatie:</u></div>" + destRows,
     ]);
-    const col4 = "<div style=\"display:flex;flex-direction:column;justify-content:center;align-items:center;height:100%;font-weight:bold;text-align:center;\">" + kgTxt + "</div>";
+    const col4 = "<div style=\"position:absolute;inset:8px;display:flex;flex-direction:column;justify-content:center;align-items:center;font-weight:bold;text-align:center;\">" + kgTxt + "</div>";
     const col5 = cellFill([
       "<div style=\"text-align:center;font-weight:bold;\"><u>INCARCAREA</u></div>" +
         "<div style=\"margin-top:4px;\"><u>Date de identificare expeditor:</u></div>" +
@@ -1798,17 +1803,17 @@ export default function App() {
               "<th style=\"border:1px solid #000;padding:6px;width:46%;\">Date privind punctul de lucru*) unde se efectueaza:</th>" +
             "</tr></thead>" +
             "<tbody><tr style=\"height:100%;\">" +
-              "<td style=\"border:1px solid #000;padding:8px;line-height:1.6;height:100%;\">" + col1 + "</td>" +
-              "<td style=\"border:1px solid #000;padding:8px;height:100%;\">" + col2 + "</td>" +
-              "<td style=\"border:1px solid #000;padding:8px;line-height:1.4;height:100%;\">" + col3 + "</td>" +
-              "<td style=\"border:1px solid #000;padding:8px;line-height:1.4;height:100%;\">" + col4 + "</td>" +
-              "<td style=\"border:1px solid #000;padding:8px;line-height:1.6;height:100%;\">" + col5 + "</td>" +
+              "<td style=\"border:1px solid #000;position:relative;line-height:1.6;\">" + col1 + "</td>" +
+              "<td style=\"border:1px solid #000;position:relative;\">" + col2 + "</td>" +
+              "<td style=\"border:1px solid #000;position:relative;line-height:1.4;\">" + col3 + "</td>" +
+              "<td style=\"border:1px solid #000;position:relative;line-height:1.4;\">" + col4 + "</td>" +
+              "<td style=\"border:1px solid #000;position:relative;line-height:1.6;\">" + col5 + "</td>" +
             "</tr></tbody>" +
           "</table>" +
         "</div>" +
       "</div>";
     const w = window.open("", "_blank");
-    w.document.write("<html><head><title>Anexa 3 " + a3.serie + " " + a3.numar + "</title><style>html,body{margin:0;height:100%;} @page{size:A4 landscape;margin:8mm;}</style></head><body>" + html + "<scr" + "ipt>window.onload=function(){setTimeout(function(){window.print();},300);};</scr" + "ipt></body></html>");
+    w.document.write("<html><head><title>Anexa 3 " + a3.serie + " " + a3.numar + "</title><style>html,body{margin:0;height:100%;} @page{size:A4 portrait;margin:10mm;}</style></head><body>" + html + "<scr" + "ipt>window.onload=function(){setTimeout(function(){window.print();},300);};</scr" + "ipt></body></html>");
     w.document.close(); w.focus();
   };
 
@@ -1818,7 +1823,7 @@ export default function App() {
       if (pvPrintRef.current) {
         const c = pvPrintRef.current.innerHTML;
         const w = window.open("", "_blank");
-        w.document.write(`<html><head><title>PV ${pv.serie} ${pv.nr_pv}</title><style>html,body{margin:0;height:100%;font-family:'Times New Roman',serif;} @page{size:A4 portrait;margin:15mm;} @page anexaLandscape{size:A4 landscape;margin:8mm;}</style></head><body>${c}</body></html>`);
+        w.document.write(`<html><head><title>PV ${pv.serie} ${pv.nr_pv}</title><style>html,body{margin:0;height:100%;font-family:'Times New Roman',serif;} @page{size:A4 portrait;margin:15mm;}</style></head><body>${c}</body></html>`);
         w.document.close(); w.focus(); w.print();
       }
     }, 150);
@@ -1832,7 +1837,7 @@ export default function App() {
       if (pvPrintRef.current) {
         const c = pvPrintRef.current.innerHTML;
         const w = window.open("", "_blank");
-        w.document.write(`<html><head><title>PV ${found.serie} ${found.nr_pv}</title><style>html,body{margin:0;height:100%;font-family:'Times New Roman',serif;} @page{size:A4 portrait;margin:15mm;} @page anexaLandscape{size:A4 landscape;margin:8mm;}</style></head><body>${c}</body></html>`);
+        w.document.write(`<html><head><title>PV ${found.serie} ${found.nr_pv}</title><style>html,body{margin:0;height:100%;font-family:'Times New Roman',serif;} @page{size:A4 portrait;margin:15mm;}</style></head><body>${c}</body></html>`);
         w.document.close(); w.focus(); w.print();
       }
     }, 150);
