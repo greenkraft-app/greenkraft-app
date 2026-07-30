@@ -529,24 +529,21 @@ function PVPrint({ pv }) {
               <td style={{ border: "1px solid #000", position: "relative", lineHeight: 1.6 }}>
                 <Fill groups={[
                   <>
-                    <div><u>Date identificare:</u></div>
+                    <div>Date identificare:</div>
                     <div><strong>GREEN KRAFT S.R.L.</strong></div>
                     <div>{GREEN_KRAFT_IDENTITATE.cui}, {GREEN_KRAFT_IDENTITATE.reg_com}</div>
                   </>,
                   <>
-                    <div><u>Delegat:</u></div>
+                    <div>Date de identificare delegat</div>
+                    <div>si nr. inmatriculare mijloc de transport:</div>
                     <div><strong>{pv.delegat}</strong></div>
-                  </>,
-                  <>
-                    <div>Nr. de inmatriculare</div>
-                    <div><u>mijloc de transport:</u></div>
-                    <div><strong>{pv.nr_masina}</strong></div>
+                    {pv.nr_masina && <div><strong>{pv.nr_masina}</strong></div>}
                   </>,
                   <>
                     <div>Număr licenţa de transport</div>
-                    <div><u>mărfuri nepericuloase:</u></div>
+                    <div>mărfuri nepericuloase:</div>
                     <div>{pv.licenta || "nu e cazul"}</div>
-                    <div style={{ marginTop: 6, fontSize: 10 }}>Data expirare licenţă transport <u>mărfuri nepericuloase:</u></div>
+                    <div style={{ marginTop: 6, fontSize: 10 }}>Data expirare licenţă transport mărfuri nepericuloase:</div>
                     <div>{pv.licenta_exp || ""}</div>
                   </>,
                   <div style={{ textAlign: "center" }}>Semnatura și stampila</div>,
@@ -554,46 +551,50 @@ function PVPrint({ pv }) {
               </td>
               <td style={{ border: "1px solid #000", position: "relative" }}>
                 <Fill groups={[
-                  <><div><u>Încărcare:</u></div><div><strong>{pv.data}</strong></div></>,
-                  <><div><u>Descărcare:</u></div><div><strong>{pv.data}</strong></div></>,
+                  <><div>Încărcare</div><div><strong>{pv.data}</strong></div></>,
+                  <><div>Descărcare</div><div><strong>{pv.data}</strong></div></>,
                 ]} />
               </td>
               <td style={{ border: "1px solid #000", position: "relative", lineHeight: 1.4 }}>
                 <Fill groups={[
-                  <>{pv.materiale?.filter(m => m.den && m.cant).map((m, i) => <div key={i} style={{ minHeight: MATERIAL_ROW_H }}>{m.den}</div>)}</>,
                   <>
-                    <div style={{ textAlign: "center", fontWeight: "bold" }}><u>Descriere destinație:</u></div>
+                    <div>Categorii deşeuri</div>
+                    {pv.materiale?.filter(m => m.den && m.cant).map((m, i) => <div key={i} style={{ minHeight: MATERIAL_ROW_H }}>{m.den}</div>)}
+                  </>,
+                  <>
+                    <div style={{ textAlign: "center", fontWeight: "bold" }}>Descriere destinație:</div>
                     {DESTINATII.map(d => <div key={d} style={{ fontSize: 10 }}>{d} {pv.destinatie === d ? "●" : "○"}</div>)}
                   </>,
                 ]} />
               </td>
               <td style={{ border: "1px solid #000", position: "relative", lineHeight: 1.4, fontWeight: "bold" }}>
-                {/* Fara Fill: aliniat la varf, exact ca lista de deseuri din coloana anterioara, ca greutatea sa cada pe acelasi rand cu deseul (nu centrat separat pe toata inaltimea celulei) */}
+                {/* Fara Fill: aliniat la varf, exact ca lista de deseuri din coloana anterioara, ca greutatea sa cada pe acelasi rand cu deseul (nu centrat separat pe toata inaltimea celulei). Spacer-ul invizibil reproduce inaltimea etichetei "Categorii deseuri" din coloana anterioara, ca listele sa porneasca din acelasi loc. */}
                 <div style={{ position: "absolute", inset: 8, textAlign: "center" }}>
+                  <div style={{ visibility: "hidden" }}>Categorii deşeuri</div>
                   {pv.materiale?.filter(m => m.den && m.cant).map((m, i) => <div key={i} style={{ minHeight: MATERIAL_ROW_H }}>{m.cant} Kg</div>)}
                 </div>
               </td>
               <td style={{ border: "1px solid #000", position: "relative", lineHeight: 1.6 }}>
                 <Fill groups={[
                   <>
-                    <div style={{ textAlign: "center", fontWeight: "bold" }}><u>ÎNCĂRCAREA</u></div>
-                    <div style={{ marginTop: 4 }}><u>Date de identificare expeditor:</u></div>
+                    <div style={{ textAlign: "center", fontWeight: "bold" }}>ÎNCĂRCAREA</div>
+                    <div style={{ marginTop: 4 }}>Date de identificare expeditor:</div>
                     <div style={{ fontWeight: "bold", fontStyle: "italic" }}>{pv.client_denumire?.toUpperCase()}</div>
                     <div>{[pv.client_cui, pv.client_reg_com].filter(Boolean).join(", ")}</div>
                     <div>{pv.adresa_incarcare || pv.client_adresa}</div>
-                    <div style={{ marginTop: 8 }}><u>Autorizație de mediu nr:</u></div>
+                    <div style={{ marginTop: 8 }}>Autorizație de mediu nr:</div>
                     <div>{pv.client_autorizatie || ""}</div>
-                    <div><u>Dată expirare Autorizație Mediu:</u></div>
+                    <div>Dată expirare Autorizație Mediu:</div>
                     <div>{pv.client_autorizatie_exp || ""}</div>
                     <div style={{ textAlign: "center", marginTop: 8 }}>Semnatura și stampila</div>
                   </>,
                   <>
-                    <div style={{ textAlign: "center", fontWeight: "bold" }}><u>DESCĂRCAREA</u></div>
-                    <div><u>Date identificare destinatar:</u></div>
+                    <div style={{ textAlign: "center", fontWeight: "bold" }}>DESCĂRCAREA</div>
+                    <div>Date identificare destinatar:</div>
                     <div style={{ fontWeight: "bold", fontStyle: "italic" }}>GREEN KRAFT S.R.L.</div>
                     <div>{GREEN_KRAFT_IDENTITATE.cui}, {GREEN_KRAFT_IDENTITATE.reg_com}</div>
                     <div>{GREEN_KRAFT_IDENTITATE.adresa}</div>
-                    <div style={{ marginTop: 8 }}><u>Autorizație de mediu număr:</u></div>
+                    <div style={{ marginTop: 8 }}>Autorizație de mediu număr:</div>
                     <div style={{ marginTop: 4, fontWeight: "bold" }}>{GREEN_KRAFT_IDENTITATE.aut_mediu}, revizuita {GREEN_KRAFT_IDENTITATE.aut_mediu_revizuita}</div>
                     <div style={{ marginTop: 8, fontSize: 10 }}>Data expirare Autorizație de Mediu:</div>
                     <div style={{ fontWeight: "bold" }}>{GREEN_KRAFT_IDENTITATE.aut_mediu_expira}</div>
@@ -1763,38 +1764,37 @@ export default function App() {
     const cellFill = (groups) => "<div style=\"position:absolute;inset:8px;display:flex;flex-direction:column;gap:26px;\">" + groups.map((g) => "<div>" + g + "</div>").join("") + "</div>";
 
     const col1 = cellFill([
-      "<div><u>Date identificare:</u></div><div><strong>" + (a3.transportator || "") + "</strong></div>" + (trCuiRegCom ? "<div>" + trCuiRegCom + "</div>" : ""),
-      "<div><u>Delegat:</u></div><div><strong>" + (a3.delegat_nume || "") + "</strong></div>" + (a3.delegat_ci ? "<div>CI " + a3.delegat_ci + "</div>" : ""),
-      "<div>Nr. de inmatriculare</div><div><u>mijloc de transport:</u></div><div><strong>" + (a3.delegat_auto || "") + "</strong></div>",
-      "<div>Numar licenta de transport</div><div><u>marfuri nepericuloase:</u></div><div>" + (a3.licenta || "nu e cazul") + "</div><div style=\"margin-top:6px;font-size:10px;\">Data expirare licenta transport <u>marfuri nepericuloase:</u></div><div>" + (a3.licenta_expira || "") + "</div>",
+      "<div>Date identificare:</div><div><strong>" + (a3.transportator || "") + "</strong></div>" + (trCuiRegCom ? "<div>" + trCuiRegCom + "</div>" : ""),
+      "<div>Date de identificare delegat</div><div>si nr. inmatriculare mijloc de transport:</div>" + (a3.delegat_nume ? "<div><strong>" + a3.delegat_nume + "</strong></div>" : "") + (a3.delegat_ci ? "<div>CI " + a3.delegat_ci + "</div>" : "") + (a3.delegat_auto ? "<div><strong>" + a3.delegat_auto + "</strong></div>" : ""),
+      "<div>Numar licenta de transport</div><div>marfuri nepericuloase:</div><div>" + (a3.licenta || "nu e cazul") + "</div><div style=\"margin-top:6px;font-size:10px;\">Data expirare licenta transport marfuri nepericuloase:</div><div>" + (a3.licenta_expira || "") + "</div>",
       "<div style=\"text-align:center;\">Semnatura si stampila</div>",
     ]);
     const col2 = cellFill([
-      "<div><u>Incarcare:</u></div><div><strong>" + (a3.data_incarcare || "") + "</strong></div>",
-      "<div><u>Descarcare:</u></div><div><strong>" + (a3.data_descarcare || "") + "</strong></div>",
+      "<div>Incarcare</div><div><strong>" + (a3.data_incarcare || "") + "</strong></div>",
+      "<div>Descarcare</div><div><strong>" + (a3.data_descarcare || "") + "</strong></div>",
     ]);
     const col3 = cellFill([
-      "<div>" + (a3.categorie || "") + "</div>",
-      "<div style=\"text-align:center;font-weight:bold;\"><u>Descriere destinatie:</u></div>" + destRows,
+      "<div>Categorii deseuri</div><div>" + (a3.categorie || "") + "</div>",
+      "<div style=\"text-align:center;font-weight:bold;\">Descriere destinatie:</div>" + destRows,
     ]);
     const col4 = "<div style=\"position:absolute;inset:8px;display:flex;flex-direction:column;justify-content:center;align-items:center;font-weight:bold;text-align:center;\">" + kgTxt + "</div>";
     const col5 = cellFill([
-      "<div style=\"text-align:center;font-weight:bold;\"><u>INCARCAREA</u></div>" +
-        "<div style=\"margin-top:4px;\"><u>Date de identificare expeditor:</u></div>" +
+      "<div style=\"text-align:center;font-weight:bold;\">INCARCAREA</div>" +
+        "<div style=\"margin-top:4px;\">Date de identificare expeditor:</div>" +
         "<div style=\"font-weight:bold;font-style:italic;\">" + (a3.expeditor || "").toUpperCase() + "</div>" +
         (expCuiRegCom ? "<div>" + expCuiRegCom + "</div>" : "") +
         "<div>" + expAdresa + "</div>" +
-        "<div style=\"margin-top:8px;\"><u>Autorizatie de mediu nr:</u></div>" +
+        "<div style=\"margin-top:8px;\">Autorizatie de mediu nr:</div>" +
         "<div>" + expAutMediu + (expAutRevizuita ? ", revizuita " + expAutRevizuita : "") + "</div>" +
-        "<div><u>Data expirare Autorizatie Mediu:</u></div>" +
+        "<div>Data expirare Autorizatie Mediu:</div>" +
         "<div>" + expAutExpira + "</div>" +
         "<div style=\"text-align:center;margin-top:8px;\">Semnatura si stampila</div>",
-      "<div style=\"text-align:center;font-weight:bold;\"><u>DESCARCAREA</u></div>" +
-        "<div><u>Date identificare destinatar:</u></div>" +
+      "<div style=\"text-align:center;font-weight:bold;\">DESCARCAREA</div>" +
+        "<div>Date identificare destinatar:</div>" +
         "<div style=\"font-weight:bold;font-style:italic;\">" + (a3.destinatar || "").toUpperCase() + "</div>" +
         (destCuiRegCom ? "<div>" + destCuiRegCom + "</div>" : "") +
         "<div>" + destAdresa + "</div>" +
-        "<div style=\"margin-top:8px;\"><u>Autorizatie de mediu numar:</u></div>" +
+        "<div style=\"margin-top:8px;\">Autorizatie de mediu numar:</div>" +
         "<div style=\"margin-top:4px;font-weight:bold;\">" + destAutMediu + (destAutRevizuita ? ", revizuita " + destAutRevizuita : "") + "</div>" +
         "<div style=\"margin-top:8px;font-size:10px;\">Data expirare Autorizatie de Mediu:</div>" +
         "<div style=\"font-weight:bold;\">" + destAutExpira + "</div>" +
