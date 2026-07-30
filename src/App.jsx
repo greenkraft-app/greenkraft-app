@@ -460,6 +460,10 @@ function Fill({ groups, inset = 8 }) {
 }
 
 // ── PV Print (2 pages) ────────────────────────────────────────
+// Inaltime minima per rand de deseu, egala in coloana "Caracteristici deseuri" si "Cantitate", ca greutatea sa
+// cada mereu pe acelasi rand cu deseul chiar si cand denumirea se infasoara pe 2-3 linii (coloanele sunt <td>-uri
+// separate, randate independent, deci nu se aliniaza automat ca intr-un singur tabel cu randuri comune).
+const MATERIAL_ROW_H = 48;
 function PVPrint({ pv }) {
   const tS = { width: "100%", borderCollapse: "collapse", fontSize: 11 };
   const pageBreak = { pageBreakAfter: "always", breakAfter: "page" };
@@ -556,7 +560,7 @@ function PVPrint({ pv }) {
               </td>
               <td style={{ border: "1px solid #000", position: "relative", lineHeight: 1.4 }}>
                 <Fill groups={[
-                  <>{pv.materiale?.filter(m => m.den && m.cant).map((m, i) => <div key={i}>{m.den}</div>)}</>,
+                  <>{pv.materiale?.filter(m => m.den && m.cant).map((m, i) => <div key={i} style={{ minHeight: MATERIAL_ROW_H }}>{m.den}</div>)}</>,
                   <>
                     <div style={{ textAlign: "center", fontWeight: "bold" }}><u>Descriere destinație:</u></div>
                     {DESTINATII.map(d => <div key={d} style={{ fontSize: 10 }}>{d} {pv.destinatie === d ? "●" : "○"}</div>)}
@@ -564,8 +568,9 @@ function PVPrint({ pv }) {
                 ]} />
               </td>
               <td style={{ border: "1px solid #000", position: "relative", lineHeight: 1.4, fontWeight: "bold" }}>
-                <div style={{ position: "absolute", inset: 8, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", textAlign: "center" }}>
-                  {pv.materiale?.filter(m => m.den && m.cant).map((m, i) => <div key={i}>{m.cant} Kg</div>)}
+                {/* Fara Fill: aliniat la varf, exact ca lista de deseuri din coloana anterioara, ca greutatea sa cada pe acelasi rand cu deseul (nu centrat separat pe toata inaltimea celulei) */}
+                <div style={{ position: "absolute", inset: 8, textAlign: "center" }}>
+                  {pv.materiale?.filter(m => m.den && m.cant).map((m, i) => <div key={i} style={{ minHeight: MATERIAL_ROW_H }}>{m.cant} Kg</div>)}
                 </div>
               </td>
               <td style={{ border: "1px solid #000", position: "relative", lineHeight: 1.6 }}>
