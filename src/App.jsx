@@ -445,16 +445,16 @@ function BordPrint({ b }) {
   );
 }
 
-// Distribuie grupurile in celula (umple pagina A4 pana jos, ca formularul oficial).
-// height:100% nu se rezolva fiabil pe un div din interiorul unui <td> (inaltimea celulei e un rezultat
-// calculat al layout-ului de tabel, nu o valoare CSS "specificata"), asa ca folosim position:absolute;inset,
-// care se ancoreaza direct de cutia reala a celulei parinte (care trebuie sa aiba position:relative).
-// justify-content:space-between pe cateva grupuri scurte intinde spatiul gol intre ele pe sute de pixeli si arata
-// rupt; pastram un gap fix intre grupuri si doar ultimul (de regula Semnatura) se ancoreaza jos cu margin-top:auto.
+// Grupurile curg de sus in jos cu un spatiu constant, moderat (ca in formularul original pe hartie: campurile
+// stau grupate, iar acolo unde textul se termina ramane pur si simplu spatiu alb in celula). Umplerea paginii
+// pana jos vine din chenarul celulei (table/tr/td), NU din intinderea artificiala a textului - height:100% nu se
+// rezolva fiabil pe un div din interiorul unui <td> (inaltimea celulei e un rezultat calculat al layout-ului de
+// tabel, nu o valoare CSS "specificata"), asa ca folosim position:absolute;inset (celula parinte are position:relative),
+// doar pentru chenar/latime, nu pentru a forta textul sa atinga marginea de jos.
 function Fill({ groups, inset = 8 }) {
   return (
-    <div style={{ position: "absolute", inset, display: "flex", flexDirection: "column", gap: 16 }}>
-      {groups.map((g, i) => <div key={i} style={i === groups.length - 1 ? { marginTop: "auto" } : undefined}>{g}</div>)}
+    <div style={{ position: "absolute", inset, display: "flex", flexDirection: "column", gap: 26 }}>
+      {groups.map((g, i) => <div key={i}>{g}</div>)}
     </div>
   );
 }
@@ -513,11 +513,11 @@ function PVPrint({ pv }) {
         <table style={{ width: "100%", flex: 1, borderCollapse: "collapse", border: "1px solid #000", fontSize: 11, tableLayout: "fixed" }}>
           <thead>
             <tr style={{ background: "#fff" }}>
-              <th style={{ border: "1px solid #000", padding: 6, width: "20%" }}>Date de identificare transportator</th>
-              <th style={{ border: "1px solid #000", padding: 6, width: "9%" }}>Data</th>
-              <th style={{ border: "1px solid #000", padding: 6, width: "16%" }}>Caracteristici deşeuri</th>
+              <th style={{ border: "1px solid #000", padding: 6, width: "29%" }}>Date de identificare transportator</th>
+              <th style={{ border: "1px solid #000", padding: 6, width: "11%" }}>Data</th>
+              <th style={{ border: "1px solid #000", padding: 6, width: "15%" }}>Caracteristici deşeuri</th>
               <th style={{ border: "1px solid #000", padding: 6, width: "9%" }}>Cantitate</th>
-              <th style={{ border: "1px solid #000", padding: 6, width: "46%" }}>Date privind punctul de lucru*) unde se efectuează:</th>
+              <th style={{ border: "1px solid #000", padding: 6, width: "36%" }}>Date privind punctul de lucru*) unde se efectuează:</th>
             </tr>
           </thead>
           <tbody>
@@ -1748,12 +1748,14 @@ export default function App() {
     const destAutMediu = a3.destinatar_aut_mediu || destInfo.aut_mediu || "";
     const destAutRevizuita = a3.destinatar_aut_revizuita || destInfo.aut_mediu_revizuita || "";
     const destAutExpira = a3.destinatar_aut_expira || destInfo.aut_mediu_expira || "";
-    // Grupuri distribuite in celula. height:100% nu se rezolva fiabil pe un div din interiorul unui <td>
-    // (inaltimea celulei e un rezultat calculat al layout-ului de tabel, nu o valoare CSS "specificata"), asa ca umplem
-    // celula cu position:absolute;inset, care se ancoreaza direct de cutia reala a celulei parinte pozitionate relativ.
-    // justify-content:space-between pe cateva grupuri scurte intinde spatiul gol intre ele pe sute de pixeli si arata
-    // rupt; pastram un gap fix intre grupuri si doar ultimul (de regula Semnatura) se ancoreaza jos cu margin-top:auto.
-    const cellFill = (groups) => "<div style=\"position:absolute;inset:8px;display:flex;flex-direction:column;gap:16px;\">" + groups.map((g, i) => "<div" + (i === groups.length - 1 ? " style=\"margin-top:auto;\"" : "") + ">" + g + "</div>").join("") + "</div>";
+    // Grupurile curg de sus in jos cu un spatiu constant, moderat (ca in formularul original pe hartie: campurile
+    // stau grupate, iar acolo unde textul se termina ramane pur si simplu spatiu alb in celula). Umplerea paginii
+    // pana jos vine din chenarul celulei (table/tr/td, mai jos), NU din intinderea artificiala a textului -
+    // height:100% nu se rezolva fiabil pe un div din interiorul unui <td> (inaltimea celulei e un rezultat calculat
+    // al layout-ului de tabel, nu o valoare CSS "specificata"), asa ca folosim position:absolute;inset, care se
+    // ancoreaza direct de cutia reala a celulei parinte pozitionate relativ, doar pentru chenar/latime, nu pentru
+    // a forta textul sa atinga marginea de jos (asta arata rupt, cu goluri de sute de pixeli intre campuri scurte).
+    const cellFill = (groups) => "<div style=\"position:absolute;inset:8px;display:flex;flex-direction:column;gap:26px;\">" + groups.map((g) => "<div>" + g + "</div>").join("") + "</div>";
 
     const col1 = cellFill([
       "<div><u>Date identificare:</u></div><div><strong>" + (a3.transportator || "") + "</strong></div>" + (trCuiRegCom ? "<div>" + trCuiRegCom + "</div>" : ""),
@@ -1800,11 +1802,11 @@ export default function App() {
           "<div style=\"text-align:center;margin-bottom:14px;\">Formular de incarcare " + "\u2013" + " descarcare deseuri nepericuloase</div>" +
           "<table style=\"width:100%;flex:1;border-collapse:collapse;border:1px solid #000;font-size:11px;table-layout:fixed;\">" +
             "<thead><tr style=\"background:#fff;\">" +
-              "<th style=\"border:1px solid #000;padding:6px;width:20%;\">Date de identificare transportator</th>" +
-              "<th style=\"border:1px solid #000;padding:6px;width:9%;\">Data</th>" +
-              "<th style=\"border:1px solid #000;padding:6px;width:16%;\">Caracteristici deseuri</th>" +
+              "<th style=\"border:1px solid #000;padding:6px;width:29%;\">Date de identificare transportator</th>" +
+              "<th style=\"border:1px solid #000;padding:6px;width:11%;\">Data</th>" +
+              "<th style=\"border:1px solid #000;padding:6px;width:15%;\">Caracteristici deseuri</th>" +
               "<th style=\"border:1px solid #000;padding:6px;width:9%;\">Cantitate</th>" +
-              "<th style=\"border:1px solid #000;padding:6px;width:46%;\">Date privind punctul de lucru*) unde se efectueaza:</th>" +
+              "<th style=\"border:1px solid #000;padding:6px;width:36%;\">Date privind punctul de lucru*) unde se efectueaza:</th>" +
             "</tr></thead>" +
             "<tbody><tr style=\"height:100%;\">" +
               "<td style=\"border:1px solid #000;position:relative;line-height:1.6;\">" + col1 + "</td>" +
