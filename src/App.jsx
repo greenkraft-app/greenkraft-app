@@ -512,10 +512,11 @@ function PVPrint({ pv }) {
 
       {/* PAGE 2 — Anexa 3 (portret, umple pagina pe toata inaltimea) */}
       <div style={{ padding: "10px 16px", width: "100%", minHeight: "100vh", boxSizing: "border-box", display: "flex", flexDirection: "column", pageBreakAfter: "always", breakAfter: "page" }}>
-        <div style={{ textAlign: "center", marginBottom: 6, fontSize: 14, fontWeight: "bold" }}>Anexa 3 - Seria {pv.serie} Nr. {pv.nr_anexa} din data de {pv.data}</div>
-        <div style={{ textAlign: "center", marginBottom: 14 }}>Formular de încărcare – descărcare deşeuri nepericuloase</div>
+        <div style={{ textAlign: "center", marginBottom: 6, fontSize: 14, fontWeight: "bold" }}>ANEXA Nr. 3</div>
+        <div style={{ textAlign: "center", marginBottom: 14, fontWeight: "bold" }}>Formular de încărcare – descărcare deşeuri nepericuloase</div>
         <table style={{ width: "100%", flex: 1, borderCollapse: "collapse", border: "1px solid #000", fontSize: 11, tableLayout: "fixed" }}>
           <thead>
+            <tr><th colSpan={5} style={{ border: "1px solid #000", padding: "4px 6px", textAlign: "left", fontWeight: "normal" }}>Serie şi număr: {pv.serie} {pv.nr_anexa}</th></tr>
             <tr style={{ background: "#fff" }}>
               <th style={{ border: "1px solid #000", padding: 6, width: "29%" }}>Date de identificare transportator</th>
               <th style={{ border: "1px solid #000", padding: 6, width: "11%" }}>Data</th>
@@ -535,18 +536,14 @@ function PVPrint({ pv }) {
                   </>,
                   <>
                     <div>Date de identificare delegat</div>
-                    <div>si nr. inmatriculare mijloc de transport:</div>
+                    <div>si nr. inmatriculare mijloc de transport</div>
                     <div><strong>{pv.delegat}</strong></div>
                     {pv.nr_masina && <div><strong>{pv.nr_masina}</strong></div>}
                   </>,
-                  <>
-                    <div>Număr licenţa de transport</div>
-                    <div>mărfuri nepericuloase:</div>
-                    <div>{pv.licenta || "nu e cazul"}</div>
-                    <div style={{ marginTop: 6, fontSize: 10 }}>Data expirare licenţă transport mărfuri nepericuloase:</div>
-                    <div>{pv.licenta_exp || ""}</div>
-                  </>,
-                  <div style={{ textAlign: "center" }}>Semnatura și stampila</div>,
+                  <><div>Licenţa de transport mărfuri nepericuloase nr.</div><div>{pv.licenta || "nu e cazul"}</div></>,
+                  <><div>Data la care expiră licenţa de transport mărfuri nepericuloase</div><div>{pv.licenta_exp || ""}</div></>,
+                  <div>Semnătura</div>,
+                  <div style={{ fontSize: 10 }}>Se cantareste la destinatie</div>,
                 ]} />
               </td>
               <td style={{ border: "1px solid #000", position: "relative" }}>
@@ -578,27 +575,22 @@ function PVPrint({ pv }) {
                 <Fill groups={[
                   <>
                     <div style={{ textAlign: "center", fontWeight: "bold" }}>ÎNCĂRCAREA</div>
-                    <div style={{ marginTop: 4 }}>Date de identificare expeditor:</div>
+                    <div>Date de identificare expeditor</div>
                     <div style={{ fontWeight: "bold", fontStyle: "italic" }}>{pv.client_denumire?.toUpperCase()}</div>
                     <div>{[pv.client_cui, pv.client_reg_com].filter(Boolean).join(", ")}</div>
                     <div>{pv.adresa_incarcare || pv.client_adresa}</div>
-                    <div style={{ marginTop: 8 }}>Autorizație de mediu nr:</div>
-                    <div>{pv.client_autorizatie || ""}</div>
-                    <div>Dată expirare Autorizație Mediu:</div>
-                    <div>{pv.client_autorizatie_exp || ""}</div>
-                    <div style={{ textAlign: "center", marginTop: 8 }}>Semnatura și stampila</div>
+                    <div>Autorizație de mediu nr. {pv.client_autorizatie || ""}</div>
+                    <div style={{ textAlign: "center" }}>Semnatura și stampila</div>
                   </>,
                   <>
                     <div style={{ textAlign: "center", fontWeight: "bold" }}>DESCĂRCAREA</div>
-                    <div>Date identificare destinatar:</div>
+                    <div>Date identificare destinatar</div>
                     <div style={{ fontWeight: "bold", fontStyle: "italic" }}>GREEN KRAFT S.R.L.</div>
                     <div>{GREEN_KRAFT_IDENTITATE.cui}, {GREEN_KRAFT_IDENTITATE.reg_com}</div>
                     <div>{GREEN_KRAFT_IDENTITATE.adresa}</div>
-                    <div style={{ marginTop: 8 }}>Autorizație de mediu număr:</div>
-                    <div style={{ marginTop: 4, fontWeight: "bold" }}>{GREEN_KRAFT_IDENTITATE.aut_mediu}, revizuita {GREEN_KRAFT_IDENTITATE.aut_mediu_revizuita}</div>
-                    <div style={{ marginTop: 8, fontSize: 10 }}>Data expirare Autorizație de Mediu:</div>
-                    <div style={{ fontWeight: "bold" }}>{GREEN_KRAFT_IDENTITATE.aut_mediu_expira}</div>
-                    <div style={{ textAlign: "center", marginTop: 18 }}>Semnatura și stampila</div>
+                    <div>Autorizație de mediu nr. {GREEN_KRAFT_IDENTITATE.aut_mediu}</div>
+                    <div>Revizuita {GREEN_KRAFT_IDENTITATE.aut_mediu_revizuita}</div>
+                    <div style={{ textAlign: "center" }}>Semnatura și stampila</div>
                   </>,
                 ]} />
               </td>
@@ -1750,10 +1742,8 @@ export default function App() {
     const destAdresa = a3.destinatar_adresa || destInfo.adresa || "";
     const expAutMediu = a3.expeditor_aut_mediu || expInfo.aut_mediu || "";
     const expAutRevizuita = a3.expeditor_aut_revizuita || expInfo.aut_mediu_revizuita || "";
-    const expAutExpira = a3.expeditor_aut_expira || expInfo.aut_mediu_expira || "";
     const destAutMediu = a3.destinatar_aut_mediu || destInfo.aut_mediu || "";
     const destAutRevizuita = a3.destinatar_aut_revizuita || destInfo.aut_mediu_revizuita || "";
-    const destAutExpira = a3.destinatar_aut_expira || destInfo.aut_mediu_expira || "";
     // Grupurile curg de sus in jos cu un spatiu constant, moderat (ca in formularul original pe hartie: campurile
     // stau grupate, iar acolo unde textul se termina ramane pur si simplu spatiu alb in celula). Umplerea paginii
     // pana jos vine din chenarul celulei (table/tr/td, mai jos), NU din intinderea artificiala a textului -
@@ -1765,9 +1755,11 @@ export default function App() {
 
     const col1 = cellFill([
       "<div>Date identificare:</div><div><strong>" + (a3.transportator || "") + "</strong></div>" + (trCuiRegCom ? "<div>" + trCuiRegCom + "</div>" : ""),
-      "<div>Date de identificare delegat</div><div>si nr. inmatriculare mijloc de transport:</div>" + (a3.delegat_nume ? "<div><strong>" + a3.delegat_nume + "</strong></div>" : "") + (a3.delegat_ci ? "<div>CI " + a3.delegat_ci + "</div>" : "") + (a3.delegat_auto ? "<div><strong>" + a3.delegat_auto + "</strong></div>" : ""),
-      "<div>Numar licenta de transport</div><div>marfuri nepericuloase:</div><div>" + (a3.licenta || "nu e cazul") + "</div><div style=\"margin-top:6px;font-size:10px;\">Data expirare licenta transport marfuri nepericuloase:</div><div>" + (a3.licenta_expira || "") + "</div>",
-      "<div style=\"text-align:center;\">Semnatura si stampila</div>",
+      "<div>Date de identificare delegat</div><div>si nr. inmatriculare mijloc de transport</div>" + (a3.delegat_nume ? "<div><strong>" + a3.delegat_nume + "</strong></div>" : "") + (a3.delegat_ci ? "<div>CI " + a3.delegat_ci + "</div>" : "") + (a3.delegat_auto ? "<div><strong>" + a3.delegat_auto + "</strong></div>" : ""),
+      "<div>Licenta de transport marfuri nepericuloase nr.</div><div>" + (a3.licenta || "nu e cazul") + "</div>",
+      "<div>Data la care expira licenta de transport marfuri nepericuloase</div><div>" + (a3.licenta_expira || "") + "</div>",
+      "<div>Semnatura</div>",
+      "<div style=\"font-size:10px;\">Se cantareste la destinatie</div>",
     ]);
     const col2 = cellFill([
       "<div>Incarcare</div><div><strong>" + (a3.data_incarcare || "") + "</strong></div>",
@@ -1780,33 +1772,30 @@ export default function App() {
     const col4 = "<div style=\"position:absolute;inset:8px;display:flex;flex-direction:column;justify-content:center;align-items:center;font-weight:bold;text-align:center;\">" + kgTxt + "</div>";
     const col5 = cellFill([
       "<div style=\"text-align:center;font-weight:bold;\">INCARCAREA</div>" +
-        "<div style=\"margin-top:4px;\">Date de identificare expeditor:</div>" +
+        "<div>Date de identificare expeditor</div>" +
         "<div style=\"font-weight:bold;font-style:italic;\">" + (a3.expeditor || "").toUpperCase() + "</div>" +
         (expCuiRegCom ? "<div>" + expCuiRegCom + "</div>" : "") +
         "<div>" + expAdresa + "</div>" +
-        "<div style=\"margin-top:8px;\">Autorizatie de mediu nr:</div>" +
-        "<div>" + expAutMediu + (expAutRevizuita ? ", revizuita " + expAutRevizuita : "") + "</div>" +
-        "<div>Data expirare Autorizatie Mediu:</div>" +
-        "<div>" + expAutExpira + "</div>" +
-        "<div style=\"text-align:center;margin-top:8px;\">Semnatura si stampila</div>",
+        "<div>Autorizatie de mediu nr. " + expAutMediu + "</div>" +
+        (expAutRevizuita ? "<div>Revizuita " + expAutRevizuita + "</div>" : "") +
+        "<div style=\"text-align:center;\">Semnatura si stampila</div>",
       "<div style=\"text-align:center;font-weight:bold;\">DESCARCAREA</div>" +
-        "<div>Date identificare destinatar:</div>" +
+        "<div>Date identificare destinatar</div>" +
         "<div style=\"font-weight:bold;font-style:italic;\">" + (a3.destinatar || "").toUpperCase() + "</div>" +
         (destCuiRegCom ? "<div>" + destCuiRegCom + "</div>" : "") +
         "<div>" + destAdresa + "</div>" +
-        "<div style=\"margin-top:8px;\">Autorizatie de mediu numar:</div>" +
-        "<div style=\"margin-top:4px;font-weight:bold;\">" + destAutMediu + (destAutRevizuita ? ", revizuita " + destAutRevizuita : "") + "</div>" +
-        "<div style=\"margin-top:8px;font-size:10px;\">Data expirare Autorizatie de Mediu:</div>" +
-        "<div style=\"font-weight:bold;\">" + destAutExpira + "</div>" +
-        "<div style=\"text-align:center;margin-top:18px;\">Semnatura si stampila</div>",
+        "<div>Autorizatie de mediu nr. " + destAutMediu + "</div>" +
+        (destAutRevizuita ? "<div>Revizuita " + destAutRevizuita + "</div>" : "") +
+        "<div style=\"text-align:center;\">Semnatura si stampila</div>",
     ]);
     const html =
       "<div style=\"font-family:'Times New Roman',serif;font-size:12px;color:#000;background:#fff;\">" +
         "<div style=\"padding:10px 16px;width:100%;min-height:100vh;box-sizing:border-box;display:flex;flex-direction:column;\">" +
-          "<div style=\"text-align:center;margin-bottom:6px;font-size:14px;font-weight:bold;\">Anexa 3 - Seria " + (a3.serie || "") + " Nr. " + a3.numar + " din data de " + a3.data_incarcare + "</div>" +
-          "<div style=\"text-align:center;margin-bottom:14px;\">Formular de incarcare " + "\u2013" + " descarcare deseuri nepericuloase</div>" +
+          "<div style=\"text-align:center;margin-bottom:6px;font-size:14px;font-weight:bold;\">ANEXA Nr. 3</div>" +
+          "<div style=\"text-align:center;margin-bottom:14px;font-weight:bold;\">Formular de incarcare " + "\u2013" + " descarcare deseuri nepericuloase</div>" +
           "<table style=\"width:100%;flex:1;border-collapse:collapse;border:1px solid #000;font-size:11px;table-layout:fixed;\">" +
-            "<thead><tr style=\"background:#fff;\">" +
+            "<thead><tr><th colspan=\"5\" style=\"border:1px solid #000;padding:4px 6px;text-align:left;font-weight:normal;\">Serie si numar: " + (a3.serie || "") + " " + a3.numar + "</th></tr>" +
+            "<tr style=\"background:#fff;\">" +
               "<th style=\"border:1px solid #000;padding:6px;width:29%;\">Date de identificare transportator</th>" +
               "<th style=\"border:1px solid #000;padding:6px;width:11%;\">Data</th>" +
               "<th style=\"border:1px solid #000;padding:6px;width:15%;\">Caracteristici deseuri</th>" +
