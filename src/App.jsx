@@ -1420,6 +1420,7 @@ export default function App() {
     const netV = Math.round((brutV - taraV) * 100) / 100;
     const f = pjList.find(x => x.denumire === ticEdit.partener) || pfList.find(x => x.denumire === ticEdit.partener);
     const upd = {
+      data: ticEdit.data || "",
       partener: ticEdit.partener, partener_cui: f?.cod_fiscal || "",
       nr_masina: (ticEdit.nr_masina || "").toUpperCase(), sofer: ticEdit.sofer || "", material: ticEdit.material || "",
       brut: brutV, tara: taraV, net: netV,
@@ -3103,6 +3104,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
               <button onClick={() => setTicEdit(null)} style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.4)", color: "#fff", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 16 }}>✕</button>
             </div>
             <div style={{ padding: "14px 18px", display: "flex", flexDirection: "column", gap: 10, maxHeight: "70vh", overflowY: "auto" }}>
+              <div><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Data (apare pe tichetul printat și în registru)</label><DateInput value={ticEdit.data} onChange={(v) => setTicEdit((p) => ({ ...p, data: v }))} style={{ border: "1px solid #ccc" }} /></div>
               <div><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Furnizor</label><div style={{ border: "1px solid #ccc", borderRadius: 5, padding: "2px 4px" }}><ACStrict value={ticEdit.partener} options={[...new Set([...pfList.map(f => f.denumire), ...pjList.map(f => f.denumire)].filter(Boolean))]} placeholder="Caută partener înregistrat..." strict onChange={(v) => setTicEdit((p) => ({ ...p, partener: v }))} /></div></div>
               <div style={{ display: "flex", gap: 8 }}>
                 <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Mașină</label><input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, boxSizing: "border-box", textTransform: "uppercase" }} value={ticEdit.nr_masina} onChange={(e) => setTicEdit((p) => ({ ...p, nr_masina: e.target.value }))} /></div>
@@ -4712,7 +4714,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                             <td style={td({ textAlign: "right", fontWeight: 700, background: "#fff8e1", color: "#e65100" })}>{fmt(t.net)}</td>
                             <td style={td({ textAlign: "center", fontSize: 10 })}>{t.operator || "—"}</td>
                             <td style={td({ textAlign: "center", padding: 2, whiteSpace: "nowrap" })}><button onClick={() => printTichet(t)} style={{ background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 4, cursor: "pointer", color: "#1565c0", fontSize: 11, fontWeight: 700, padding: "2px 8px" }} title="Printează aici">🖨️</button> <button onClick={() => trimiteLaPrint(t)} style={{ background: "#ede7f6", border: "1px solid #b39ddb", borderRadius: 4, cursor: "pointer", color: "#6a1b9a", fontSize: 11, fontWeight: 700, padding: "2px 6px" }} title="Trimite la imprimanta de la birou">📡🖨️</button></td>
-                            <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => setTicEdit({ id: t.id, tip: t.tip, nr_tichet: t.nr_tichet, partener: t.partener || "", nr_masina: t.nr_masina || "", sofer: t.sofer || "", material: t.material || "", brut: t.brut != null ? String(t.brut) : "", tara: t.tara != null ? String(t.tara) : "", factura: t.factura || "", aviz: t.aviz || "", brut_la: t.brut_la || "", tara_la: t.tara_la || "", ora_intrare: t.ora_intrare || "", ora_iesire: t.ora_iesire || "" })} style={{ background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 4, cursor: "pointer", color: "#e65100", fontSize: 11, fontWeight: 700, padding: "2px 8px" }} title="Editează tichetul">✏️</button></td>
+                            <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => setTicEdit({ id: t.id, tip: t.tip, nr_tichet: t.nr_tichet, data: t.data || "", partener: t.partener || "", nr_masina: t.nr_masina || "", sofer: t.sofer || "", material: t.material || "", brut: t.brut != null ? String(t.brut) : "", tara: t.tara != null ? String(t.tara) : "", factura: t.factura || "", aviz: t.aviz || "", brut_la: t.brut_la || "", tara_la: t.tara_la || "", ora_intrare: t.ora_intrare || "", ora_iesire: t.ora_iesire || "" })} style={{ background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 4, cursor: "pointer", color: "#e65100", fontSize: 11, fontWeight: 700, padding: "2px 8px" }} title="Editează tichetul">✏️</button></td>
                             <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => delTichet(t)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
                           </tr>
                         ))}
