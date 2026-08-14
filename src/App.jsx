@@ -955,11 +955,17 @@ export default function App() {
   const [colSearch, setColSearch] = useState("");
   const [colCat, setColCat] = useState("");
   const [colAchitat, setColAchitat] = useState("");
+  const [colFurn, setColFurn] = useState("");
+  const [colProdus, setColProdus] = useState("");
   const [colMonth, setColMonth] = useState(() => { const d = new Date(); return `${String(d.getMonth()+1).padStart(2,"0")}.${d.getFullYear()}`; });
+  const [colDataDe, setColDataDe] = useState("");
+  const [colDataPana, setColDataPana] = useState("");
   const [livSearch, setLivSearch] = useState("");
   const [livClient, setLivClient] = useState("");
   const [livProdus, setLivProdus] = useState("");
   const [livMonth, setLivMonth] = useState(() => { const d = new Date(); return `${String(d.getMonth()+1).padStart(2,"0")}.${d.getFullYear()}`; });
+  const [livDataDe, setLivDataDe] = useState("");
+  const [livDataPana, setLivDataPana] = useState("");
   // ── Rapoarte state ────────────────────────────────────────
   const [rapDateStart, setRapDateStart] = useState("");
   const [rapDateEnd, setRapDateEnd] = useState("");
@@ -1899,6 +1905,14 @@ export default function App() {
     if (!m) return null;
     const d = parseInt(m[1]), mo = parseInt(m[2]), y = parseInt(m[3]) < 100 ? 2000 + parseInt(m[3]) : parseInt(m[3]);
     return new Date(y, mo - 1, d);
+  };
+  // Filtru pe interval de zile (ex: 1-15 August), combinabil cu filtrul de luna existent - "de"/"pana" sunt string-uri DD.MM.YYYY (din DateInput), goale = fara limita in acea directie
+  const inDateRange = (dataStr, de, pana) => {
+    const d = parseDateRO(dataStr);
+    if (!d) return true; // fara data pe rand -> nu excludem, doar celelalte filtre decid
+    if (de && d < parseDateRO(de)) return false;
+    if (pana && d > parseDateRO(pana)) return false;
+    return true;
   };
   // Sort an array by 'data' field ascending (oldest first → newest last)
   const sortByDateAsc = (arr) => [...arr].sort((a, b) => {
@@ -4276,12 +4290,17 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
         {tab === "colectari" && (() => {
           const colFiltered = sortByDateAsc(colRows.filter(r => {
             if (colMonth && monthOf(r.data) !== colMonth) return false;
+            if (!inDateRange(r.data, colDataDe, colDataPana)) return false;
             if (colCat && r.cat !== colCat) return false;
             if (colAchitat && r.ach !== colAchitat) return false;
+            if (colFurn && r.furn !== colFurn) return false;
+            if (colProdus && r.produs !== colProdus) return false;
             if (colSearch) { const q = colSearch.toLowerCase(); if (!(r.furn?.toLowerCase().includes(q) || r.produs?.toLowerCase().includes(q) || r.ach_de?.toLowerCase().includes(q))) return false; }
             return true;
           }));
           const colMonthOpts = [...new Set(colRows.map(r => monthOf(r.data)).filter(Boolean))].sort();
+          const colFurnFilterOptions = [...new Set(colRows.map(r => r.furn).filter(Boolean))].sort();
+          const colProdusFilterOptions = [...new Set(colRows.map(r => r.produs).filter(Boolean))].sort();
           return (
           <div>
             <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
@@ -4296,16 +4315,30 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                 <option value="">📅 Toate lunile</option>
                 {colMonthOpts.map(m => <option key={m}>{m}</option>)}
               </select>
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <span style={{ fontSize: 11, color: "#777" }}>de la</span>
+                <DateInput value={colDataDe} onChange={setColDataDe} style={{ border: "1px solid #ccc", padding: "5px 6px", fontSize: 12 }} />
+                <span style={{ fontSize: 11, color: "#777" }}>până la</span>
+                <DateInput value={colDataPana} onChange={setColDataPana} style={{ border: "1px solid #ccc", padding: "5px 6px", fontSize: 12 }} />
+              </div>
               <select value={colCat} onChange={(e) => setColCat(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}>
                 <option value="">📂 Toate cat.</option>
                 {CATEGORIE_COL.map(c => <option key={c}>{c}</option>)}
+              </select>
+              <select value={colFurn} onChange={(e) => setColFurn(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}>
+                <option value="">🏢 Toți furnizorii</option>
+                {colFurnFilterOptions.map(f => <option key={f}>{f}</option>)}
+              </select>
+              <select value={colProdus} onChange={(e) => setColProdus(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}>
+                <option value="">📦 Toate produsele</option>
+                {colProdusFilterOptions.map(p => <option key={p}>{p}</option>)}
               </select>
               <select value={colAchitat} onChange={(e) => setColAchitat(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}>
                 <option value="">💰 Toate</option>
                 <option value="Da">✅ Achitat</option>
                 <option value="Nu">⏳ Neachitat</option>
               </select>
-              {(colSearch || colMonth || colCat || colAchitat) && <button onClick={() => { setColSearch(""); setColMonth(""); setColCat(""); setColAchitat(""); }} style={{ background: "#e53935", color: "#fff", border: "none", borderRadius: 5, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕ Reset</button>}
+              {(colSearch || colMonth || colCat || colAchitat || colFurn || colProdus || colDataDe || colDataPana) && <button onClick={() => { setColSearch(""); setColMonth(""); setColCat(""); setColAchitat(""); setColFurn(""); setColProdus(""); setColDataDe(""); setColDataPana(""); }} style={{ background: "#e53935", color: "#fff", border: "none", borderRadius: 5, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕ Reset</button>}
             </div>
             <div style={{ overflowX: "auto" }}>
               <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 1290 }}>
@@ -4352,6 +4385,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
         {tab === "livrari" && (() => {
           const livFiltered = sortByDateAsc(livRows.filter(r => {
             if (livMonth && monthOf(r.data) !== livMonth) return false;
+            if (!inDateRange(r.data, livDataDe, livDataPana)) return false;
             if (livClient && r.client !== livClient) return false;
             if (livProdus && r.produs !== livProdus) return false;
             if (livSearch) { const q = livSearch.toLowerCase(); if (!(r.client?.toLowerCase().includes(q) || r.produs?.toLowerCase().includes(q) || r.det?.toLowerCase().includes(q) || String(r.nr).includes(q))) return false; }
@@ -4372,6 +4406,12 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                 <option value="">📅 Toate lunile</option>
                 {livMonthOpts.map(m => <option key={m}>{m}</option>)}
               </select>
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <span style={{ fontSize: 11, color: "#777" }}>de la</span>
+                <DateInput value={livDataDe} onChange={setLivDataDe} style={{ border: "1px solid #ccc", padding: "5px 6px", fontSize: 12 }} />
+                <span style={{ fontSize: 11, color: "#777" }}>până la</span>
+                <DateInput value={livDataPana} onChange={setLivDataPana} style={{ border: "1px solid #ccc", padding: "5px 6px", fontSize: 12 }} />
+              </div>
               <select value={livClient} onChange={(e) => setLivClient(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}>
                 <option value="">🏢 Toți clienții</option>
                 {clientFilterOptions.map(c => <option key={c}>{c}</option>)}
@@ -4380,7 +4420,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                 <option value="">📦 Toate produsele</option>
                 {livProdusFilterOptions.map(p => <option key={p}>{p}</option>)}
               </select>
-              {(livSearch || livMonth || livClient || livProdus) && <button onClick={() => { setLivSearch(""); setLivMonth(""); setLivClient(""); setLivProdus(""); }} style={{ background: "#e53935", color: "#fff", border: "none", borderRadius: 5, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕ Reset</button>}
+              {(livSearch || livMonth || livClient || livProdus || livDataDe || livDataPana) && <button onClick={() => { setLivSearch(""); setLivMonth(""); setLivClient(""); setLivProdus(""); setLivDataDe(""); setLivDataPana(""); }} style={{ background: "#e53935", color: "#fff", border: "none", borderRadius: 5, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕ Reset</button>}
             </div>
             <div style={{ overflowX: "auto" }}>
               <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 1310 }}>
