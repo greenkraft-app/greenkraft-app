@@ -958,6 +958,7 @@ export default function App() {
   const [colMonth, setColMonth] = useState(() => { const d = new Date(); return `${String(d.getMonth()+1).padStart(2,"0")}.${d.getFullYear()}`; });
   const [livSearch, setLivSearch] = useState("");
   const [livClient, setLivClient] = useState("");
+  const [livProdus, setLivProdus] = useState("");
   const [livMonth, setLivMonth] = useState(() => { const d = new Date(); return `${String(d.getMonth()+1).padStart(2,"0")}.${d.getFullYear()}`; });
   // ── Rapoarte state ────────────────────────────────────────
   const [rapDateStart, setRapDateStart] = useState("");
@@ -2786,6 +2787,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
   const achitatOptions = [...new Set([...ACHITAT_DE_OPT, ...colRows.map(r => r.ach_de).filter(Boolean), ...chRows.map(r => r.ach_de).filter(Boolean), ...datRows.map(r => r.ach_de).filter(Boolean)])].sort();
   const clientOptions = dedupeFirme([...pfList.map(f => f.denumire), ...pjList.map(f => f.denumire)]);
   const clientFilterOptions = dedupeFirme(livRows.map(r => r.client).filter(Boolean));
+  const livProdusFilterOptions = [...new Set(livRows.map(r => r.produs).filter(Boolean))].sort();
 
   // ── Render helpers ────────────────────────────────────────
   const tabSt = (name) => ({ padding: "7px 13px", cursor: "pointer", border: "none", fontWeight: 600, fontSize: 12, borderBottom: tab === name ? `3px solid ${G}` : "3px solid transparent", background: tab === name ? "#fff" : "#e8f0eb", color: tab === name ? G : "#555", borderRadius: "6px 6px 0 0", marginRight: 2, whiteSpace: "nowrap" });
@@ -4351,6 +4353,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
           const livFiltered = sortByDateAsc(livRows.filter(r => {
             if (livMonth && monthOf(r.data) !== livMonth) return false;
             if (livClient && r.client !== livClient) return false;
+            if (livProdus && r.produs !== livProdus) return false;
             if (livSearch) { const q = livSearch.toLowerCase(); if (!(r.client?.toLowerCase().includes(q) || r.produs?.toLowerCase().includes(q) || r.det?.toLowerCase().includes(q) || String(r.nr).includes(q))) return false; }
             return true;
           }));
@@ -4373,7 +4376,11 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                 <option value="">🏢 Toți clienții</option>
                 {clientFilterOptions.map(c => <option key={c}>{c}</option>)}
               </select>
-              {(livSearch || livMonth || livClient) && <button onClick={() => { setLivSearch(""); setLivMonth(""); setLivClient(""); }} style={{ background: "#e53935", color: "#fff", border: "none", borderRadius: 5, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕ Reset</button>}
+              <select value={livProdus} onChange={(e) => setLivProdus(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}>
+                <option value="">📦 Toate produsele</option>
+                {livProdusFilterOptions.map(p => <option key={p}>{p}</option>)}
+              </select>
+              {(livSearch || livMonth || livClient || livProdus) && <button onClick={() => { setLivSearch(""); setLivMonth(""); setLivClient(""); setLivProdus(""); }} style={{ background: "#e53935", color: "#fff", border: "none", borderRadius: 5, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕ Reset</button>}
             </div>
             <div style={{ overflowX: "auto" }}>
               <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 1310 }}>
