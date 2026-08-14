@@ -1054,6 +1054,8 @@ export default function App() {
   const [ticTaraInput, setTicTaraInput] = useState({}); // { [id]: valoare }
   const [ticNou, setTicNou] = useState({ tip: "Intrare", prima: "plin", partener: "", partener_cui: "", client: "GREEN KRAFT SRL", transportator: "", transportator_cui: "", nr_masina: "", sofer: "", material: "", greutate: "", factura: "", aviz: "", obs: "" });
   const [ticEdit, setTicEdit] = useState(null); // { id, nr_tichet, factura, aviz, brut_la, tara_la, ora_intrare, ora_iesire }
+  const [ticSaving, setTicSaving] = useState(false); // doar pentru UI (buton dezactivat/"Se salveaza...")
+  const ticSavingRef = useRef(false); // garda reala: state-ul React nu se actualizeaza sincron, deci click-uri repetate in aceeasi bucla de evenimente ar citi tot valoarea veche si ar trece toate de "if (ticSaving) return" -- ref-ul se actualizeaza imediat
   const [anexa3List, setAnexa3List] = useState([]);
   const [a3SubTab, setA3SubTab] = useState("nou");
   const [a3Filter, setA3Filter] = useState("");
@@ -1309,64 +1311,80 @@ export default function App() {
     return String(Math.max(maxNr, 3377) + 1); // numerotare continua de la 3378 (preluata din sKala)
   };
   const salveazaTichet1 = async () => {
+    if (ticSavingRef.current) return; // click dublu / apasat de mai multe ori inainte sa se reactualizeze ecranul -> ar crea acelasi nr_tichet de mai multe ori
     if (!ticNou.partener) { alert("Completați furnizorul (cine aduce marfa)!"); return; }
     if (!ticNou.nr_masina) { alert("Completați nr. de înmatriculare!"); return; }
     if (!ticNou.greutate || parseSuma(ticNou.greutate) <= 0) { alert("Completați greutatea primei cântăriri!"); return; }
-    const g = parseSuma(ticNou.greutate);
-    const ePlin = ticNou.prima === "plin";
-    const ts = timestampAcum();
-    const row = {
-      serie: "TC",
-      nr_tichet: getNextTichetNr(),
-      data: today(),
-      ora_intrare: oraAcum(),
-      ora_iesire: "",
-      tip: ticNou.tip,
-      partener: ticNou.partener,
-      partener_cui: ticNou.partener_cui || "",
-      client: ticNou.client || "GREEN KRAFT SRL",
-      transportator: ticNou.transportator || "",
-      transportator_cui: ticNou.transportator_cui || "",
-      nr_masina: ticNou.nr_masina.toUpperCase(),
-      sofer: ticNou.sofer || "",
-      material: ticNou.material || "",
-      brut: ePlin ? g : null,
-      tara: ePlin ? null : g,
-      brut_la: ePlin ? ts : "",
-      tara_la: ePlin ? "" : ts,
-      net: null,
-      status: "deschis",
-      operator: currentUser || "",
-      factura: ticNou.factura || "",
-      aviz: ticNou.aviz || "",
-      obs: ticNou.obs || "",
-    };
-    const { data, error } = await sb.from("tichete_cantar").insert(row).select();
-    if (error) { alert("Eroare la salvare: " + error.message); return; }
-    if (data) setTicheteList((p) => [...p, data[0]]);
-    // Sofer nou? Il salvam automat in tabela delegati
-    if (row.sofer && !delegatiList.some((d) => d.nume?.toLowerCase() === row.sofer.toLowerCase())) {
-      const { data: dNou } = await sb.from("delegati").insert({ nume: row.sofer, ci_serie: "", ci_numar: "", cnp: "" }).select();
-      if (dNou) setDelegatiList((p) => [...p, dNou[0]]);
+    ticSavingRef.current = true;
+    setTicSaving(true);
+    try {
+      const g = parseSuma(ticNou.greutate);
+      const ePlin = ticNou.prima === "plin";
+      const ts = timestampAcum();
+      const row = {
+        serie: "TC",
+        nr_tichet: getNextTichetNr(),
+        data: today(),
+        ora_intrare: oraAcum(),
+        ora_iesire: "",
+        tip: ticNou.tip,
+        partener: ticNou.partener,
+        partener_cui: ticNou.partener_cui || "",
+        client: ticNou.client || "GREEN KRAFT SRL",
+        transportator: ticNou.transportator || "",
+        transportator_cui: ticNou.transportator_cui || "",
+        nr_masina: ticNou.nr_masina.toUpperCase(),
+        sofer: ticNou.sofer || "",
+        material: ticNou.material || "",
+        brut: ePlin ? g : null,
+        tara: ePlin ? null : g,
+        brut_la: ePlin ? ts : "",
+        tara_la: ePlin ? "" : ts,
+        net: null,
+        status: "deschis",
+        operator: currentUser || "",
+        factura: ticNou.factura || "",
+        aviz: ticNou.aviz || "",
+        obs: ticNou.obs || "",
+      };
+      const { data, error } = await sb.from("tichete_cantar").insert(row).select();
+      if (error) { alert("Eroare la salvare: " + error.message); return; }
+      if (data) setTicheteList((p) => [...p, data[0]]);
+      // Sofer nou? Il salvam automat in tabela delegati
+      if (row.sofer && !delegatiList.some((d) => d.nume?.toLowerCase() === row.sofer.toLowerCase())) {
+        const { data: dNou } = await sb.from("delegati").insert({ nume: row.sofer, ci_serie: "", ci_numar: "", cnp: "" }).select();
+        if (dNou) setDelegatiList((p) => [...p, dNou[0]]);
+      }
+      logAction("Creare", "Tichet cântar", row.serie + " " + row.nr_tichet, `${row.tip} • ${row.partener} • ${ePlin ? "BRUT" : "TARA"} ${g} kg`);
+      setTicNou({ tip: "Intrare", prima: "plin", partener: "", partener_cui: "", client: "GREEN KRAFT SRL", transportator: "", transportator_cui: "", nr_masina: "", sofer: "", material: "", greutate: "", factura: "", aviz: "", obs: "" });
+      setTicSubTab("deschise");
+    } finally {
+      ticSavingRef.current = false;
+      setTicSaving(false);
     }
-    logAction("Creare", "Tichet cântar", row.serie + " " + row.nr_tichet, `${row.tip} • ${row.partener} • ${ePlin ? "BRUT" : "TARA"} ${g} kg`);
-    setTicNou({ tip: "Intrare", prima: "plin", partener: "", partener_cui: "", client: "GREEN KRAFT SRL", transportator: "", transportator_cui: "", nr_masina: "", sofer: "", material: "", greutate: "", factura: "", aviz: "", obs: "" });
-    setTicSubTab("deschise");
   };
   // Rezervă un număr de tichet fără date (pentru un tichet fizic completat mai târziu) — statusul "gol" îl ține în
   // afara fluxului normal deschis→închis (care presupune deja o primă cântărire), pana e completat din 📝 Rezervate.
   const addTicBlank = async (tip) => {
-    const row = {
-      serie: "TC", nr_tichet: getNextTichetNr(), data: today(), ora_intrare: oraAcum(), ora_iesire: "",
-      tip, partener: "", partener_cui: "", client: "GREEN KRAFT SRL", transportator: "", transportator_cui: "",
-      nr_masina: "", sofer: "", material: "", brut: null, tara: null, net: null, brut_la: "", tara_la: "",
-      status: "gol", operator: currentUser || "", factura: "", aviz: "", obs: "",
-    };
-    const { data, error } = await sb.from("tichete_cantar").insert(row).select();
-    if (error) { alert("Eroare la salvare: " + error.message); return; }
-    if (data) setTicheteList((p) => [...p, data[0]]);
-    logAction("Rezervare", "Tichet cântar", row.serie + " " + row.nr_tichet, "tichet gol, de completat mai târziu");
-    setTicSubTab("gol");
+    if (ticSavingRef.current) return;
+    ticSavingRef.current = true;
+    setTicSaving(true);
+    try {
+      const row = {
+        serie: "TC", nr_tichet: getNextTichetNr(), data: today(), ora_intrare: oraAcum(), ora_iesire: "",
+        tip, partener: "", partener_cui: "", client: "GREEN KRAFT SRL", transportator: "", transportator_cui: "",
+        nr_masina: "", sofer: "", material: "", brut: null, tara: null, net: null, brut_la: "", tara_la: "",
+        status: "gol", operator: currentUser || "", factura: "", aviz: "", obs: "",
+      };
+      const { data, error } = await sb.from("tichete_cantar").insert(row).select();
+      if (error) { alert("Eroare la salvare: " + error.message); return; }
+      if (data) setTicheteList((p) => [...p, data[0]]);
+      logAction("Rezervare", "Tichet cântar", row.serie + " " + row.nr_tichet, "tichet gol, de completat mai târziu");
+      setTicSubTab("gol");
+    } finally {
+      ticSavingRef.current = false;
+      setTicSaving(false);
+    }
   };
   const inchideTichet = async (t) => {
     const v = parseSuma(ticTaraInput[t.id]);
@@ -4728,8 +4746,8 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   <button key={k} onClick={() => setTicSubTab(k)} style={{ padding: "7px 16px", cursor: "pointer", border: "none", fontWeight: 600, fontSize: 12, borderBottom: ticSubTab === k ? `2px solid ${G}` : "2px solid transparent", background: ticSubTab === k ? "#f0faf4" : "transparent", color: ticSubTab === k ? G : "#666" }}>{l}</button>
                 ))}
                 <div style={{ marginLeft: "auto", display: "flex", gap: 4 }} title="Rezervă un număr de tichet fără date — îl completezi mai târziu din 📝 Rezervate">
-                  <button onClick={() => addTicBlank("Intrare")} style={{ padding: "6px 10px", border: "1px solid #ccc", borderRadius: 6, background: "#fafafa", cursor: "pointer", fontSize: 11, fontWeight: 600, color: "#666" }}>📝 + Gol ▼ Intrare (TC #{getNextTichetNr()})</button>
-                  <button onClick={() => addTicBlank("Iesire")} style={{ padding: "6px 10px", border: "1px solid #ccc", borderRadius: 6, background: "#fafafa", cursor: "pointer", fontSize: 11, fontWeight: 600, color: "#666" }}>📝 + Gol ▲ Ieșire</button>
+                  <button onClick={() => addTicBlank("Intrare")} disabled={ticSaving} style={{ padding: "6px 10px", border: "1px solid #ccc", borderRadius: 6, background: "#fafafa", cursor: ticSaving ? "wait" : "pointer", fontSize: 11, fontWeight: 600, color: "#666", opacity: ticSaving ? 0.6 : 1 }}>{ticSaving ? "⏳" : `📝 + Gol ▼ Intrare (TC #${getNextTichetNr()})`}</button>
+                  <button onClick={() => addTicBlank("Iesire")} disabled={ticSaving} style={{ padding: "6px 10px", border: "1px solid #ccc", borderRadius: 6, background: "#fafafa", cursor: ticSaving ? "wait" : "pointer", fontSize: 11, fontWeight: 600, color: "#666", opacity: ticSaving ? 0.6 : 1 }}>{ticSaving ? "⏳" : "📝 + Gol ▲ Ieșire"}</button>
                 </div>
               </div>
 
@@ -4785,7 +4803,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                       </div>
                       {scalePort && <button onClick={() => useScaleWeight((v) => setTicNou((p) => ({ ...p, greutate: v })))} style={{ padding: "10px", background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: `1px solid ${G}`, borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700, color: G, marginBottom: 8 }}>⚖️ Preia din cântar {scaleReading ? `(${fmt(scaleReading.value)} kg)` : ""}</button>}
                       {!scalePort && cantarLive?.fresh && <button onClick={() => useLiveWeight((v) => setTicNou((p) => ({ ...p, greutate: v })))} style={{ padding: "10px", background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#1565c0", marginBottom: 8 }}>📡 Preia live de la birou ({fmt(cantarLive.value)} kg)</button>}
-                      <button onClick={salveazaTichet1} style={{ marginTop: "auto", padding: "13px", background: `linear-gradient(135deg,#1b5e20,${G})`, color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 14, fontWeight: 700 }}>💾 Deschide tichet TC #{getNextTichetNr()}</button>
+                      <button onClick={salveazaTichet1} disabled={ticSaving} style={{ marginTop: "auto", padding: "13px", background: ticSaving ? "#9e9e9e" : `linear-gradient(135deg,#1b5e20,${G})`, color: "#fff", border: "none", borderRadius: 8, cursor: ticSaving ? "wait" : "pointer", fontSize: 14, fontWeight: 700 }}>{ticSaving ? "⏳ Se salvează..." : `💾 Deschide tichet TC #${getNextTichetNr()}`}</button>
                       <div style={{ fontSize: 10, color: "#999", marginTop: 6, textAlign: "center" }}>A doua cântărire se face din „⏳ Deschise"</div>
                     </div>
                   </div>
