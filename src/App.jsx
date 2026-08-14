@@ -1048,7 +1048,7 @@ export default function App() {
   const [varSubTab, setVarSubTab] = useState("produse"); // produse | delegati | parteneri
   const [parteneriSearch, setParteneriSearch] = useState("");
   const [ticheteList, setTicheteList] = useState([]);
-  const [ticSubTab, setTicSubTab] = useState("nou"); // nou | deschise | registru
+  const [ticSubTab, setTicSubTab] = useState("nou"); // nou | deschise | gol | registru
   const [ticFilter, setTicFilter] = useState("");
   const [ticLuna, setTicLuna] = useState("");
   const [ticTaraInput, setTicTaraInput] = useState({}); // { [id]: valoare }
@@ -1353,6 +1353,21 @@ export default function App() {
     setTicNou({ tip: "Intrare", prima: "plin", partener: "", partener_cui: "", client: "GREEN KRAFT SRL", transportator: "", transportator_cui: "", nr_masina: "", sofer: "", material: "", greutate: "", factura: "", aviz: "", obs: "" });
     setTicSubTab("deschise");
   };
+  // Rezervă un număr de tichet fără date (pentru un tichet fizic completat mai târziu) — statusul "gol" îl ține în
+  // afara fluxului normal deschis→închis (care presupune deja o primă cântărire), pana e completat din 📝 Rezervate.
+  const addTicBlank = async (tip) => {
+    const row = {
+      serie: "TC", nr_tichet: getNextTichetNr(), data: today(), ora_intrare: oraAcum(), ora_iesire: "",
+      tip, partener: "", partener_cui: "", client: "GREEN KRAFT SRL", transportator: "", transportator_cui: "",
+      nr_masina: "", sofer: "", material: "", brut: null, tara: null, net: null, brut_la: "", tara_la: "",
+      status: "gol", operator: currentUser || "", factura: "", aviz: "", obs: "",
+    };
+    const { data, error } = await sb.from("tichete_cantar").insert(row).select();
+    if (error) { alert("Eroare la salvare: " + error.message); return; }
+    if (data) setTicheteList((p) => [...p, data[0]]);
+    logAction("Rezervare", "Tichet cântar", row.serie + " " + row.nr_tichet, "tichet gol, de completat mai târziu");
+    setTicSubTab("gol");
+  };
   const inchideTichet = async (t) => {
     const v = parseSuma(ticTaraInput[t.id]);
     if (!v || v <= 0) { alert("Introduceți greutatea celei de-a doua cântăriri!"); return; }
@@ -1422,6 +1437,8 @@ export default function App() {
     if (brutV <= taraV) { alert(`Brut (${brutV} kg) trebuie să fie mai mare decât Tara (${taraV} kg)!`); return; }
     const netV = Math.round((brutV - taraV) * 100) / 100;
     const f = pjList.find(x => x.denumire === ticEdit.partener) || pfList.find(x => x.denumire === ticEdit.partener);
+    const orig = ticheteList.find((x) => x.id === ticEdit.id);
+    const eraNeinchis = orig?.status !== "inchis"; // tichet gol sau deschis, completat acum pentru prima data
     const upd = {
       data: ticEdit.data || "",
       partener: ticEdit.partener, partener_cui: f?.cod_fiscal || "",
@@ -1429,7 +1446,8 @@ export default function App() {
       brut: brutV, tara: taraV, net: netV,
       factura: ticEdit.factura || "", aviz: ticEdit.aviz || "",
       brut_la: ticEdit.brut_la || "", tara_la: ticEdit.tara_la || "",
-      ora_intrare: ticEdit.ora_intrare || "", ora_iesire: ticEdit.ora_iesire || "",
+      ora_intrare: ticEdit.ora_intrare || "", ora_iesire: ticEdit.ora_iesire || oraAcum(),
+      status: "inchis",
     };
     const { error } = await sb.from("tichete_cantar").update(upd).eq("id", ticEdit.id);
     if (error) { alert("Eroare: " + error.message); return; }
@@ -1444,9 +1462,11 @@ export default function App() {
         };
         const { error: colErr } = await sb.from("colectari").update(colUpd).eq("id", legata.id);
         if (!colErr) setColRows((p) => p.map((r) => (r.id === legata.id ? { ...r, ...colUpd } : r)));
+      } else if (eraNeinchis) {
+        await creeazaAchizitieDinTichet({ ...orig, ...upd });
       }
     } else if (ticEdit.tip === "Iesire") {
-      const avizVechi = ticheteList.find((x) => x.id === ticEdit.id)?.aviz;
+      const avizVechi = orig?.aviz;
       const legata = avizVechi ? livRows.find((r) => r.nr === avizVechi) : null;
       if (legata) {
         const livUpd = {
@@ -1455,6 +1475,8 @@ export default function App() {
         };
         const { error: livErr } = await sb.from("livrari").update(livUpd).eq("id", legata.id);
         if (!livErr) setLivRows((p) => p.map((r) => (r.id === legata.id ? { ...r, ...livUpd } : r)));
+      } else if (eraNeinchis) {
+        await creeazaVanzareDinTichet({ ...orig, ...upd });
       }
     }
     setTicEdit(null);
@@ -4654,6 +4676,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
         {/* ══ STOCURI ══ */}
         {tab === "cantar" && (() => {
           const deschise = ticheteList.filter((t) => t.status === "deschis");
+          const goale = sortByDateAsc(ticheteList.filter((t) => t.status === "gol"));
           const inchise = sortByDateAsc(ticheteList.filter((t) => t.status === "inchis"));
           const lunaOpts = [...new Set(ticheteList.map((t) => monthOf(t.data)).filter(Boolean))].sort();
           const filtrate = inchise.filter((t) => {
@@ -4700,10 +4723,14 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                 </label>
               </div>
 
-              <div style={{ display: "flex", gap: 6, marginBottom: 14, borderBottom: "2px solid #eee" }}>
-                {[["nou", "➕ Tichet Nou"], ["deschise", `⏳ Deschise${deschise.length ? ` (${deschise.length})` : ""}`], ["registru", "📒 Registru"]].map(([k, l]) => (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 14, borderBottom: "2px solid #eee", flexWrap: "wrap" }}>
+                {[["nou", "➕ Tichet Nou"], ["deschise", `⏳ Deschise${deschise.length ? ` (${deschise.length})` : ""}`], ["gol", `📝 Rezervate${goale.length ? ` (${goale.length})` : ""}`], ["registru", "📒 Registru"]].map(([k, l]) => (
                   <button key={k} onClick={() => setTicSubTab(k)} style={{ padding: "7px 16px", cursor: "pointer", border: "none", fontWeight: 600, fontSize: 12, borderBottom: ticSubTab === k ? `2px solid ${G}` : "2px solid transparent", background: ticSubTab === k ? "#f0faf4" : "transparent", color: ticSubTab === k ? G : "#666" }}>{l}</button>
                 ))}
+                <div style={{ marginLeft: "auto", display: "flex", gap: 4 }} title="Rezervă un număr de tichet fără date — îl completezi mai târziu din 📝 Rezervate">
+                  <button onClick={() => addTicBlank("Intrare")} style={{ padding: "6px 10px", border: "1px solid #ccc", borderRadius: 6, background: "#fafafa", cursor: "pointer", fontSize: 11, fontWeight: 600, color: "#666" }}>📝 + Gol ▼ Intrare (TC #{getNextTichetNr()})</button>
+                  <button onClick={() => addTicBlank("Iesire")} style={{ padding: "6px 10px", border: "1px solid #ccc", borderRadius: 6, background: "#fafafa", cursor: "pointer", fontSize: 11, fontWeight: 600, color: "#666" }}>📝 + Gol ▲ Ieșire</button>
+                </div>
               </div>
 
               {ticSubTab === "nou" && (
@@ -4801,6 +4828,27 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                         })()}
                         <div style={{ display: "flex", gap: 6 }}>
                           <button onClick={() => inchideTichet(t)} style={{ flex: 1, padding: "9px", background: G, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>✔ Închide tichet</button>
+                          <button onClick={() => delTichet(t)} style={{ padding: "9px 11px", background: "#fff", color: "#e53935", border: "1px solid #ef9a9a", borderRadius: 6, cursor: "pointer", fontSize: 12 }}>✕</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {ticSubTab === "gol" && (
+                <div>
+                  {goale.length === 0 && <div style={{ color: "#999", fontSize: 13, padding: "40px 0", textAlign: "center" }}>Niciun tichet rezervat.<br /><span style={{ fontSize: 11 }}>Folosește „📝 + Tichet gol" ca să rezervi un număr fără date, de completat mai târziu.</span></div>}
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+                    {goale.map((t) => (
+                      <div key={t.id} style={{ width: 260, background: "#fff", border: "1px solid #e0e0e0", borderLeft: "4px solid #9e9e9e", borderRadius: 10, padding: 14 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+                          <span style={{ fontWeight: 700, fontSize: 14 }}>TC #{t.nr_tichet}</span>
+                          <span style={{ fontSize: 10, color: "#999" }}>{t.tip === "Intrare" ? "▼ Intrare" : "▲ Ieșire"} • {t.data} {t.ora_intrare}</span>
+                        </div>
+                        <div style={{ fontSize: 11, color: "#999", marginBottom: 12 }}>Rezervat de {t.operator || "—"} — fără date completate încă.</div>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button onClick={() => setTicEdit({ id: t.id, tip: t.tip, nr_tichet: t.nr_tichet, data: t.data || "", partener: t.partener || "", nr_masina: t.nr_masina || "", sofer: t.sofer || "", material: t.material || "", brut: t.brut != null ? String(t.brut) : "", tara: t.tara != null ? String(t.tara) : "", factura: t.factura || "", aviz: t.aviz || "", brut_la: t.brut_la || "", tara_la: t.tara_la || "", ora_intrare: t.ora_intrare || "", ora_iesire: t.ora_iesire || "" })} style={{ flex: 1, padding: "9px", background: G, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>✏️ Completează</button>
                           <button onClick={() => delTichet(t)} style={{ padding: "9px 11px", background: "#fff", color: "#e53935", border: "1px solid #ef9a9a", borderRadius: 6, cursor: "pointer", fontSize: 12 }}>✕</button>
                         </div>
                       </div>
