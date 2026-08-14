@@ -944,7 +944,8 @@ export default function App() {
   const [pjFilter, setPjFilter] = useState("");
   const [puncteModal, setPuncteModal] = useState(null); // { idx, adrese: [...] }
   const [matTipiceModal, setMatTipiceModal] = useState(null); // { idx, den, items: [{den,cod_art,min_kg,max_kg}] }
-  const [delegatiModal, setDelegatiModal] = useState(null); // { tip: "PF"|"PJ", idx, den, items: [{nume,ci,auto,licenta,licenta_expira}] }
+  const [delegatiModal, setDelegatiModal] = useState(null); // { tip: "PF"|"PJ", idx, den, items: [{nume,ci}] }
+  const [masiniModal, setMasiniModal] = useState(null); // { tip: "PF"|"PJ", idx, den, items: [{auto,licenta,licenta_expira}] }
   // ── Filtre pentru Cheltuieli/Colectari/Livrari ───────────
   const [chSearch, setChSearch] = useState("");
   const [chCat, setChCat] = useState("");
@@ -1043,6 +1044,7 @@ export default function App() {
   const [produseLista, setProduseLista] = useState([]);
   const [taskuri, setTaskuri] = useState([]);
   const [delegatiList, setDelegatiList] = useState([]);
+  const [masiniList, setMasiniList] = useState([]);
   const [varSubTab, setVarSubTab] = useState("produse"); // produse | delegati | parteneri
   const [parteneriSearch, setParteneriSearch] = useState("");
   const [ticheteList, setTicheteList] = useState([]);
@@ -1059,7 +1061,7 @@ export default function App() {
   const [a3KgInput, setA3KgInput] = useState({});
   const [a3Nou, setA3Nou] = useState({
     serie: "GK", numar: "",
-    transportator: "", data_incarcare: today(), delegat: null,
+    transportator: "", data_incarcare: today(), delegat: null, masina: null,
     categorie: "", kg_cunoscut: true, kilograme: "",
     expeditor: "", data_descarcare: today(), destinatar: "GREEN KRAFT SRL",
     descriere_destinatie: "Valorificare", obs: "",
@@ -1080,6 +1082,7 @@ export default function App() {
   useSupaTable("produse", setProduseLista);
   useSupaTable("taskuri", setTaskuri);
   useSupaTable("delegati", setDelegatiList);
+  useSupaTable("masini", setMasiniList);
   useSupaTable("tichete_cantar", setTicheteList);
   useSupaTable("cantar_live", setCantarLiveRows);
   useSupaTable("print_queue", setPrintQueue);
@@ -1666,8 +1669,9 @@ export default function App() {
   // ── Anexa 3 helpers ────────────────────────────────────────
   const a3FirmaInfo = (denumire) => {
     if ((denumire || "").toUpperCase().includes("GREEN KRAFT")) {
-      const delegati = delegatiList.map((d) => ({ nume: d.nume || "", ci: [d.ci_serie, d.ci_numar].filter(Boolean).join(" "), auto: d.auto || "", licenta: d.licenta || "", licenta_expira: d.licenta_expira || "" }));
-      return { ...GREEN_KRAFT_IDENTITATE, delegati };
+      const delegati = delegatiList.map((d) => ({ nume: d.nume || "", ci: [d.ci_serie, d.ci_numar].filter(Boolean).join(" ") }));
+      const masini = masiniList.map((m) => ({ auto: m.nr_auto || "", licenta: m.licenta || "", licenta_expira: m.licenta_expira || "" }));
+      return { ...GREEN_KRAFT_IDENTITATE, delegati, masini };
     }
     const f = pjList.find((x) => x.denumire === denumire) || pfList.find((x) => x.denumire === denumire);
     return f ? { cui: f.cod_fiscal || "", adresa: f.adresa || "", reg_com: f.reg_com || "", ...(f.anexa3 || {}) } : null;
@@ -1685,12 +1689,13 @@ export default function App() {
     const exp = a3FirmaInfo(a3Nou.expeditor) || {};
     const dest = a3FirmaInfo(a3Nou.destinatar) || {};
     const del = a3Nou.delegat || {};
+    const masina = a3Nou.masina || {};
     const kgCunoscut = a3Nou.kg_cunoscut && a3Nou.kilograme !== "";
     const row = {
       serie: a3Nou.serie, numar: a3Nou.numar,
       transportator: a3Nou.transportator, transportator_cui: tr.cui || "",
-      delegat_nume: del.nume || "", delegat_ci: del.ci || "", delegat_auto: del.auto || "",
-      licenta: del.licenta || "", licenta_expira: del.licenta_expira || "",
+      delegat_nume: del.nume || "", delegat_ci: del.ci || "", delegat_auto: masina.auto || "",
+      licenta: masina.licenta || "", licenta_expira: masina.licenta_expira || "",
       data_incarcare: a3Nou.data_incarcare, categorie: a3Nou.categorie,
       kilograme: kgCunoscut ? parseSuma(a3Nou.kilograme) : null,
       expeditor: a3Nou.expeditor, expeditor_cui: exp.cui || "", expeditor_adresa: exp.adresa || "",
@@ -1705,7 +1710,7 @@ export default function App() {
     if (error) { alert("Eroare la salvare: " + error.message); return; }
     if (data) setAnexa3List((p) => [...p, data[0]]);
     logAction("Creare", "Anexa 3", row.serie + " " + row.numar, row.transportator + " • " + row.categorie + (kgCunoscut ? " • " + row.kilograme + " kg" : " • greutate in asteptare"));
-    setA3Nou((p) => ({ ...p, numar: "", categorie: "", kilograme: "", obs: "", delegat: null }));
+    setA3Nou((p) => ({ ...p, numar: "", categorie: "", kilograme: "", obs: "", delegat: null, masina: null }));
     setA3SubTab(kgCunoscut ? "registru" : "asteptare");
   };
   const completeazaA3Kg = async (a3) => {
@@ -3032,16 +3037,16 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
 
       {delegatiModal && (
         <div onClick={() => setDelegatiModal(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 10, width: "min(96vw,720px)", display: "flex", flexDirection: "column", boxShadow: "0 8px 40px rgba(0,0,0,0.35)", overflow: "hidden" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 10, width: "min(96vw,560px)", display: "flex", flexDirection: "column", boxShadow: "0 8px 40px rgba(0,0,0,0.35)", overflow: "hidden" }}>
             <div style={{ background: "linear-gradient(135deg,#4a148c,#6a1b9a)", color: "#fff", padding: "12px 18px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div>
-                <div style={{ fontWeight: 700, fontSize: 14 }}>🚚 Delegați / mijloace de transport</div>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>🧑 Delegați (șoferi)</div>
                 <div style={{ fontSize: 11, opacity: 0.85, marginTop: 2 }}>{delegatiModal.den} — de ales pe Anexa 3 la fiecare transport</div>
               </div>
               <button onClick={() => setDelegatiModal(null)} style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.4)", color: "#fff", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 16 }}>✕</button>
             </div>
             <div style={{ background: "#fff8e1", borderBottom: "1px solid #ffe082", padding: "8px 18px", fontSize: 11, color: "#795548" }}>
-              💡 O firmă poate avea mai mulți delegați, cu maşini şi licenţe de transport diferite. La Anexa 3, după ce alegi transportatorul, vei putea alege care dintre ei a efectuat transportul.
+              💡 O firmă poate avea mai mulți delegați. Mașina și licența de transport (legate de vehicul, nu de șofer) se configurează separat, din 🚛 Mașini.
             </div>
             <div style={{ padding: "14px 18px", display: "flex", flexDirection: "column", gap: 0, maxHeight: 420, overflowY: "auto" }}>
               {delegatiModal.items.length === 0 && (
@@ -3051,12 +3056,9 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                 <table style={{ borderCollapse: "collapse", width: "100%", marginBottom: 8 }}>
                   <thead>
                     <tr style={{ background: "#6a1b9a", color: "#fff" }}>
-                      <th style={{ padding: "6px 8px", textAlign: "center", fontSize: 11, fontWeight: 700, width: "26%" }}>Nume delegat</th>
-                      <th style={{ padding: "6px 8px", textAlign: "center", fontSize: 11, fontWeight: 700, width: "16%" }}>CI</th>
-                      <th style={{ padding: "6px 8px", textAlign: "center", fontSize: 11, fontWeight: 700, width: "16%" }}>Auto</th>
-                      <th style={{ padding: "6px 8px", textAlign: "center", fontSize: 11, fontWeight: 700, width: "20%" }}>Licență transport nr.</th>
-                      <th style={{ padding: "6px 8px", textAlign: "center", fontSize: 11, fontWeight: 700, width: "16%" }}>Licență expiră</th>
-                      <th style={{ padding: "6px 4px", textAlign: "center", fontSize: 11, fontWeight: 700, width: "6%" }}></th>
+                      <th style={{ padding: "6px 8px", textAlign: "center", fontSize: 11, fontWeight: 700, width: "55%" }}>Nume delegat</th>
+                      <th style={{ padding: "6px 8px", textAlign: "center", fontSize: 11, fontWeight: 700, width: "35%" }}>CI</th>
+                      <th style={{ padding: "6px 4px", textAlign: "center", fontSize: 11, fontWeight: 700, width: "10%" }}></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -3064,31 +3066,89 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                       <tr key={ai} style={{ background: ai % 2 === 0 ? "#fff" : "#faf5ff" }}>
                         <td style={{ padding: "4px 6px" }}><input style={{ width: "100%", padding: "5px 6px", border: "1px solid #ddd", borderRadius: 4, fontSize: 12, textAlign: "center", boxSizing: "border-box" }} value={it.nume || ""} onChange={(e) => { const nou = [...delegatiModal.items]; nou[ai] = { ...nou[ai], nume: e.target.value }; setDelegatiModal((p) => ({ ...p, items: nou })); }} placeholder="Nume Prenume" /></td>
                         <td style={{ padding: "4px 6px" }}><input style={{ width: "100%", padding: "5px 6px", border: "1px solid #ddd", borderRadius: 4, fontSize: 12, textAlign: "center", boxSizing: "border-box" }} value={it.ci || ""} onChange={(e) => { const nou = [...delegatiModal.items]; nou[ai] = { ...nou[ai], ci: e.target.value }; setDelegatiModal((p) => ({ ...p, items: nou })); }} placeholder="ex: IF687666" /></td>
-                        <td style={{ padding: "4px 6px" }}><input style={{ width: "100%", padding: "5px 6px", border: "1px solid #ddd", borderRadius: 4, fontSize: 12, textAlign: "center", boxSizing: "border-box", textTransform: "uppercase" }} value={it.auto || ""} onChange={(e) => { const nou = [...delegatiModal.items]; nou[ai] = { ...nou[ai], auto: e.target.value }; setDelegatiModal((p) => ({ ...p, items: nou })); }} placeholder="ex: IF55KFT" /></td>
-                        <td style={{ padding: "4px 6px" }}><input style={{ width: "100%", padding: "5px 6px", border: "1px solid #ddd", borderRadius: 4, fontSize: 12, textAlign: "center", boxSizing: "border-box" }} value={it.licenta || ""} onChange={(e) => { const nou = [...delegatiModal.items]; nou[ai] = { ...nou[ai], licenta: e.target.value }; setDelegatiModal((p) => ({ ...p, items: nou })); }} placeholder="nu e cazul" /></td>
-                        <td style={{ padding: "4px 6px" }}><input style={{ width: "100%", padding: "5px 6px", border: "1px solid #ddd", borderRadius: 4, fontSize: 12, textAlign: "center", boxSizing: "border-box" }} value={it.licenta_expira || ""} onChange={(e) => { const nou = [...delegatiModal.items]; nou[ai] = { ...nou[ai], licenta_expira: e.target.value }; setDelegatiModal((p) => ({ ...p, items: nou })); }} placeholder="DD.MM.YYYY" /></td>
                         <td style={{ padding: "4px 4px", textAlign: "center" }}><button onClick={() => { const nou = delegatiModal.items.filter((_, j) => j !== ai); setDelegatiModal((p) => ({ ...p, items: nou })); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 16 }} title="Șterge">✕</button></td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               )}
-              <button onClick={() => setDelegatiModal((p) => ({ ...p, items: [...p.items, { nume: "", ci: "", auto: "", licenta: "", licenta_expira: "" }] }))} style={{ padding: "6px 14px", border: "2px dashed #ce93d8", borderRadius: 6, background: "#faf5ff", color: "#6a1b9a", cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
+              <button onClick={() => setDelegatiModal((p) => ({ ...p, items: [...p.items, { nume: "", ci: "" }] }))} style={{ padding: "6px 14px", border: "2px dashed #ce93d8", borderRadius: 6, background: "#faf5ff", color: "#6a1b9a", cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
                 + Adaugă delegat
               </button>
             </div>
             <div style={{ padding: "10px 18px", background: "#f5f5f5", borderTop: "1px solid #ddd", display: "flex", gap: 8, justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 11, color: "#888" }}>{delegatiModal.items.filter((i) => i.nume || i.auto).length} delegat(i) configurat(i)</span>
+              <span style={{ fontSize: 11, color: "#888" }}>{delegatiModal.items.filter((i) => i.nume).length} delegat(i) configurat(i)</span>
               <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={() => setDelegatiModal(null)} style={{ padding: "6px 16px", border: "1px solid #ccc", borderRadius: 6, background: "#fff", cursor: "pointer", fontSize: 13 }}>Anulează</button>
                 <button onClick={() => {
                   const upd = delegatiModal.tip === "PF" ? updPF : updPJ;
                   const lista = delegatiModal.tip === "PF" ? pfList : pjList;
                   const curent = lista[delegatiModal.idx]?.anexa3 || {};
-                  const curate = delegatiModal.items.filter((i) => i.nume || i.auto).map((i) => ({ nume: i.nume || "", ci: i.ci || "", auto: i.auto || "", licenta: i.licenta || "", licenta_expira: i.licenta_expira || "" }));
+                  const curate = delegatiModal.items.filter((i) => i.nume).map((i) => ({ nume: i.nume || "", ci: i.ci || "" }));
                   upd(delegatiModal.idx, "anexa3", { ...curent, delegati: curate });
                   setDelegatiModal(null);
                 }} style={{ padding: "6px 20px", border: "none", borderRadius: 6, background: "#6a1b9a", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 700 }}>✔ Salvează</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {masiniModal && (
+        <div onClick={() => setMasiniModal(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 10, width: "min(96vw,640px)", display: "flex", flexDirection: "column", boxShadow: "0 8px 40px rgba(0,0,0,0.35)", overflow: "hidden" }}>
+            <div style={{ background: "linear-gradient(135deg,#004d40,#00695c)", color: "#fff", padding: "12px 18px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>🚛 Mașini</div>
+                <div style={{ fontSize: 11, opacity: 0.85, marginTop: 2 }}>{masiniModal.den} — de ales pe Anexa 3 la fiecare transport</div>
+              </div>
+              <button onClick={() => setMasiniModal(null)} style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.4)", color: "#fff", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 16 }}>✕</button>
+            </div>
+            <div style={{ background: "#e0f2f1", borderBottom: "1px solid #80cbc4", padding: "8px 18px", fontSize: 11, color: "#00695c" }}>
+              💡 Licența de transport e legată de mașină, nu de șofer — fiecare vehicul poate avea licența lui. La Anexa 3, alegerea numărului de înmatriculare completează automat licența și data de expirare.
+            </div>
+            <div style={{ padding: "14px 18px", display: "flex", flexDirection: "column", gap: 0, maxHeight: 420, overflowY: "auto" }}>
+              {masiniModal.items.length === 0 && (
+                <div style={{ color: "#999", fontSize: 12, textAlign: "center", padding: "20px 0" }}>Nicio mașină adăugată. Apasă „+ Adaugă mașină" mai jos.</div>
+              )}
+              {masiniModal.items.length > 0 && (
+                <table style={{ borderCollapse: "collapse", width: "100%", marginBottom: 8 }}>
+                  <thead>
+                    <tr style={{ background: "#00695c", color: "#fff" }}>
+                      <th style={{ padding: "6px 8px", textAlign: "center", fontSize: 11, fontWeight: 700, width: "26%" }}>Nr. înmatriculare</th>
+                      <th style={{ padding: "6px 8px", textAlign: "center", fontSize: 11, fontWeight: 700, width: "37%" }}>Licență transport nr.</th>
+                      <th style={{ padding: "6px 8px", textAlign: "center", fontSize: 11, fontWeight: 700, width: "27%" }}>Licență expiră</th>
+                      <th style={{ padding: "6px 4px", textAlign: "center", fontSize: 11, fontWeight: 700, width: "10%" }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {masiniModal.items.map((it, ai) => (
+                      <tr key={ai} style={{ background: ai % 2 === 0 ? "#fff" : "#e0f2f1" }}>
+                        <td style={{ padding: "4px 6px" }}><input style={{ width: "100%", padding: "5px 6px", border: "1px solid #ddd", borderRadius: 4, fontSize: 12, textAlign: "center", boxSizing: "border-box", textTransform: "uppercase" }} value={it.auto || ""} onChange={(e) => { const nou = [...masiniModal.items]; nou[ai] = { ...nou[ai], auto: e.target.value }; setMasiniModal((p) => ({ ...p, items: nou })); }} placeholder="ex: IF55KFT" /></td>
+                        <td style={{ padding: "4px 6px" }}><input style={{ width: "100%", padding: "5px 6px", border: "1px solid #ddd", borderRadius: 4, fontSize: 12, textAlign: "center", boxSizing: "border-box" }} value={it.licenta || ""} onChange={(e) => { const nou = [...masiniModal.items]; nou[ai] = { ...nou[ai], licenta: e.target.value }; setMasiniModal((p) => ({ ...p, items: nou })); }} placeholder="nu e cazul" /></td>
+                        <td style={{ padding: "4px 6px" }}><input style={{ width: "100%", padding: "5px 6px", border: "1px solid #ddd", borderRadius: 4, fontSize: 12, textAlign: "center", boxSizing: "border-box" }} value={it.licenta_expira || ""} onChange={(e) => { const nou = [...masiniModal.items]; nou[ai] = { ...nou[ai], licenta_expira: e.target.value }; setMasiniModal((p) => ({ ...p, items: nou })); }} placeholder="DD.MM.YYYY" /></td>
+                        <td style={{ padding: "4px 4px", textAlign: "center" }}><button onClick={() => { const nou = masiniModal.items.filter((_, j) => j !== ai); setMasiniModal((p) => ({ ...p, items: nou })); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 16 }} title="Șterge">✕</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              <button onClick={() => setMasiniModal((p) => ({ ...p, items: [...p.items, { auto: "", licenta: "", licenta_expira: "" }] }))} style={{ padding: "6px 14px", border: "2px dashed #80cbc4", borderRadius: 6, background: "#e0f2f1", color: "#00695c", cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
+                + Adaugă mașină
+              </button>
+            </div>
+            <div style={{ padding: "10px 18px", background: "#f5f5f5", borderTop: "1px solid #ddd", display: "flex", gap: 8, justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 11, color: "#888" }}>{masiniModal.items.filter((i) => i.auto).length} mașină/mașini configurate</span>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => setMasiniModal(null)} style={{ padding: "6px 16px", border: "1px solid #ccc", borderRadius: 6, background: "#fff", cursor: "pointer", fontSize: 13 }}>Anulează</button>
+                <button onClick={() => {
+                  const upd = masiniModal.tip === "PF" ? updPF : updPJ;
+                  const lista = masiniModal.tip === "PF" ? pfList : pjList;
+                  const curent = lista[masiniModal.idx]?.anexa3 || {};
+                  const curate = masiniModal.items.filter((i) => i.auto).map((i) => ({ auto: (i.auto || "").toUpperCase(), licenta: i.licenta || "", licenta_expira: i.licenta_expira || "" }));
+                  upd(masiniModal.idx, "anexa3", { ...curent, masini: curate });
+                  setMasiniModal(null);
+                }} style={{ padding: "6px 20px", border: "none", borderRadius: 6, background: "#00695c", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 700 }}>✔ Salvează</button>
               </div>
             </div>
           </div>
@@ -3944,20 +4004,33 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                           </div>
                           <div style={{ marginBottom: 10 }}>
                             <label style={FL}>Transportator <span style={{ color: "#c62828" }}>*</span></label>
-                            <div style={ACB}><ACStrict value={a3Nou.transportator} options={firmeOpts} placeholder="Caută firmă..." onChange={(v) => { const info = a3FirmaInfo(v) || {}; const delegati = info.delegati || []; setA3Nou((p) => ({ ...p, transportator: v, delegat: delegati.length === 1 ? delegati[0] : null })); }} /></div>
+                            <div style={ACB}><ACStrict value={a3Nou.transportator} options={firmeOpts} placeholder="Caută firmă..." onChange={(v) => { const info = a3FirmaInfo(v) || {}; const delegati = info.delegati || []; const masini = info.masini || []; setA3Nou((p) => ({ ...p, transportator: v, delegat: delegati.length === 1 ? delegati[0] : null, masina: masini.length === 1 ? masini[0] : null })); }} /></div>
                             {Preview(trInfo)}
                             {(trInfo?.delegati?.length || 0) > 0 && (
                               <div style={{ marginTop: 6 }}>
-                                <label style={FL}>Delegat / mașină <span style={{ color: "#c62828" }}>*</span></label>
+                                <label style={FL}>Delegat (șofer) <span style={{ color: "#c62828" }}>*</span></label>
                                 <select style={FI} value={a3Nou.delegat ? JSON.stringify(a3Nou.delegat) : ""} onChange={(e) => setA3Nou((p) => ({ ...p, delegat: e.target.value ? JSON.parse(e.target.value) : null }))}>
                                   <option value="">— alege —</option>
-                                  {trInfo.delegati.map((d, i) => <option key={i} value={JSON.stringify(d)}>{d.nume || "(fără nume)"}{d.auto ? ` — ${d.auto}` : ""}</option>)}
+                                  {trInfo.delegati.map((d, i) => <option key={i} value={JSON.stringify(d)}>{d.nume || "(fără nume)"}</option>)}
                                 </select>
-                                {a3Nou.delegat && <div style={{ marginTop: 4, fontSize: 10, color: "#6a1b9a" }}>{[a3Nou.delegat.ci && `CI ${a3Nou.delegat.ci}`, a3Nou.delegat.licenta && `Licență ${a3Nou.delegat.licenta}`, a3Nou.delegat.licenta_expira && `expiră ${a3Nou.delegat.licenta_expira}`].filter(Boolean).join(" • ")}</div>}
+                                {a3Nou.delegat?.ci && <div style={{ marginTop: 4, fontSize: 10, color: "#6a1b9a" }}>CI {a3Nou.delegat.ci}</div>}
                               </div>
                             )}
                             {(trInfo?.delegati?.length || 0) === 0 && a3Nou.transportator && (
-                              <div style={{ marginTop: 4, fontSize: 10, color: "#aaa" }}>Fără delegați configurați — completează în 🛠️ Variabile → Parteneri → 🚚 Delegați</div>
+                              <div style={{ marginTop: 4, fontSize: 10, color: "#aaa" }}>Fără delegați configurați — completează în 🛠️ Variabile → Parteneri → 🧑 Delegați (sau → Delegați (Șoferi), pentru GREEN KRAFT)</div>
+                            )}
+                            {(trInfo?.masini?.length || 0) > 0 && (
+                              <div style={{ marginTop: 6 }}>
+                                <label style={FL}>Nr. auto (mașină) <span style={{ color: "#c62828" }}>*</span></label>
+                                <select style={FI} value={a3Nou.masina ? JSON.stringify(a3Nou.masina) : ""} onChange={(e) => setA3Nou((p) => ({ ...p, masina: e.target.value ? JSON.parse(e.target.value) : null }))}>
+                                  <option value="">— alege —</option>
+                                  {trInfo.masini.map((m, i) => <option key={i} value={JSON.stringify(m)}>{m.auto || "(fără nr.)"}</option>)}
+                                </select>
+                                {a3Nou.masina && <div style={{ marginTop: 4, fontSize: 10, color: "#00695c" }}>{[a3Nou.masina.licenta && `Licență ${a3Nou.masina.licenta}`, a3Nou.masina.licenta_expira && `expiră ${a3Nou.masina.licenta_expira}`].filter(Boolean).join(" • ") || "fără licență configurată"}</div>}
+                              </div>
+                            )}
+                            {(trInfo?.masini?.length || 0) === 0 && a3Nou.transportator && (
+                              <div style={{ marginTop: 4, fontSize: 10, color: "#aaa" }}>Fără mașini configurate — completează în 🛠️ Variabile → Parteneri → 🚛 Mașini (sau → Mașini, pentru GREEN KRAFT)</div>
                             )}
                           </div>
                           <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
@@ -4339,6 +4412,28 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
             } catch (e) { alert("Eroare: " + e.message); }
           };
 
+          const addMasina = async (autoPrefill = "") => {
+            const nr_auto = (autoPrefill || window.prompt("Nr. înmatriculare:") || "").toUpperCase();
+            if (!nr_auto.trim()) return;
+            const licenta = autoPrefill ? "" : (window.prompt("Licență transport nr. (opțional):") || "");
+            const licenta_expira = autoPrefill ? "" : (window.prompt("Licență expiră la (opțional, DD.MM.YYYY):") || "");
+            try {
+              const { error } = await sb.from("masini").insert({ nr_auto: nr_auto.trim(), licenta: licenta.trim(), licenta_expira: licenta_expira.trim() });
+              if (error) alert("Eroare: " + error.message);
+              else await logAction("add", "masini", "", { nr_auto });
+            } catch (e) { alert("Eroare: " + e.message); }
+          };
+          const updMasina = async (id, field, value) => {
+            try { await sb.from("masini").update({ [field]: value }).eq("id", id); } catch (e) { alert("Eroare: " + e.message); }
+          };
+          const delMasina = async (id, nr_auto) => {
+            if (!confirmDel(`mașina "${nr_auto}"`)) return;
+            try {
+              await sb.from("masini").delete().eq("id", id);
+              await logAction("delete", "masini", id, { nr_auto });
+            } catch (e) { alert("Eroare: " + e.message); }
+          };
+
           const subTabSt = (k) => ({ padding: "8px 16px", borderRadius: "8px 8px 0 0", cursor: "pointer", fontSize: 13, fontWeight: 600, border: "1px solid #ccc", borderBottom: varSubTab === k ? "1px solid #fff" : "1px solid #ccc", background: varSubTab === k ? "#fff" : "#f0f0f0", color: varSubTab === k ? G : "#666", marginRight: 4, position: "relative", top: 1 });
 
           return (
@@ -4354,6 +4449,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
               <div style={{ borderBottom: "1px solid #ccc", marginBottom: 0 }}>
                 <button style={subTabSt("produse")} onClick={() => setVarSubTab("produse")}>🏷️ Produse <span style={{ marginLeft: 4, background: "#1565c0", color: "#fff", borderRadius: 10, padding: "1px 5px", fontSize: 10, fontWeight: 700 }}>{produseLista.length}</span></button>
                 <button style={subTabSt("delegati")} onClick={() => setVarSubTab("delegati")}>🚚 Delegați (Șoferi) <span style={{ marginLeft: 4, background: "#e65100", color: "#fff", borderRadius: 10, padding: "1px 5px", fontSize: 10, fontWeight: 700 }}>{delegatiList.length}</span></button>
+                <button style={subTabSt("masini")} onClick={() => setVarSubTab("masini")}>🚛 Mașini <span style={{ marginLeft: 4, background: "#00695c", color: "#fff", borderRadius: 10, padding: "1px 5px", fontSize: 10, fontWeight: 700 }}>{masiniList.length}</span></button>
                 <button style={subTabSt("parteneri")} onClick={() => setVarSubTab("parteneri")}>🤝 Parteneri <span style={{ marginLeft: 4, background: "#6a1b9a", color: "#fff", borderRadius: 10, padding: "1px 5px", fontSize: 10, fontWeight: 700 }}>{pfList.length + pjList.length}</span></button>
               </div>
 
@@ -4401,24 +4497,21 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                     <button onClick={() => addDelegat()} style={{ background: "#e65100", color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Adaugă Delegat</button>
                   </div>
                   <div style={{ padding: "8px 10px", background: "#fff3e0", border: "1px solid #ffcc80", borderRadius: 6, fontSize: 11, color: "#e65100", marginBottom: 10 }}>
-                    🚚 Aceștia sunt delegații/șoferii proprii GREEN KRAFT (nu ai partenerilor externi). Auto și Licență completate aici se auto-completează pe Anexa 3 la alegerea delegatului, când GREEN KRAFT e transportator.
+                    🚚 Aceștia sunt delegații/șoferii proprii GREEN KRAFT (nu ai partenerilor externi). Selectați pe Anexa 3 la alegerea delegatului, când GREEN KRAFT e transportator. Mașina și licența (legate de vehicul, nu de șofer) se aleg separat, din 🚛 Mașini.
                   </div>
                   <div style={{ overflowX: "auto" }}>
-                    <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 900 }}>
-                      <colgroup><col style={{ width: 48 }} /><col style={{ width: 200 }} /><col style={{ width: 70 }} /><col style={{ width: 90 }} /><col style={{ width: 110 }} /><col style={{ width: 90 }} /><col style={{ width: 130 }} /><col style={{ width: 100 }} /><col style={{ width: 30 }} /></colgroup>
+                    <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 620 }}>
+                      <colgroup><col style={{ width: 48 }} /><col style={{ width: 220 }} /><col style={{ width: 80 }} /><col style={{ width: 110 }} /><col style={{ width: 130 }} /><col style={{ width: 30 }} /></colgroup>
                       <thead><tr style={{ background: "#e65100" }}>
                         <th style={th({ background: "#bf360c", textAlign: "center" })}>#</th>
                         <th style={th({ background: "#e65100", textAlign: "center" })}>Nume Complet</th>
                         <th style={th({ background: "#e65100", textAlign: "center" })}>Serie CI</th>
                         <th style={th({ background: "#e65100", textAlign: "center" })}>Număr CI</th>
                         <th style={th({ background: "#e65100", textAlign: "center" })}>CNP</th>
-                        <th style={th({ background: "#bf360c", textAlign: "center" })}>Auto</th>
-                        <th style={th({ background: "#bf360c", textAlign: "center" })}>Licență transport nr.</th>
-                        <th style={th({ background: "#bf360c", textAlign: "center" })}>Licență expiră</th>
                         <th style={th({ background: "#bf360c" })}></th>
                       </tr></thead>
                       <tbody>
-                        {delegatiList.length === 0 && <tr><td colSpan={9} style={{ textAlign: "center", padding: 30, color: "#888" }}>Niciun delegat încă. Adaugă unul cu butonul de mai sus.</td></tr>}
+                        {delegatiList.length === 0 && <tr><td colSpan={6} style={{ textAlign: "center", padding: 30, color: "#888" }}>Niciun delegat încă. Adaugă unul cu butonul de mai sus.</td></tr>}
                         {delegatiList.map((d, i) => (
                           <tr key={d.id || i} style={{ background: i % 2 === 0 ? "#fff" : "#fff3e0" }}>
                             <td style={td({ textAlign: "center", color: "#888", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td>
@@ -4426,10 +4519,43 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                             <td style={td({ background: "#fff8e1" })}><input style={inp({ textAlign: "center", fontFamily: "monospace" })} defaultValue={d.ci_serie || ""} onBlur={(e) => { if (e.target.value !== d.ci_serie) updDelegat(d.id, "ci_serie", e.target.value); }} /></td>
                             <td style={td({ background: "#fff8e1" })}><input style={inp({ textAlign: "center", fontFamily: "monospace" })} defaultValue={d.ci_numar || ""} onBlur={(e) => { if (e.target.value !== d.ci_numar) updDelegat(d.id, "ci_numar", e.target.value); }} /></td>
                             <td style={td({ background: "#e3f2fd" })}><input style={inp({ textAlign: "center", fontFamily: "monospace" })} defaultValue={d.cnp || ""} onBlur={(e) => { if (e.target.value !== d.cnp) updDelegat(d.id, "cnp", e.target.value); }} /></td>
-                            <td style={td()}><input style={inp({ textAlign: "center", textTransform: "uppercase" })} defaultValue={d.auto || ""} onBlur={(e) => { if (e.target.value !== d.auto) updDelegat(d.id, "auto", e.target.value); }} placeholder="ex: IF55KFT" /></td>
-                            <td style={td()}><input style={inp({ textAlign: "center" })} defaultValue={d.licenta || ""} onBlur={(e) => { if (e.target.value !== d.licenta) updDelegat(d.id, "licenta", e.target.value); }} placeholder="nu e cazul" /></td>
-                            <td style={td()}><input style={inp({ textAlign: "center" })} defaultValue={d.licenta_expira || ""} onBlur={(e) => { if (e.target.value !== d.licenta_expira) updDelegat(d.id, "licenta_expira", e.target.value); }} placeholder="DD.MM.YYYY" /></td>
                             <td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delDelegat(d.id, d.nume)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {varSubTab === "masini" && (
+                <div style={{ background: "#fff", border: "1px solid #ccc", borderTop: "none", padding: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                    <div style={{ fontSize: 13, color: "#555" }}>🚛 Total: <strong style={{ color: "#00695c" }}>{masiniList.length} mașini</strong></div>
+                    <button onClick={() => addMasina()} style={{ background: "#00695c", color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Adaugă Mașină</button>
+                  </div>
+                  <div style={{ padding: "8px 10px", background: "#e0f2f1", border: "1px solid #80cbc4", borderRadius: 6, fontSize: 11, color: "#00695c", marginBottom: 10 }}>
+                    🚛 Mașinile proprii GREEN KRAFT, cu licența de transport (legată de vehicul, nu de șofer). Auto-completează Anexa 3 la alegerea numărului de înmatriculare, când GREEN KRAFT e transportator.
+                  </div>
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 560 }}>
+                      <colgroup><col style={{ width: 48 }} /><col style={{ width: 140 }} /><col style={{ width: 200 }} /><col style={{ width: 130 }} /><col style={{ width: 30 }} /></colgroup>
+                      <thead><tr style={{ background: "#00695c" }}>
+                        <th style={th({ background: "#004d40", textAlign: "center" })}>#</th>
+                        <th style={th({ background: "#00695c", textAlign: "center" })}>Nr. înmatriculare</th>
+                        <th style={th({ background: "#00695c", textAlign: "center" })}>Licență transport nr.</th>
+                        <th style={th({ background: "#00695c", textAlign: "center" })}>Licență expiră</th>
+                        <th style={th({ background: "#004d40" })}></th>
+                      </tr></thead>
+                      <tbody>
+                        {masiniList.length === 0 && <tr><td colSpan={5} style={{ textAlign: "center", padding: 30, color: "#888" }}>Nicio mașină încă. Adaugă una cu butonul de mai sus.</td></tr>}
+                        {masiniList.map((m, i) => (
+                          <tr key={m.id || i} style={{ background: i % 2 === 0 ? "#fff" : "#e0f2f1" }}>
+                            <td style={td({ textAlign: "center", color: "#888", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td>
+                            <td style={td()}><input style={inp({ textAlign: "center", fontWeight: 700, textTransform: "uppercase" })} defaultValue={m.nr_auto || ""} onBlur={(e) => { if (e.target.value !== m.nr_auto) updMasina(m.id, "nr_auto", e.target.value.toUpperCase()); }} /></td>
+                            <td style={td({ background: "#fff8e1" })}><input style={inp({ textAlign: "center" })} defaultValue={m.licenta || ""} onBlur={(e) => { if (e.target.value !== m.licenta) updMasina(m.id, "licenta", e.target.value); }} placeholder="nu e cazul" /></td>
+                            <td style={td({ background: "#fff8e1" })}><input style={inp({ textAlign: "center" })} defaultValue={m.licenta_expira || ""} onBlur={(e) => { if (e.target.value !== m.licenta_expira) updMasina(m.id, "licenta_expira", e.target.value); }} placeholder="DD.MM.YYYY" /></td>
+                            <td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delMasina(m.id, m.nr_auto)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
                           </tr>
                         ))}
                       </tbody>
@@ -4474,11 +4600,11 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                       </div>
                     </div>
                     <div style={{ padding: "8px 10px", background: "#f3e5f5", border: "1px solid #ce93d8", borderRadius: 6, fontSize: 11, color: "#4a148c", marginBottom: 10 }}>
-                      📜 Coloanele Reg.Com. / Autorizație mediu / Delegați centralizează datele folosite pe Anexa 3 — completate aici, se auto-completează la alegerea partenerului ca transportator/expeditor/destinatar. O firmă poate avea mai mulți delegați (nume, auto, licență diferite) — vezi 🚚 Delegați.
+                      📜 Coloanele Reg.Com. / Autorizație mediu / Delegați / Mașini centralizează datele folosite pe Anexa 3 — completate aici, se auto-completează la alegerea partenerului ca transportator/expeditor/destinatar. O firmă poate avea mai mulți delegați (🧑) și mai multe mașini (🚛), fiecare mașină cu licența ei de transport — licența e legată de vehicul, nu de șofer.
                     </div>
                     <div style={{ overflowX: "auto" }}>
-                      <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 1180 }}>
-                        <colgroup><col style={{ width: 50 }} /><col style={{ width: 190 }} /><col style={{ width: 110 }} /><col style={{ width: 180 }} /><col style={{ width: 60 }} /><col style={{ width: 110 }} /><col style={{ width: 130 }} /><col style={{ width: 100 }} /><col style={{ width: 110 }} /><col style={{ width: 30 }} /></colgroup>
+                      <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 1270 }}>
+                        <colgroup><col style={{ width: 50 }} /><col style={{ width: 190 }} /><col style={{ width: 110 }} /><col style={{ width: 180 }} /><col style={{ width: 60 }} /><col style={{ width: 110 }} /><col style={{ width: 130 }} /><col style={{ width: 100 }} /><col style={{ width: 90 }} /><col style={{ width: 90 }} /><col style={{ width: 30 }} /></colgroup>
                         <thead><tr style={{ background: "#6a1b9a" }}>
                           <th style={th({ background: "#4a148c", textAlign: "center" })}>Tip</th>
                           <th style={th({ background: "#6a1b9a", textAlign: "center" })}>Denumire</th>
@@ -4489,10 +4615,11 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                           <th style={th({ background: "#4a148c", textAlign: "center" })}>Autorizație mediu nr.</th>
                           <th style={th({ background: "#4a148c", textAlign: "center" })}>Revizuită la</th>
                           <th style={th({ background: "#6a1b9a", textAlign: "center" })}>Delegați</th>
+                          <th style={th({ background: "#4a148c", textAlign: "center" })}>Mașini</th>
                           <th style={th({ background: "#4a148c" })}></th>
                         </tr></thead>
                         <tbody>
-                          {parteneri.length === 0 && <tr><td colSpan={10} style={{ textAlign: "center", padding: 30, color: "#888" }}>Niciun partener încă. Adaugă unul cu butoanele de mai sus.</td></tr>}
+                          {parteneri.length === 0 && <tr><td colSpan={11} style={{ textAlign: "center", padding: 30, color: "#888" }}>Niciun partener încă. Adaugă unul cu butoanele de mai sus.</td></tr>}
                           {parteneri.map((r) => {
                             const upd = r._tip === "PF" ? updPF : updPJ;
                             const del = r._tip === "PF" ? delPF : delPJ;
@@ -4508,7 +4635,8 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                                 <td style={td()}><input style={inp({ textAlign: "center", fontFamily: "monospace", fontSize: 11 })} value={r.reg_com || ""} onChange={(e) => upd(r._idx, "reg_com", e.target.value)} /></td>
                                 <td style={td({ background: "#f3e5f5" })}><input style={inp({ textAlign: "center", fontSize: 11 })} value={a3.aut_mediu || ""} onChange={(e) => updA3("aut_mediu", e.target.value)} placeholder="ex: 233/22.12.2021" /></td>
                                 <td style={td({ background: "#f3e5f5" })}><input style={inp({ textAlign: "center", fontSize: 11 })} value={a3.aut_mediu_revizuita || ""} onChange={(e) => updA3("aut_mediu_revizuita", e.target.value)} placeholder="DD.MM.YYYY" /></td>
-                                <td style={td({ textAlign: "center" })}><button onClick={() => setDelegatiModal({ tip: r._tip, idx: r._idx, den: r.denumire || "", items: JSON.parse(JSON.stringify(a3.delegati || [])) })} style={{ background: (a3.delegati?.length || 0) > 0 ? "#f3e5f5" : "#fff", border: "1px solid #6a1b9a", borderRadius: 3, padding: "2px 8px", cursor: "pointer", fontSize: 11, color: "#6a1b9a", fontWeight: 600 }} title="Delegați / mijloace de transport">🚚 {a3.delegati?.length || 0}</button></td>
+                                <td style={td({ textAlign: "center" })}><button onClick={() => setDelegatiModal({ tip: r._tip, idx: r._idx, den: r.denumire || "", items: JSON.parse(JSON.stringify(a3.delegati || [])) })} style={{ background: (a3.delegati?.length || 0) > 0 ? "#f3e5f5" : "#fff", border: "1px solid #6a1b9a", borderRadius: 3, padding: "2px 8px", cursor: "pointer", fontSize: 11, color: "#6a1b9a", fontWeight: 600 }} title="Delegați (șoferi)">🧑 {a3.delegati?.length || 0}</button></td>
+                                <td style={td({ textAlign: "center" })}><button onClick={() => setMasiniModal({ tip: r._tip, idx: r._idx, den: r.denumire || "", items: JSON.parse(JSON.stringify(a3.masini || [])) })} style={{ background: (a3.masini?.length || 0) > 0 ? "#e0f2f1" : "#fff", border: "1px solid #00695c", borderRadius: 3, padding: "2px 8px", cursor: "pointer", fontSize: 11, color: "#00695c", fontWeight: 600 }} title="Mașini (nr. auto + licență)">🚛 {a3.masini?.length || 0}</button></td>
                                 <td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => del(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
                               </tr>
                             );
