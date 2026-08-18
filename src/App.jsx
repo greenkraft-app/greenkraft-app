@@ -1145,6 +1145,10 @@ export default function App() {
 
   // ── Transfer catre WiseWeee (extensie Chrome) ──────────────
   const findTichetPentruColectare = (r) => {
+    if (r.tichet_id) {
+      const direct = ticheteList.find((t) => String(t.id) === String(r.tichet_id));
+      if (direct) return direct;
+    }
     if (!r.furn || !r.data) return null;
     const furnLC = r.furn.trim().toLowerCase();
     const candidati = ticheteList.filter((t) => (t.partener || "").trim().toLowerCase() === furnLC && t.data === r.data);
