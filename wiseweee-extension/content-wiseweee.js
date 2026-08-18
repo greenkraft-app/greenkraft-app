@@ -142,6 +142,8 @@ async function runTransfer(payload) {
   const rezultate = [];
   rezultate.push(["Furnizor", await fillSearchCombobox(dialog, "Furnizor", payload.furnizor)]);
   rezultate.push(["Nr. Document", fillTextInput(dialog, "Nr. Document", payload.nr_document)]);
+  rezultate.push(["Nr. Anexa", fillTextInput(dialog, "Nr. Anex", payload.nr_document)]);
+  rezultate.push(["Organizație alocată", await fillSearchCombobox(dialog, "Organiza", "NEALOCATE")]);
   rezultate.push(["Nr. Ticket Cântar", fillTextInput(dialog, "Nr. Ticket Cântar", payload.nr_ticket_cantar)]);
   rezultate.push(["Cod HG856", await fillSearchCombobox(dialog, "Cod HG856", payload.cod_hg856)]);
   rezultate.push(["Greutate Totală", fillTextInput(dialog, "Greutate Totală", payload.greutate_kg)]);
