@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Greenkraft \u2192 WiseWeee",
+  "version": "1.0",
+  "description": "Trimite automat datele unei achizitii din Greenkraft catre formularul de Document Nou din WiseWeee.",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": [
+    "https://greenkraft-app.vercel.app/*",
+    "http://localhost:5173/*",
+    "https://dash.wiseweee.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://greenkraft-app.vercel.app/*", "http://localhost:5173/*"],
+      "js": ["content-greenkraft.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://dash.wiseweee.com/*"],
+      "js": ["content-wiseweee.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}

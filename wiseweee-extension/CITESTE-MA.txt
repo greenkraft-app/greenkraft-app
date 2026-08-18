@@ -1,0 +1,55 @@
+GREENKRAFT -> WISEWEEE — Extensie Chrome
+==========================================
+
+CE FACE
+-------
+In tabelul Achizitii din Greenkraft, fiecare rand are acum un buton nou "📤".
+Apasandu-l, extensia:
+  1. Ia datele din acel rand (Furnizor, Serie+Nr, Categorie/Cod HG, Cantitate, Data)
+  2. Cauta automat un Tichet Cantar potrivit (acelasi furnizor + aceeasi data)
+     si preia de-acolo Transportator, Nr. Auto, Sofer, Nr. Tichet
+  3. Deschide (sau focalizeaza) tab-ul WiseWeee si completeaza automat
+     formularul "Document Nou" -> "Completeaza manual"
+
+IMPORTANT: extensia NU apasa niciodata "Urmatorul Pas" sau "Salveaza".
+Tu verifici datele completate si continui manual, ca de obicei.
+Un mesaj (banner) aparut in coltul din dreapta-sus iti arata ce s-a completat
+automat si ce trebuie verificat/completat manual.
+
+
+INSTALARE (o singura data)
+---------------------------
+1. Deschide Chrome, mergi la adresa: chrome://extensions/
+2. Activeaza "Developer mode" (comutatorul din coltul dreapta-sus)
+3. Click pe "Load unpacked" (Incarca extensia neambalata)
+4. Selecteaza acest folder (wiseweee-extension) intreg
+5. Extensia apare in lista, cu iconita verde cu sageata
+
+
+CUM SE FOLOSESTE
+-----------------
+1. Deschide Greenkraft (greenkraft-app.vercel.app), mergi la tab-ul Achizitii
+2. Gaseste randul pe care vrei sa-l trimiti si apasa butonul "📤"
+3. Se deschide automat WiseWeee (daca nu era deja deschis) si formularul
+   se completeaza singur
+4. Verifici campurile, completezi ce lipseste (ex: daca nu s-a gasit un
+   tichet de cantar potrivit) si continui normal cu "Urmatorul Pas"
+
+
+DE RETINUT
+----------
+- Trebuie sa fii deja logat manual in WiseWeee (extensia nu introduce
+  parola ta, doar foloseste sesiunea in care esti deja autentificat)
+- Daca un camp nu a putut fi gasit/completat (de ex. Furnizorul nu exista
+  inca in lista WiseWeee), bannerul iti spune exact ce sa verifici
+- Rândul din Greenkraft primeste un semn "✓" dupa trimitere, ca sa stii
+  ce ai trimis deja (semnul dispare daca reincarci pagina — e doar
+  un indicator vizual temporar, nu se salveaza in baza de date)
+
+
+DACA CEVA NU MERGE
+-------------------
+Structura paginii WiseWeee se poate schimba in timp (actualizari ale lor),
+caz in care extensia ar putea sa nu mai gaseasca un camp anume. Bannerul
+va arata clar campul respectiv ca "de completat manual" — nu se blocheaza
+si nu strica nimic, doar sare peste acel camp.

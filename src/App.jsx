@@ -1143,6 +1143,40 @@ export default function App() {
     if (data) setColRows((p) => [...p, data[0]]);
   };
 
+  // ── Transfer catre WiseWeee (extensie Chrome) ──────────────
+  const findTichetPentruColectare = (r) => {
+    if (!r.furn || !r.data) return null;
+    const furnLC = r.furn.trim().toLowerCase();
+    const candidati = ticheteList.filter((t) => (t.partener || "").trim().toLowerCase() === furnLC && t.data === r.data);
+    if (!candidati.length) return null;
+    return candidati.find((t) => t.status === "inchis") || candidati[0];
+  };
+  const extrageCodHG = (text) => {
+    if (!text) return "";
+    const m = text.match(/(\d{2})\s?(\d{2})\s?(\d{2})/);
+    return m ? `${m[1]} ${m[2]} ${m[3]}` : "";
+  };
+  const [wwSent, setWwSent] = useState({}); // { [rowId]: timestamp } - feedback vizual dupa trimitere
+  const trimiteWiseWeee = (r) => {
+    const tichet = findTichetPentruColectare(r);
+    const payload = {
+      source: "greenkraft",
+      furnizor: r.furn || "",
+      nr_document: r.nr_doc || "",
+      cod_hg856: extrageCodHG(r.produs) || extrageCodHG(r.cat),
+      greutate_kg: r.cant || "",
+      data_colectare: r.data || "",
+      nr_ticket_cantar: tichet?.nr_tichet || "",
+      transportator: tichet?.transportator || tichet?.partener || "",
+      nr_auto: tichet?.nr_masina || "",
+      sofer: tichet?.sofer || "",
+      observatii: `Generat automat din Greenkraft — ${r.produs || r.cat || ""}`,
+    };
+    window.postMessage({ type: "GK_TO_WISEWEEE", payload }, "*");
+    setWwSent((p) => ({ ...p, [r.id]: Date.now() }));
+    logAction("Trimitere", "WiseWeee", r.furn || "", `${payload.nr_document} • ${payload.greutate_kg} kg${tichet ? " • tichet #" + tichet.nr_tichet + " gasit automat" : " • fara tichet potrivit"}`);
+  };
+
   // Livrari
   const updLIV = mkUpd(livRows, setLivRows, "livrari");
   const delLIV = mkDel(setLivRows, "livrari", "această vânzare");
@@ -4341,7 +4375,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
               {(colSearch || colMonth || colCat || colAchitat || colFurn || colProdus || colDataDe || colDataPana) && <button onClick={() => { setColSearch(""); setColMonth(""); setColCat(""); setColAchitat(""); setColFurn(""); setColProdus(""); setColDataDe(""); setColDataPana(""); }} style={{ background: "#e53935", color: "#fff", border: "none", borderRadius: 5, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕ Reset</button>}
             </div>
             <div style={{ overflowX: "auto" }}>
-              <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 1290 }}>
+              <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 1320 }}>
                 <colgroup>
                   <col style={{ width: 28 }} />
                   <col style={{ width: 122 }} />
@@ -4355,6 +4389,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   <col style={{ width: 82 }} />
                   <col style={{ width: 75 }} />
                   <col style={{ width: 90 }} />
+                  <col style={{ width: 30 }} />
                   <col style={{ width: 28 }} />
                 </colgroup>
                 <thead><tr>
@@ -4370,10 +4405,11 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   <th style={th({ textAlign: "center" })}>Fără Imp.12%</th>
                   <th style={th({ textAlign: "center" })}>Achitat</th>
                   <th style={th({ textAlign: "center" })}>Achitat De</th>
+                  <th style={th({})} title="Trimite catre WiseWeee">📤</th>
                   <th style={th({})}></th>
                 </tr></thead>
-                <tbody>{colFiltered.map((r, idx) => { const i = colRows.indexOf(r); const tot = parseSuma(r.cant) * parseSuma(r.pret); const faraImp = tot ? +(tot * 0.88).toFixed(2) : 0; const rowBg = idx % 2 === 0 ? "#fff" : "#f8fbf9"; const achBg = r.ach === "Da" ? "#e8f5e9" : r.ach === "Nu" ? "#ffebee" : "#fff"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 1}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updCOL(i, "data", v)} /></td><td style={td({ background: rowBg })}><ACStrict value={r.furn || ""} options={furnOptions} onChange={(v) => updCOL(i, "furn", v)} placeholder="—" strict /></td><td style={td({ background: r.nr_doc ? "#e8f5e9" : "#fff3e0" })}><input style={inp({ textAlign: "center", fontWeight: 600 })} value={r.nr_doc || ""} onChange={(e) => updCOL(i, "nr_doc", e.target.value)} placeholder="—" /></td><td style={td({ background: COL_COLORS[r.cat] || "#eee", textAlign: "center" })}><select style={sel({ fontWeight: 600, textAlign: "center" })} value={r.cat || ""} onChange={(e) => updCOL(i, "cat", e.target.value)}>{CATEGORIE_COL.map((o) => <option key={o}>{o}</option>)}</select></td><td style={td({ background: rowBg })}><ACStrict value={r.produs || ""} options={PRODUSE_DYN} onChange={(v) => updCOL(i, "produs", v)} /></td><td style={td({ background: rowBg })}><div style={{ display: "flex", gap: 2, alignItems: "center" }}><input style={inpNum({ textAlign: "right", minWidth: 34 })} type="text" inputMode="decimal" value={r.cant || ""} onChange={(e) => updCOL(i, "cant", e.target.value)} />{scalePort && <button onClick={() => useScaleWeight(v => updCOL(i, "cant", v))} title="Citește din cantar" style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 3, padding: "1px 3px", cursor: "pointer", fontSize: 10, flexShrink: 0 }}>⚖️</button>}</div></td><td style={td({ background: rowBg })}><input style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.pret || ""} onChange={(e) => updCOL(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 600 })}>{tot > 0 ? fmt(tot) : "0,00"}</td><td style={td({ textAlign: "right", background: "#fce4d6", fontWeight: 600, color: "#bf360c" })}>{faraImp > 0 ? fmt(faraImp) : "0,00"}</td><td style={td({ background: achBg })}><select style={sel({ color: r.ach === "Da" ? G : r.ach === "Nu" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.ach || ""} onChange={(e) => updCOL(i, "ach", e.target.value)}><option value=""></option><option>Da</option><option>Nu</option></select></td><td style={td({ background: r.ach_de ? "#ffe0b2" : "#fff" })}><ACStrict value={r.ach_de || ""} options={achitatOptions} onChange={(v) => updCOL(i, "ach_de", v)} placeholder="—" /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delCOL(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
-                <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={6} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(colFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0), 0))} kg</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(colFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0))}</td><td colSpan={4}></td></tr></tfoot>
+                <tbody>{colFiltered.map((r, idx) => { const i = colRows.indexOf(r); const tot = parseSuma(r.cant) * parseSuma(r.pret); const faraImp = tot ? +(tot * 0.88).toFixed(2) : 0; const rowBg = idx % 2 === 0 ? "#fff" : "#f8fbf9"; const achBg = r.ach === "Da" ? "#e8f5e9" : r.ach === "Nu" ? "#ffebee" : "#fff"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 1}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updCOL(i, "data", v)} /></td><td style={td({ background: rowBg })}><ACStrict value={r.furn || ""} options={furnOptions} onChange={(v) => updCOL(i, "furn", v)} placeholder="—" strict /></td><td style={td({ background: r.nr_doc ? "#e8f5e9" : "#fff3e0" })}><input style={inp({ textAlign: "center", fontWeight: 600 })} value={r.nr_doc || ""} onChange={(e) => updCOL(i, "nr_doc", e.target.value)} placeholder="—" /></td><td style={td({ background: COL_COLORS[r.cat] || "#eee", textAlign: "center" })}><select style={sel({ fontWeight: 600, textAlign: "center" })} value={r.cat || ""} onChange={(e) => updCOL(i, "cat", e.target.value)}>{CATEGORIE_COL.map((o) => <option key={o}>{o}</option>)}</select></td><td style={td({ background: rowBg })}><ACStrict value={r.produs || ""} options={PRODUSE_DYN} onChange={(v) => updCOL(i, "produs", v)} /></td><td style={td({ background: rowBg })}><div style={{ display: "flex", gap: 2, alignItems: "center" }}><input style={inpNum({ textAlign: "right", minWidth: 34 })} type="text" inputMode="decimal" value={r.cant || ""} onChange={(e) => updCOL(i, "cant", e.target.value)} />{scalePort && <button onClick={() => useScaleWeight(v => updCOL(i, "cant", v))} title="Citește din cantar" style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 3, padding: "1px 3px", cursor: "pointer", fontSize: 10, flexShrink: 0 }}>⚖️</button>}</div></td><td style={td({ background: rowBg })}><input style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.pret || ""} onChange={(e) => updCOL(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 600 })}>{tot > 0 ? fmt(tot) : "0,00"}</td><td style={td({ textAlign: "right", background: "#fce4d6", fontWeight: 600, color: "#bf360c" })}>{faraImp > 0 ? fmt(faraImp) : "0,00"}</td><td style={td({ background: achBg })}><select style={sel({ color: r.ach === "Da" ? G : r.ach === "Nu" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.ach || ""} onChange={(e) => updCOL(i, "ach", e.target.value)}><option value=""></option><option>Da</option><option>Nu</option></select></td><td style={td({ background: r.ach_de ? "#ffe0b2" : "#fff" })}><ACStrict value={r.ach_de || ""} options={achitatOptions} onChange={(v) => updCOL(i, "ach_de", v)} placeholder="—" /></td><td style={td({ textAlign: "center", padding: 2 })}>{wwSent[r.id] ? <span style={{ color: G, fontSize: 15 }} title="Trimis">✓</span> : <button onClick={() => trimiteWiseWeee(r)} title="Trimite spre WiseWeee" style={{ background: "#fff3e0", border: "1px solid #ffb74d", borderRadius: 4, cursor: "pointer", fontSize: 13, padding: "2px 5px" }}>📤</button>}</td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delCOL(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={6} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(colFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0), 0))} kg</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(colFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0))}</td><td colSpan={5}></td></tr></tfoot>
               </table>
             </div>
             <AddBtn onClick={addCOL} label="+ Adaugă achiziție" />
