@@ -385,6 +385,46 @@ function ACStrict({ value, onChange, options, placeholder = "", style, strict = 
     </>
   );
 }
+// ── Filtru cu selecție multiplă (checkbox-uri într-un dropdown) ─
+function MultiSelectFilter({ value, onChange, options, placeholder }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    const onDocClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+  const toggle = (opt) => onChange(value.includes(opt) ? value.filter((v) => v !== opt) : [...value, opt]);
+  const label = value.length === 0 ? placeholder : value.length === 1 ? value[0] : `${value.length} produse selectate`;
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12, background: "#fff", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, maxWidth: 200 }}
+      >
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+        <span style={{ fontSize: 9, color: "#777" }}>▾</span>
+      </button>
+      {open && (
+        <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 2, background: "#fff", border: "1px solid #ccc", borderRadius: 6, boxShadow: "0 4px 14px rgba(0,0,0,.15)", zIndex: 50, maxHeight: 260, overflowY: "auto", minWidth: 220, padding: 6 }}>
+          {value.length > 0 && (
+            <div onClick={() => onChange([])} style={{ padding: "4px 6px", fontSize: 11, color: "#e53935", cursor: "pointer", fontWeight: 600, borderBottom: "1px solid #eee", marginBottom: 4 }}>
+              ✕ Deselectează tot
+            </div>
+          )}
+          {options.map((o) => (
+            <label key={o} style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 6px", fontSize: 12, cursor: "pointer", borderRadius: 4 }}>
+              <input type="checkbox" checked={value.includes(o)} onChange={() => toggle(o)} style={{ cursor: "pointer" }} />
+              {o}
+            </label>
+          ))}
+          {options.length === 0 && <div style={{ fontSize: 11, color: "#999", padding: "3px 6px" }}>—</div>}
+        </div>
+      )}
+    </div>
+  );
+}
 // ── Borderou Print ────────────────────────────────────────────
 function BordPrint({ b }) {
   const tot = b.produse.reduce((s, p) => s + (parseSuma(p.cant) || 0) * (parseSuma(p.pret) || 0), 0);
@@ -605,14 +645,22 @@ function PVPrint({ pv }) {
 // ── Supabase realtime helper ──────────────────────────────────
 function useSupaTable(tableName, setFn) {
   useEffect(() => {
-    sb.from(tableName).select("*").order("created_at", { ascending: true })
-      .then(({ data }) => { if (data) setFn(data); });
+    const refetch = () =>
+      sb.from(tableName).select("*").order("created_at", { ascending: true })
+        .then(({ data }) => { if (data) setFn(data); });
+    refetch();
     const ch = sb.channel(`${tableName}-rt`)
-      .on("postgres_changes", { event: "*", schema: "public", table: tableName },
-        () => sb.from(tableName).select("*").order("created_at", { ascending: true })
-          .then(({ data }) => { if (data) setFn(data); }))
+      .on("postgres_changes", { event: "*", schema: "public", table: tableName }, refetch)
       .subscribe();
-    return () => sb.removeChannel(ch);
+    const onFocus = () => refetch();
+    const onVisibility = () => { if (document.visibilityState === "visible") refetch(); };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      sb.removeChannel(ch);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, []);
 }
 
@@ -956,13 +1004,13 @@ export default function App() {
   const [colCat, setColCat] = useState("");
   const [colAchitat, setColAchitat] = useState("");
   const [colFurn, setColFurn] = useState("");
-  const [colProdus, setColProdus] = useState("");
+  const [colProdus, setColProdus] = useState([]);
   const [colMonth, setColMonth] = useState(() => { const d = new Date(); return `${String(d.getMonth()+1).padStart(2,"0")}.${d.getFullYear()}`; });
   const [colDataDe, setColDataDe] = useState("");
   const [colDataPana, setColDataPana] = useState("");
   const [livSearch, setLivSearch] = useState("");
   const [livClient, setLivClient] = useState("");
-  const [livProdus, setLivProdus] = useState("");
+  const [livProdus, setLivProdus] = useState([]);
   const [livMonth, setLivMonth] = useState(() => { const d = new Date(); return `${String(d.getMonth()+1).padStart(2,"0")}.${d.getFullYear()}`; });
   const [livDataDe, setLivDataDe] = useState("");
   const [livDataPana, setLivDataPana] = useState("");
@@ -1140,7 +1188,7 @@ export default function App() {
   const addCOL = async () => {
     const row = { data: today(), agent: "", furn: "", nr_doc: "", cat: "Curte", produs: "", cant: 0, pret: 0, ach: "", ach_de: "" };
     const { data } = await sb.from("colectari").insert(row).select();
-    if (data) setColRows((p) => [...p, data[0]]);
+    if (data && data.length) setColRows((p) => [...p, data[0]]);
   };
 
   // ── Transfer catre WiseWeee (extensie Chrome) ──────────────
@@ -1187,7 +1235,7 @@ export default function App() {
   const addLIV = async () => {
     const row = { data: today(), nr: "", client: "", produs: "", cant: 0, pret: 0, fact: "", inc: "", det: "" };
     const { data } = await sb.from("livrari").insert(row).select();
-    if (data) setLivRows((p) => [...p, data[0]]);
+    if (data && data.length) setLivRows((p) => [...p, data[0]]);
   };
 
   // Datorii
@@ -1466,7 +1514,7 @@ export default function App() {
     };
     const { data, error } = await sb.from("colectari").insert(row).select();
     if (error) { alert("Tichetul a fost închis, dar înregistrarea automată în Achiziții a eșuat: " + error.message); return; }
-    if (data) setColRows((p) => [...p, data[0]]);
+    if (data && data.length) setColRows((p) => [...p, data[0]]);
   };
   // ── Creează automat o înregistrare în Vânzări pornind de la un tichet de cântar închis (tip Ieșire) ──
   // Legătura cu tichetul se face prin câmpul Aviz (regăsit atât în tichet cât și în Nr. doc. din Vânzări) — nu e nevoie de o coloană nouă în Supabase.
@@ -1477,7 +1525,7 @@ export default function App() {
     };
     const { data, error } = await sb.from("livrari").insert(row).select();
     if (error) { alert("Tichetul a fost închis, dar înregistrarea automată în Vânzări a eșuat: " + error.message); return; }
-    if (data) setLivRows((p) => [...p, data[0]]);
+    if (data && data.length) setLivRows((p) => [...p, data[0]]);
   };
   const delTichet = async (t) => {
     const legataCol = colRows.find((r) => r.tichet_id === String(t.id));
@@ -4334,7 +4382,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
             if (colCat && r.cat !== colCat) return false;
             if (colAchitat && r.ach !== colAchitat) return false;
             if (colFurn && r.furn !== colFurn) return false;
-            if (colProdus && r.produs !== colProdus) return false;
+            if (colProdus.length && !colProdus.includes(r.produs)) return false;
             if (colSearch) { const q = colSearch.toLowerCase(); if (!(r.furn?.toLowerCase().includes(q) || r.produs?.toLowerCase().includes(q) || r.ach_de?.toLowerCase().includes(q))) return false; }
             return true;
           }));
@@ -4369,16 +4417,13 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                 <option value="">🏢 Toți furnizorii</option>
                 {colFurnFilterOptions.map(f => <option key={f}>{f}</option>)}
               </select>
-              <select value={colProdus} onChange={(e) => setColProdus(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}>
-                <option value="">📦 Toate produsele</option>
-                {colProdusFilterOptions.map(p => <option key={p}>{p}</option>)}
-              </select>
+              <MultiSelectFilter value={colProdus} onChange={setColProdus} options={colProdusFilterOptions} placeholder="📦 Toate produsele" />
               <select value={colAchitat} onChange={(e) => setColAchitat(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}>
                 <option value="">💰 Toate</option>
                 <option value="Da">✅ Achitat</option>
                 <option value="Nu">⏳ Neachitat</option>
               </select>
-              {(colSearch || colMonth || colCat || colAchitat || colFurn || colProdus || colDataDe || colDataPana) && <button onClick={() => { setColSearch(""); setColMonth(""); setColCat(""); setColAchitat(""); setColFurn(""); setColProdus(""); setColDataDe(""); setColDataPana(""); }} style={{ background: "#e53935", color: "#fff", border: "none", borderRadius: 5, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕ Reset</button>}
+              {(colSearch || colMonth || colCat || colAchitat || colFurn || colProdus.length || colDataDe || colDataPana) && <button onClick={() => { setColSearch(""); setColMonth(""); setColCat(""); setColAchitat(""); setColFurn(""); setColProdus([]); setColDataDe(""); setColDataPana(""); }} style={{ background: "#e53935", color: "#fff", border: "none", borderRadius: 5, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕ Reset</button>}
             </div>
             <div style={{ overflowX: "auto" }}>
               <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 1320 }}>
@@ -4429,7 +4474,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
             if (livMonth && monthOf(r.data) !== livMonth) return false;
             if (!inDateRange(r.data, livDataDe, livDataPana)) return false;
             if (livClient && r.client !== livClient) return false;
-            if (livProdus && r.produs !== livProdus) return false;
+            if (livProdus.length && !livProdus.includes(r.produs)) return false;
             if (livSearch) { const q = livSearch.toLowerCase(); if (!(r.client?.toLowerCase().includes(q) || r.produs?.toLowerCase().includes(q) || r.det?.toLowerCase().includes(q) || String(r.nr).includes(q))) return false; }
             return true;
           }));
@@ -4458,11 +4503,8 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                 <option value="">🏢 Toți clienții</option>
                 {clientFilterOptions.map(c => <option key={c}>{c}</option>)}
               </select>
-              <select value={livProdus} onChange={(e) => setLivProdus(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}>
-                <option value="">📦 Toate produsele</option>
-                {livProdusFilterOptions.map(p => <option key={p}>{p}</option>)}
-              </select>
-              {(livSearch || livMonth || livClient || livProdus || livDataDe || livDataPana) && <button onClick={() => { setLivSearch(""); setLivMonth(""); setLivClient(""); setLivProdus(""); setLivDataDe(""); setLivDataPana(""); }} style={{ background: "#e53935", color: "#fff", border: "none", borderRadius: 5, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕ Reset</button>}
+              <MultiSelectFilter value={livProdus} onChange={setLivProdus} options={livProdusFilterOptions} placeholder="📦 Toate produsele" />
+              {(livSearch || livMonth || livClient || livProdus.length || livDataDe || livDataPana) && <button onClick={() => { setLivSearch(""); setLivMonth(""); setLivClient(""); setLivProdus([]); setLivDataDe(""); setLivDataPana(""); }} style={{ background: "#e53935", color: "#fff", border: "none", borderRadius: 5, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕ Reset</button>}
             </div>
             <div style={{ overflowX: "auto" }}>
               <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 1310 }}>

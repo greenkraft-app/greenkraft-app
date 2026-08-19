@@ -60,6 +60,19 @@ function getDialog() {
   return dialogs.find((d) => d.getBoundingClientRect().width > 0) || null;
 }
 
+// Scoate punctuatia (S.A. -> SA, S.R.L. -> SRL) si spatiile duble, pentru
+// comparatii care nu trebuie sa depinda de cum e scrisa forma juridica.
+function normalizeDenumire(s) {
+  return (s || "").replace(/[.,]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+// Scoate si forma juridica de la final (SA, SRL, PFA, II, IF...) pentru a obtine
+// un termen de cautare mai permisiv, care sa gaseasca firma chiar daca WiseWeee
+// are alt format de scriere a formei juridice (ex. "S.A." vs "SA").
+function coreDenumire(s) {
+  return normalizeDenumire(s).replace(/\s+(sa|srl|snc|scs|pfa|ii|if|ong)$/i, "").trim();
+}
+
 // Deschide un combobox de tip "cauta si alege", scrie textul de cautare si
 // selecteaza prima optiune al carei text incepe cu acel text. Intoarce true/false.
 async function fillSearchCombobox(root, labelStart, searchText) {
@@ -69,14 +82,17 @@ async function fillSearchCombobox(root, labelStart, searchText) {
   realClick(trigger);
   await sleep(350);
 
+  const cautare = coreDenumire(searchText) || searchText;
   const input = document.activeElement && document.activeElement.tagName === "INPUT" ? document.activeElement : document.querySelector('input[placeholder*="aut"], input[placeholder*="Cauta"], input:focus');
   if (input) {
-    setNativeValue(input, searchText);
+    setNativeValue(input, cautare);
     await sleep(600);
   }
   const options = Array.from(document.querySelectorAll('[role="option"]')).filter((o) => o.getBoundingClientRect().width > 0);
-  const target = searchText.trim().toLowerCase();
-  const match = options.find((o) => o.textContent.trim().toLowerCase().startsWith(target));
+  const target = normalizeDenumire(searchText);
+  const targetCore = coreDenumire(searchText);
+  const match = options.find((o) => normalizeDenumire(o.textContent).startsWith(target))
+    || options.find((o) => normalizeDenumire(o.textContent).startsWith(targetCore));
   if (match) {
     realClick(match);
     await sleep(150);
