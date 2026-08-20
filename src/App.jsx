@@ -5398,7 +5398,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                     <tfoot><tr style={{ background: "#00838f", color: "#fff" }}>
                       <td colSpan={3} style={{ padding: "7px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td>
                       <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700, fontSize: 13 }}>{fmt(baniAdusiRows.reduce((s, r) => s + (parseSuma(r.suma) || 0), 0))}</td>
-                      <td colSpan={4}></td>
+                      <td colSpan={3}></td>
                       <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700, fontSize: 13 }}>{fmt(baniAdusiRows.reduce((s, r, i) => { const totalDisp = (parseSuma(r.suma) || 0) + (parseSuma(r.sold_anterior) || 0); const cheltuit = cheltuitDinCasa(r.data, baniAdusiRows[i + 1]?.data || null).total; return s + (totalDisp - cheltuit); }, 0))}</td>
                       <td></td>
                     </tr></tfoot>
