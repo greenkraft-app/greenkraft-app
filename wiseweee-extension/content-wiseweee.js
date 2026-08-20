@@ -88,7 +88,14 @@ async function fillSearchCombobox(root, labelStart, searchText) {
     setNativeValue(input, cautare);
     await sleep(600);
   }
-  const options = Array.from(document.querySelectorAll('[role="option"]')).filter((o) => o.getBoundingClientRect().width > 0);
+  // Site-ul (shadcn) randeaza optiunile ca <button> simple in dropdown, fara role="option" —
+  // le prindem dupa clasele lor tipice, cu fallback pe role="option" daca structura se schimba.
+  const dropdownButtons = Array.from(document.querySelectorAll("button")).filter((b) => {
+    const cls = b.className || "";
+    return typeof cls === "string" && cls.includes("hover:bg-accent") && cls.includes("justify-between");
+  });
+  const roleOptions = Array.from(document.querySelectorAll('[role="option"]'));
+  const options = [...dropdownButtons, ...roleOptions].filter((o) => o.getBoundingClientRect().width > 0);
   const target = normalizeDenumire(searchText);
   const targetCore = coreDenumire(searchText);
   const match = options.find((o) => normalizeDenumire(o.textContent).startsWith(target))
@@ -131,9 +138,17 @@ function normalizeTxt(s) {
   return (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 }
 
-// Bifeaza un checkbox/switch a carui eticheta (sau textul din apropiere) contine
-// un anumit fragment de text, insensibil la diacritice si majuscule.
-function checkCheckboxByText(root, textIncludes) {
+// Bifeaza un checkbox (shadcn/Radix: <button role="checkbox" id="...">). Cauta
+// intai dupa un id cunoscut (cel mai fiabil), apoi cade pe cautare dupa eticheta/text.
+function checkCheckboxByText(root, textIncludes, knownId) {
+  if (knownId) {
+    const byId = (root.querySelector(`#${knownId}`) || document.querySelector(`#${knownId}`));
+    if (byId) {
+      const dejaBifat = byId.getAttribute("aria-checked") === "true" || byId.getAttribute("data-state") === "checked" || byId.checked === true;
+      if (!dejaBifat) realClick(byId);
+      return "ok";
+    }
+  }
   const target = normalizeTxt(textIncludes);
   const labels = Array.from(root.querySelectorAll("label"));
   let container = labels.find((l) => normalizeTxt(l.textContent).includes(target));
@@ -189,7 +204,7 @@ async function runTransfer(payload) {
   rezultate.push(["Data Colectare", fillDateInput(dialog, "Data Colectare", payload.data_colectare)]);
   rezultate.push(["Transportator", await fillSearchCombobox(dialog, "Transportator", payload.transportator)]);
   if (payload.fara_licenta) {
-    rezultate.push(["Fără licență transport", checkCheckboxByText(dialog, "fara licenta")]);
+    rezultate.push(["Fără licență transport", checkCheckboxByText(dialog, "fara licenta", "no-license-transport")]);
   }
   rezultate.push(["Nr. Auto", fillTextInput(dialog, "Nr. Auto", payload.nr_auto)]);
   rezultate.push(["Șofer", fillTextInput(dialog, "Șofer", payload.sofer)]);
