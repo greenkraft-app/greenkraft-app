@@ -5380,7 +5380,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                       const ramas = totalDisp - cheltuit;
                       const rowBg = i % 2 === 0 ? "#fff" : "#e0f7fa";
                       return (
-                        <tr key={r.id || i} style={{ background: rowBg }}>
+                        <tr key={r.id || i} style={{ background: rowBg, height: 38 }}>
                           <td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td>
                           <td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updAV(oi, "data", v)} /></td>
                           <td style={td({ background: rowBg, fontWeight: 600 })}><input style={inp({ textAlign: "center", fontWeight: 600 })} value={r.catre || ""} onChange={(e) => updAV(oi, "catre", e.target.value)} placeholder="Cine a adus" /></td>
