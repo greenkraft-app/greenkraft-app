@@ -1258,7 +1258,15 @@ export default function App() {
   const addAV = async (tip) => {
     const row = { data: today(), catre: "", suma: "", tip, det: "", decont: [] };
     const { data } = await sb.from("avansuri").insert(row).select();
-    if (data) setAvRows((p) => [...p, data[0]]);
+    if (data && data.length) setAvRows((p) => [...p, data[0]]);
+  };
+  // Bani aduși în casă — folosește tot tabelul "avansuri", cu tip="bani_adus"
+  const delBaniAdusi = mkDel(setAvRows, "avansuri", "această înregistrare de bani aduși");
+  const addBaniAdusi = async () => {
+    const row = { data: today(), catre: "", suma: "", tip: "bani_adus", det: "", decont: [], sold_anterior: "" };
+    const { data, error } = await sb.from("avansuri").insert(row).select();
+    if (error) { alert("Eroare: " + error.message + "\n\nAsigură-te că există coloana \"sold_anterior\" (numeric) în tabelul avansuri din Supabase."); return; }
+    if (data && data.length) setAvRows((p) => [...p, data[0]]);
   };
   // Decont items
   const addDecontItem = async (avansId) => {
@@ -2867,10 +2875,28 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
   const totDatAchitat = datRows.filter((r) => r.ach === "Da").reduce((s, r) => s + (parseSuma(r.suma) || 0), 0);
 
   // Avansuri computed
-  const filtAv = sortByDateAsc(avRows.filter((r) => (avTip === "toate" || r.tip === avTip) && (!avPers || r.catre === avPers)));
+  const filtAv = sortByDateAsc(avRows.filter((r) => r.tip !== "bani_adus" && (avTip === "toate" || r.tip === avTip) && (!avPers || r.catre === avPers)));
   const totAvans = avRows.filter((r) => r.tip === "avans").reduce((s, r) => s + (parseSuma(r.suma) || 0), 0);
   const totDiv = avRows.filter((r) => r.tip === "dividend").reduce((s, r) => s + (parseSuma(r.suma) || 0), 0);
   const persList = [...new Set(avRows.map((r) => r.catre).filter(Boolean))];
+
+  // Bani aduși în casă computed — pentru fiecare adus, calculăm automat cât s-a cheltuit
+  // din Cheltuieli (categoria "Altele") și Achiziții (categoria "Diverse") până la următoarea aducere de bani
+  const baniAdusiRows = sortByDateAsc(avRows.filter((r) => r.tip === "bani_adus"));
+  const cheltuitDinCasa = (dataStart, dataEndExclusiv) => {
+    const dStart = parseDateRO(dataStart);
+    const dEnd = dataEndExclusiv ? parseDateRO(dataEndExclusiv) : null;
+    const inInterval = (dataStr) => {
+      const d = parseDateRO(dataStr);
+      if (!d || !dStart) return false;
+      if (d < dStart) return false;
+      if (dEnd && d >= dEnd) return false;
+      return true;
+    };
+    const totCh = chRows.filter((r) => r.cat === "Altele" && inInterval(r.data)).reduce((s, r) => s + (parseSuma(r.suma) || 0), 0);
+    const totCol = colRows.filter((r) => r.cat === "Diverse" && inInterval(r.data)).reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0);
+    return { totCh, totCol, total: totCh + totCol };
+  };
 
   // Contracte computed
   const filtCT = sortByDateAsc(contracte.filter((r) => !ctSearch || r.companie?.toLowerCase().includes(ctSearch.toLowerCase()) || r.nr?.includes(ctSearch) || r.detalii?.toLowerCase().includes(ctSearch.toLowerCase())));
@@ -5207,6 +5233,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
               <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
                 <button onClick={() => addAV("avans")} style={{ padding: "6px 14px", background: "#e65100", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Avans</button>
                 <button onClick={() => addAV("dividend")} style={{ padding: "6px 14px", background: "#1565c0", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Dividend</button>
+                <button onClick={addBaniAdusi} style={{ padding: "6px 14px", background: "#00838f", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Bani aduși</button>
               </div>
             </div>
             <div style={{ overflowX: "auto" }}>
@@ -5322,6 +5349,62 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                 </tbody>
                 <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={4} style={{ padding: "7px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700, fontSize: 13 }}>{fmt(filtAv.reduce((s, r) => s + (parseSuma(r.suma) || 0), 0))} lei</td><td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700, fontSize: 13 }}>{fmt(filtAv.reduce((s, r) => s + (r.decont || []).reduce((ss, d) => ss + (parseSuma(d.suma) || 0), 0), 0))}</td><td colSpan={5}></td></tr></tfoot>
               </table>
+            </div>
+
+            {/* ── Bani aduși în casă ── */}
+            <div style={{ marginTop: 26 }}>
+              <div style={{ fontWeight: 700, color: "#00838f", fontSize: 14, marginBottom: 10 }}>💵 Bani aduși în casă</div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 1000 }}>
+                  <colgroup><col style={{ width: 28 }} /><col style={{ width: 100 }} /><col style={{ width: 150 }} /><col style={{ width: 105 }} /><col style={{ width: 105 }} /><col style={{ width: 110 }} /><col style={{ width: 130 }} /><col style={{ width: 110 }} /><col style={{ width: 30 }} /></colgroup>
+                  <thead><tr style={{ background: "#00838f" }}>
+                    <th style={th({ background: "#00636b" })}></th>
+                    <th style={th({ textAlign: "center" })}>Data</th>
+                    <th style={th({ textAlign: "center" })}>Adus de</th>
+                    <th style={th({ textAlign: "center" })}>Sumă adusă</th>
+                    <th style={th({ textAlign: "center" })} title="Câți bani mai erau în casă în ziua respectivă">Sold anterior</th>
+                    <th style={th({ textAlign: "center" })}>Total disponibil</th>
+                    <th style={th({ textAlign: "center" })} title="Calculat automat: Cheltuieli (Altele) + Achiziții (Diverse), de la această dată până la următoarea aducere de bani">Detalii (cheltuit)</th>
+                    <th style={th({ textAlign: "center" })}>Rămas în casă</th>
+                    <th style={th({})}></th>
+                  </tr></thead>
+                  <tbody>
+                    {baniAdusiRows.length === 0 && <tr><td colSpan={9} style={{ textAlign: "center", padding: 20, color: "#aaa" }}>Nicio înregistrare.</td></tr>}
+                    {baniAdusiRows.map((r, i) => {
+                      const oi = avRows.indexOf(r);
+                      const suma = parseSuma(r.suma) || 0;
+                      const soldAnt = parseSuma(r.sold_anterior) || 0;
+                      const totalDisp = suma + soldAnt;
+                      const nextData = baniAdusiRows[i + 1]?.data || null;
+                      const { totCh, totCol, total: cheltuit } = cheltuitDinCasa(r.data, nextData);
+                      const ramas = totalDisp - cheltuit;
+                      const rowBg = i % 2 === 0 ? "#fff" : "#e0f7fa";
+                      return (
+                        <tr key={r.id || i} style={{ background: rowBg }}>
+                          <td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td>
+                          <td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updAV(oi, "data", v)} /></td>
+                          <td style={td({ background: rowBg, fontWeight: 600 })}><input style={inp({ textAlign: "center", fontWeight: 600 })} value={r.catre || ""} onChange={(e) => updAV(oi, "catre", e.target.value)} placeholder="Cine a adus" /></td>
+                          <td style={td({ background: "#e0f2f1", textAlign: "right", fontWeight: 700, color: "#00695c" })}><input style={inp({ textAlign: "right", fontWeight: 700, color: "#00695c" })} value={r.suma || ""} onChange={(e) => updAV(oi, "suma", e.target.value)} placeholder="0" /></td>
+                          <td style={td({ background: "#fff8e1", textAlign: "right" })}><input style={inp({ textAlign: "right" })} value={r.sold_anterior || ""} onChange={(e) => updAV(oi, "sold_anterior", e.target.value)} placeholder="0" /></td>
+                          <td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 700 })}>{fmt(totalDisp)}</td>
+                          <td style={td({ textAlign: "right", background: "#fce4d6", fontWeight: 600, color: "#bf360c" })} title={`Cheltuieli (Altele): ${fmt(totCh)} lei • Achiziții (Diverse): ${fmt(totCol)} lei`}>{fmt(cheltuit)}</td>
+                          <td style={td({ textAlign: "right", background: ramas < 0 ? "#ffebee" : "#e8f5e9", fontWeight: 700, color: ramas < 0 ? "#c62828" : G })}>{fmt(ramas)}</td>
+                          <td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delBaniAdusi(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 14 }}>✕</button></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  {baniAdusiRows.length > 0 && (
+                    <tfoot><tr style={{ background: "#00838f", color: "#fff" }}>
+                      <td colSpan={3} style={{ padding: "7px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td>
+                      <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700, fontSize: 13 }}>{fmt(baniAdusiRows.reduce((s, r) => s + (parseSuma(r.suma) || 0), 0))}</td>
+                      <td colSpan={4}></td>
+                      <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700, fontSize: 13 }}>{fmt(baniAdusiRows.reduce((s, r, i) => { const totalDisp = (parseSuma(r.suma) || 0) + (parseSuma(r.sold_anterior) || 0); const cheltuit = cheltuitDinCasa(r.data, baniAdusiRows[i + 1]?.data || null).total; return s + (totalDisp - cheltuit); }, 0))}</td>
+                      <td></td>
+                    </tr></tfoot>
+                  )}
+                </table>
+              </div>
             </div>
           </div>
         )}
