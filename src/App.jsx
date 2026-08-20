@@ -1263,7 +1263,7 @@ export default function App() {
   // Bani aduși în casă — folosește tot tabelul "avansuri", cu tip="bani_adus"
   const delBaniAdusi = mkDel(setAvRows, "avansuri", "această înregistrare de bani aduși");
   const addBaniAdusi = async () => {
-    const row = { data: today(), catre: "", suma: "", tip: "bani_adus", det: "", decont: [], sold_anterior: "" };
+    const row = { data: today(), catre: "", suma: "", tip: "bani_adus", det: "", decont: [], sold_anterior: null };
     const { data, error } = await sb.from("avansuri").insert(row).select();
     if (error) { alert("Eroare: " + error.message + "\n\nAsigură-te că există coloana \"sold_anterior\" (numeric) în tabelul avansuri din Supabase."); return; }
     if (data && data.length) setAvRows((p) => [...p, data[0]]);
@@ -5385,7 +5385,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                           <td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updAV(oi, "data", v)} /></td>
                           <td style={td({ background: rowBg, fontWeight: 600 })}><input style={inp({ textAlign: "center", fontWeight: 600 })} value={r.catre || ""} onChange={(e) => updAV(oi, "catre", e.target.value)} placeholder="Cine a adus" /></td>
                           <td style={td({ background: "#e0f2f1", textAlign: "right", fontWeight: 700, color: "#00695c" })}><input style={inp({ textAlign: "right", fontWeight: 700, color: "#00695c" })} value={r.suma || ""} onChange={(e) => updAV(oi, "suma", e.target.value)} placeholder="0" /></td>
-                          <td style={td({ background: "#fff8e1", textAlign: "right" })}><input style={inp({ textAlign: "right" })} value={r.sold_anterior || ""} onChange={(e) => updAV(oi, "sold_anterior", e.target.value)} placeholder="0" /></td>
+                          <td style={td({ background: "#fff8e1", textAlign: "right" })}><input style={inp({ textAlign: "right" })} value={r.sold_anterior ?? ""} onChange={(e) => updAV(oi, "sold_anterior", e.target.value === "" ? null : e.target.value)} placeholder="0" /></td>
                           <td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 700 })}>{fmt(totalDisp)}</td>
                           <td style={td({ textAlign: "right", background: "#fce4d6", fontWeight: 600, color: "#bf360c" })} title={`Cheltuieli (Altele): ${fmt(totCh)} lei • Achiziții (Diverse): ${fmt(totCol)} lei`}>{fmt(cheltuit)}</td>
                           <td style={td({ textAlign: "right", background: ramas < 0 ? "#ffebee" : "#e8f5e9", fontWeight: 700, color: ramas < 0 ? "#c62828" : G })}>{fmt(ramas)}</td>
