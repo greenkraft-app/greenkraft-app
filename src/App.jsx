@@ -2893,8 +2893,8 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
       if (dEnd && d >= dEnd) return false;
       return true;
     };
-    const totCh = chRows.filter((r) => r.cat === "Altele" && inInterval(r.data)).reduce((s, r) => s + (parseSuma(r.suma) || 0), 0);
-    const totCol = colRows.filter((r) => r.cat === "Diverse" && inInterval(r.data)).reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0);
+    const totCh = chRows.filter((r) => r.cat === "Altele" && r.ach === "Da" && inInterval(r.data)).reduce((s, r) => s + (parseSuma(r.suma) || 0), 0);
+    const totCol = colRows.filter((r) => r.cat === "Diverse" && r.ach === "Da" && inInterval(r.data)).reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0);
     return { totCh, totCol, total: totCh + totCol };
   };
 
@@ -5355,8 +5355,8 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
             <div style={{ marginTop: 26 }}>
               <div style={{ fontWeight: 700, color: "#00838f", fontSize: 14, marginBottom: 10 }}>💵 Bani aduși în casă</div>
               <div style={{ overflowX: "auto" }}>
-                <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 1000 }}>
-                  <colgroup><col style={{ width: 28 }} /><col style={{ width: 100 }} /><col style={{ width: 150 }} /><col style={{ width: 105 }} /><col style={{ width: 105 }} /><col style={{ width: 110 }} /><col style={{ width: 130 }} /><col style={{ width: 110 }} /><col style={{ width: 30 }} /></colgroup>
+                <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 960 }}>
+                  <colgroup><col style={{ width: 28 }} /><col style={{ width: 110 }} /><col style={{ width: 165 }} /><col style={{ width: 115 }} /><col style={{ width: 115 }} /><col style={{ width: 125 }} /><col style={{ width: 145 }} /><col style={{ width: 127 }} /><col style={{ width: 30 }} /></colgroup>
                   <thead><tr style={{ background: "#00838f" }}>
                     <th style={th({ background: "#00636b" })}></th>
                     <th style={th({ textAlign: "center" })}>Data</th>
@@ -5364,7 +5364,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                     <th style={th({ textAlign: "center" })}>Sumă adusă</th>
                     <th style={th({ textAlign: "center" })} title="Câți bani mai erau în casă în ziua respectivă">Sold anterior</th>
                     <th style={th({ textAlign: "center" })}>Total disponibil</th>
-                    <th style={th({ textAlign: "center" })} title="Calculat automat: Cheltuieli (Altele) + Achiziții (Diverse), de la această dată până la următoarea aducere de bani">Detalii (cheltuit)</th>
+                    <th style={th({ textAlign: "center" })} title="Calculat automat: Cheltuieli (Altele) + Achiziții (Diverse) achitate (Da), de la această dată până la următoarea aducere de bani">Detalii (cheltuit)</th>
                     <th style={th({ textAlign: "center" })}>Rămas în casă</th>
                     <th style={th({})}></th>
                   </tr></thead>
