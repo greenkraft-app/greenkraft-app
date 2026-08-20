@@ -1209,8 +1209,12 @@ export default function App() {
     return m ? `${m[1]} ${m[2]} ${m[3]}` : "";
   };
   const [wwSent, setWwSent] = useState({}); // { [rowId]: timestamp } - feedback vizual dupa trimitere
+  // Mașinile proprii GREEN KRAFT sub 3,5t, care circulă fără licență de transport
+  const MASINI_PROPRII_FARA_LICENTA = ["IF55KFT", "IF88KFT"];
   const trimiteWiseWeee = (r) => {
     const tichet = findTichetPentruColectare(r);
+    const nrAuto = (tichet?.nr_masina || "").toUpperCase().replace(/\s+/g, "");
+    const masinaProprieFaraLicenta = MASINI_PROPRII_FARA_LICENTA.includes(nrAuto);
     const payload = {
       source: "greenkraft",
       furnizor: r.furn || "",
@@ -1219,9 +1223,10 @@ export default function App() {
       greutate_kg: r.cant || "",
       data_colectare: r.data || "",
       nr_ticket_cantar: tichet?.nr_tichet || "",
-      transportator: tichet?.transportator || tichet?.partener || "",
+      transportator: masinaProprieFaraLicenta ? "GREEN KRAFT SRL" : (tichet?.transportator || tichet?.partener || ""),
       nr_auto: tichet?.nr_masina || "",
       sofer: tichet?.sofer || "",
+      fara_licenta: masinaProprieFaraLicenta,
       observatii: `Generat automat din Greenkraft — ${r.produs || r.cat || ""}`,
     };
     window.postMessage({ type: "GK_TO_WISEWEEE", payload }, "*");

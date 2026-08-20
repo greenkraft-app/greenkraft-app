@@ -127,6 +127,29 @@ function fillTextarea(root, labelStart, value) {
   return "ok";
 }
 
+function normalizeTxt(s) {
+  return (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+}
+
+// Bifeaza un checkbox/switch a carui eticheta (sau textul din apropiere) contine
+// un anumit fragment de text, insensibil la diacritice si majuscule.
+function checkCheckboxByText(root, textIncludes) {
+  const target = normalizeTxt(textIncludes);
+  const labels = Array.from(root.querySelectorAll("label"));
+  let container = labels.find((l) => normalizeTxt(l.textContent).includes(target));
+  if (!container) {
+    const leaf = Array.from(root.querySelectorAll("span, div, p")).find((el) => el.children.length === 0 && normalizeTxt(el.textContent).includes(target));
+    container = leaf?.closest("label, div, li") || leaf;
+  }
+  if (!container) return "camp-negasit";
+  const input = container.querySelector('input[type="checkbox"], [role="checkbox"], [role="switch"], button[role="switch"]')
+    || container.parentElement?.querySelector('input[type="checkbox"], [role="checkbox"], [role="switch"], button[role="switch"]');
+  if (!input) return "camp-negasit";
+  const dejaBifat = input.checked === true || input.getAttribute("aria-checked") === "true" || input.getAttribute("data-state") === "checked";
+  if (!dejaBifat) realClick(input);
+  return "ok";
+}
+
 function showBanner(lines, isError) {
   const old = document.getElementById("gk-transfer-banner");
   if (old) old.remove();
@@ -165,6 +188,9 @@ async function runTransfer(payload) {
   rezultate.push(["Greutate Totală", fillTextInput(dialog, "Greutate Totală", payload.greutate_kg)]);
   rezultate.push(["Data Colectare", fillDateInput(dialog, "Data Colectare", payload.data_colectare)]);
   rezultate.push(["Transportator", await fillSearchCombobox(dialog, "Transportator", payload.transportator)]);
+  if (payload.fara_licenta) {
+    rezultate.push(["Fără licență transport", checkCheckboxByText(dialog, "fara licenta")]);
+  }
   rezultate.push(["Nr. Auto", fillTextInput(dialog, "Nr. Auto", payload.nr_auto)]);
   rezultate.push(["Șofer", fillTextInput(dialog, "Șofer", payload.sofer)]);
   rezultate.push(["Observații", fillTextarea(dialog, "Observații", payload.observatii)]);
