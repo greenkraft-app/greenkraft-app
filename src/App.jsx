@@ -4859,7 +4859,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
           const goale = sortByDateAsc(ticheteList.filter((t) => t.status === "gol"));
           const inchise = sortByDateAsc(ticheteList.filter((t) => t.status === "inchis"));
           const lunaOpts = [...new Set(ticheteList.map((t) => monthOf(t.data)).filter(Boolean))].sort();
-          const filtrate = inchise.filter((t) => {
+          const filtrate = sortByDateAsc([...inchise, ...goale]).filter((t) => {
             if (ticLuna && monthOf(t.data) !== ticLuna) return false;
             if (ticFilter) {
               const q = ticFilter.toLowerCase();
@@ -5053,13 +5053,14 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   </div>
                   <div style={{ overflowX: "auto" }}>
                     <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12 }}>
-                      <thead><tr>{["Nr.", "Data", "Ore", "Tip", "Furnizor", "Mașină", "Șofer", "Material", "Brut", "Tara", "NET (kg)", "Operator", "🖨️", "✏️", ""].map((h, i) => <th key={i} style={th({ background: G })}>{h}</th>)}</tr></thead>
+                      <thead><tr>{["Nr.", "Data", "Ore", "Status", "Tip", "Furnizor", "Mașină", "Șofer", "Material", "Brut", "Tara", "NET (kg)", "Operator", "🖨️", "✏️", ""].map((h, i) => <th key={i} style={th({ background: G })}>{h}</th>)}</tr></thead>
                       <tbody>
                         {filtrate.map((t, idx) => (
-                          <tr key={t.id} style={{ background: idx % 2 === 0 ? "#fff" : "#f8fbf9" }}>
+                          <tr key={t.id} style={{ background: t.status === "gol" ? "#fff8e1" : idx % 2 === 0 ? "#fff" : "#f8fbf9" }}>
                             <td style={td({ textAlign: "center", fontWeight: 700, color: G })}>{t.serie} {t.nr_tichet}</td>
                             <td style={td({ textAlign: "center" })}>{t.data}</td>
-                            <td style={td({ textAlign: "center", fontSize: 10, color: "#888" })}>{t.ora_intrare}–{t.ora_iesire}</td>
+                            <td style={td({ textAlign: "center", fontSize: 10, color: "#888" })}>{t.status === "gol" ? t.ora_intrare : `${t.ora_intrare}–${t.ora_iesire}`}</td>
+                            <td style={td({ textAlign: "center", fontWeight: 700, fontSize: 10, color: t.status === "gol" ? "#e65100" : G, background: t.status === "gol" ? "#fff3e0" : "#e8f5e9" })}>{t.status === "gol" ? "📝 Rezervat" : "✅ Închis"}</td>
                             <td style={td({ textAlign: "center", fontWeight: 700, color: t.tip === "Intrare" ? G : "#bf360c", background: t.tip === "Intrare" ? "#e8f5e9" : "#fbe9e7" })}>{t.tip === "Intrare" ? "▼ IN" : "▲ OUT"}</td>
                             <td style={td({ fontWeight: 600 })}>{t.partener}</td>
                             <td style={td({ textAlign: "center", fontFamily: "monospace" })}>{t.nr_masina}</td>
@@ -5074,7 +5075,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                             <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => delTichet(t)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
                           </tr>
                         ))}
-                        {filtrate.length === 0 && <tr><td colSpan={15} style={{ padding: 20, textAlign: "center", color: "#999", fontSize: 12 }}>Niciun tichet închis {ticLuna || ticFilter ? "pentru filtrele alese" : "încă"}.</td></tr>}
+                        {filtrate.length === 0 && <tr><td colSpan={16} style={{ padding: 20, textAlign: "center", color: "#999", fontSize: 12 }}>Niciun tichet {ticLuna || ticFilter ? "pentru filtrele alese" : "încă"}.</td></tr>}
                       </tbody>
                     </table>
                   </div>
