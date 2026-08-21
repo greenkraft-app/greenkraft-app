@@ -1116,6 +1116,7 @@ export default function App() {
   const [a3Filter, setA3Filter] = useState("");
   const [a3Luna, setA3Luna] = useState("");
   const [a3KgInput, setA3KgInput] = useState({});
+  const [expandedA3, setExpandedA3] = useState(null); // id of expanded (editable) anexa3 row
   const [a3Nou, setA3Nou] = useState({
     serie: "GK", numar: "",
     transportator: "", data_incarcare: today(), delegat: null, masina: null,
@@ -1875,6 +1876,17 @@ export default function App() {
     setAnexa3List((p) => p.filter((x) => x.id !== a3.id));
     logAction("Ștergere", "Anexa 3", a3.serie + " " + a3.numar, a3.transportator);
   };
+  // Editare Anexa 3 dupa emitere — orice camp poate fi corectat ulterior
+  const updA3 = mkUpd(anexa3List, setAnexa3List, "anexa3");
+  const updA3Firma = async (a3, rol, valoare) => {
+    const info = a3FirmaInfo(valoare) || {};
+    const patch = { [rol]: valoare };
+    if (rol === "transportator") patch.transportator_cui = info.cui || "";
+    else Object.assign(patch, { [rol + "_cui"]: info.cui || "", [rol + "_adresa"]: info.adresa || "", [rol + "_aut_mediu"]: info.aut_mediu || "", [rol + "_aut_revizuita"]: info.aut_mediu_revizuita || "", [rol + "_aut_expira"]: info.aut_mediu_expira || "" });
+    setAnexa3List((p) => p.map((x) => (x.id === a3.id ? { ...x, ...patch } : x)));
+    await sb.from("anexa3").update(patch).eq("id", a3.id);
+    logAction("Editare", "Anexa 3", a3.serie + " " + a3.numar, rol + " → " + valoare);
+  };
   const printA3 = (a3) => {
     const kgTxt = a3.kilograme != null ? fmt(a3.kilograme) + " Kg" : "* se cantareste la destinatie";
     const destRows = DESTINATII.map((d) =>
@@ -1892,57 +1904,52 @@ export default function App() {
     const expAutRevizuita = a3.expeditor_aut_revizuita || expInfo.aut_mediu_revizuita || "";
     const destAutMediu = a3.destinatar_aut_mediu || destInfo.aut_mediu || "";
     const destAutRevizuita = a3.destinatar_aut_revizuita || destInfo.aut_mediu_revizuita || "";
-    // Grupurile curg de sus in jos cu un spatiu constant, moderat (ca in formularul original pe hartie: campurile
-    // stau grupate, iar acolo unde textul se termina ramane pur si simplu spatiu alb in celula). Umplerea paginii
-    // pana jos vine din chenarul celulei (table/tr/td, mai jos), NU din intinderea artificiala a textului -
-    // height:100% nu se rezolva fiabil pe un div din interiorul unui <td> (inaltimea celulei e un rezultat calculat
-    // al layout-ului de tabel, nu o valoare CSS "specificata"), asa ca folosim position:absolute;inset, care se
-    // ancoreaza direct de cutia reala a celulei parinte pozitionate relativ, doar pentru chenar/latime, nu pentru
-    // a forta textul sa atinga marginea de jos (asta arata rupt, cu goluri de sute de pixeli intre campuri scurte).
-    const cellFill = (groups) => "<div style=\"position:absolute;inset:8px;display:flex;flex-direction:column;gap:26px;\">" + groups.map((g) => "<div>" + g + "</div>").join("") + "</div>";
+    // Randul Incarcare/Descarcare e acum despartit in 2 randuri reale de tabel (cu chenar intre ele, ca in
+    // formularul fizic), asa ca fiecare celula isi ia inaltimea din propriul continut — pozitionarea absoluta
+    // (folosita cand totul statea intr-un singur rand, inalt cat toata pagina) ar face continutul sa se
+    // reverse peste randul urmator, pentru ca un element position:absolute nu-si mai calculeaza inaltimea
+    // parintelui. Asezare normala, de sus in jos, cu spatiu moderat intre campuri.
+    const cellFill = (groups) => "<div style=\"padding:6px;display:flex;flex-direction:column;gap:10px;\">" + groups.map((g) => "<div>" + g + "</div>").join("") + "</div>";
 
     const col1 = cellFill([
-      "<div>Date identificare:</div><div><strong>" + (a3.transportator || "") + "</strong></div>" + (trCuiRegCom ? "<div>" + trCuiRegCom + "</div>" : ""),
+      "<div>Date de identificare:</div><div><strong>" + (a3.transportator || "") + "</strong></div>" + (trCuiRegCom ? "<div>" + trCuiRegCom + "</div>" : ""),
       "<div>Date de identificare delegat</div><div>si nr. inmatriculare mijloc de transport</div>" + (a3.delegat_nume ? "<div><strong>" + a3.delegat_nume + "</strong></div>" : "") + (a3.delegat_ci ? "<div>CI " + a3.delegat_ci + "</div>" : "") + (a3.delegat_auto ? "<div><strong>" + a3.delegat_auto + "</strong></div>" : ""),
       "<div>Licenta de transport marfuri nepericuloase nr.</div><div>" + (a3.licenta || "nu e cazul") + "</div>",
       "<div>Data la care expira licenta de transport marfuri nepericuloase</div><div>" + (a3.licenta_expira || "") + "</div>",
       "<div>Semnatura</div>",
-      "<div style=\"font-size:10px;\">Se cantareste la destinatie</div>",
     ]);
-    const col2 = cellFill([
-      "<div>Incarcare</div><div><strong>" + (a3.data_incarcare || "") + "</strong></div>",
-      "<div>Descarcare</div><div><strong>" + (a3.data_descarcare || "") + "</strong></div>",
-    ]);
-    const col3 = cellFill([
-      "<div>Categorii deseuri</div><div>" + (a3.categorie || "") + "</div>",
-      "<div style=\"text-align:center;font-weight:bold;\">Descriere destinatie:</div>" + destRows,
-    ]);
-    const col4 = "<div style=\"position:absolute;inset:8px;display:flex;flex-direction:column;justify-content:center;align-items:center;font-weight:bold;text-align:center;\">" + kgTxt + "</div>";
-    const col5 = cellFill([
+    const col5a = cellFill([
       "<div style=\"text-align:center;font-weight:bold;\">INCARCAREA</div>" +
         "<div>Date de identificare expeditor</div>" +
         "<div style=\"font-weight:bold;font-style:italic;\">" + (a3.expeditor || "").toUpperCase() + "</div>" +
         (expCuiRegCom ? "<div>" + expCuiRegCom + "</div>" : "") +
         "<div>" + expAdresa + "</div>" +
         "<div>Autorizatie de mediu nr. " + expAutMediu + "</div>" +
-        (expAutRevizuita ? "<div>Revizuita " + expAutRevizuita + "</div>" : "") +
+        "<div>Revizuita " + (expAutRevizuita || "") + "</div>" +
+        "<div>Data la care expira autorizatia de mediu</div>" +
+        "<div>Viza anuala</div>" +
         "<div style=\"text-align:center;\">Semnatura si stampila</div>",
+    ]);
+    const col5b = cellFill([
       "<div style=\"text-align:center;font-weight:bold;\">DESCARCAREA</div>" +
         "<div>Date identificare destinatar</div>" +
         "<div style=\"font-weight:bold;font-style:italic;\">" + (a3.destinatar || "").toUpperCase() + "</div>" +
         (destCuiRegCom ? "<div>" + destCuiRegCom + "</div>" : "") +
         "<div>" + destAdresa + "</div>" +
         "<div>Autorizatie de mediu nr. " + destAutMediu + "</div>" +
-        (destAutRevizuita ? "<div>Revizuita " + destAutRevizuita + "</div>" : "") +
+        "<div>Revizuita " + (destAutRevizuita || "") + "</div>" +
+        "<div>Data la care expira autorizatia de mediu</div>" +
+        "<div>Viza anuala</div>" +
         "<div style=\"text-align:center;\">Semnatura si stampila</div>",
     ]);
     const html =
       "<div style=\"font-family:'Times New Roman',serif;font-size:12px;color:#000;background:#fff;\">" +
         "<div style=\"padding:10px 16px;width:100%;min-height:100vh;box-sizing:border-box;display:flex;flex-direction:column;\">" +
-          "<div style=\"text-align:center;margin-bottom:6px;font-size:14px;font-weight:bold;\">ANEXA Nr. 3</div>" +
-          "<div style=\"text-align:center;margin-bottom:14px;font-weight:bold;\">Formular de incarcare " + "\u2013" + " descarcare deseuri nepericuloase</div>" +
+          "<div style=\"text-align:center;font-size:14px;font-weight:bold;text-decoration:underline;\">ANEXA Nr. 3</div>" +
+          "<div style=\"text-align:center;font-weight:bold;text-decoration:underline;\">Formular de incarcare " + "\u2013" + " descarcare</div>" +
+          "<div style=\"text-align:center;margin-bottom:14px;font-weight:bold;text-decoration:underline;\">deseuri nepericuloase</div>" +
           "<table style=\"width:100%;flex:1;border-collapse:collapse;border:1px solid #000;font-size:11px;table-layout:fixed;\">" +
-            "<thead><tr><th colspan=\"5\" style=\"border:1px solid #000;padding:4px 6px;text-align:left;font-weight:normal;\">Serie si numar: " + (a3.serie || "") + " " + a3.numar + "</th></tr>" +
+            "<thead><tr><th colspan=\"5\" style=\"border:1px solid #000;padding:4px 6px;text-align:left;font-weight:normal;\">Serie si numar &nbsp;&nbsp;&nbsp; " + (a3.serie || "") + " &nbsp;&nbsp;&nbsp; " + a3.numar + "</th></tr>" +
             "<tr style=\"background:#fff;\">" +
               "<th style=\"border:1px solid #000;padding:6px;width:29%;\">Date de identificare transportator</th>" +
               "<th style=\"border:1px solid #000;padding:6px;width:11%;\">Data</th>" +
@@ -1950,13 +1957,21 @@ export default function App() {
               "<th style=\"border:1px solid #000;padding:6px;width:9%;\">Cantitate</th>" +
               "<th style=\"border:1px solid #000;padding:6px;width:36%;\">Date privind punctul de lucru*) unde se efectueaza:</th>" +
             "</tr></thead>" +
-            "<tbody><tr style=\"height:100%;\">" +
-              "<td style=\"border:1px solid #000;position:relative;line-height:1.6;\">" + col1 + "</td>" +
-              "<td style=\"border:1px solid #000;position:relative;\">" + col2 + "</td>" +
-              "<td style=\"border:1px solid #000;position:relative;line-height:1.4;\">" + col3 + "</td>" +
-              "<td style=\"border:1px solid #000;position:relative;line-height:1.4;\">" + col4 + "</td>" +
-              "<td style=\"border:1px solid #000;position:relative;line-height:1.6;\">" + col5 + "</td>" +
-            "</tr></tbody>" +
+            "<tbody>" +
+              "<tr>" +
+                "<td rowspan=\"2\" style=\"border:1px solid #000;vertical-align:top;line-height:1.6;\">" + col1 + "</td>" +
+                "<td style=\"border:1px solid #000;padding:6px;vertical-align:top;\"><div>Incarcare</div><div style=\"margin-top:4px;\"><strong>" + (a3.data_incarcare || "") + "</strong></div></td>" +
+                "<td style=\"border:1px solid #000;padding:6px;vertical-align:top;line-height:1.4;\"><div style=\"font-size:10px;\">Categorii deseuri</div><div style=\"margin-top:4px;\">" + (a3.categorie || "") + "</div></td>" +
+                "<td style=\"border:1px solid #000;padding:6px;vertical-align:top;text-align:center;\"><div style=\"font-size:10px;\">Kilograme</div><div style=\"margin-top:4px;font-weight:bold;\">" + kgTxt + "</div></td>" +
+                "<td style=\"border:1px solid #000;vertical-align:top;line-height:1.6;\">" + col5a + "</td>" +
+              "</tr>" +
+              "<tr>" +
+                "<td style=\"border:1px solid #000;padding:6px;vertical-align:top;\"><div>Descarcare</div><div style=\"margin-top:4px;\"><strong>" + (a3.data_descarcare || "") + "</strong></div></td>" +
+                "<td style=\"border:1px solid #000;padding:6px;vertical-align:top;line-height:1.4;\"><div style=\"font-size:10px;\">Categorii deseuri</div><div style=\"margin-top:4px;\">" + (a3.categorie || "") + "</div><div style=\"margin-top:14px;font-weight:bold;\">Descriere destinatie:</div>" + destRows + "</td>" +
+                "<td style=\"border:1px solid #000;\"></td>" +
+                "<td style=\"border:1px solid #000;vertical-align:top;line-height:1.6;\">" + col5b + "</td>" +
+              "</tr>" +
+            "</tbody>" +
           "</table>" +
         "</div>" +
       "</div>";
@@ -4282,25 +4297,83 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                           <SC label="Total kg" value={fmt(totKg) + " kg"} c="#e65100" bg="#fff3e0" />
                         </div>
                       </div>
+                      <div style={{ fontSize: 11, color: "#999", marginBottom: 6 }}>💡 Click pe ▶ pentru a edita informațiile unui document, inclusiv după emitere.</div>
                       <div style={{ overflowX: "auto" }}>
                         <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12 }}>
-                          <thead><tr>{["Serie/Nr", "Data Înc.", "Transportator", "Expeditor", "Destinatar", "Categorie", "Kg", "Operator", "🖨️", ""].map((h, i) => <th key={i} style={th({ background: "#6a1b9a" })}>{h}</th>)}</tr></thead>
+                          <thead><tr>{["", "Serie/Nr", "Data Înc.", "Transportator", "Expeditor", "Destinatar", "Categorie", "Kg", "Operator", "🖨️", ""].map((h, i) => <th key={i} style={th({ background: "#6a1b9a" })}>{h}</th>)}</tr></thead>
                           <tbody>
-                            {a3Filtrate.map((a3, idx) => (
-                              <tr key={a3.id} style={{ background: idx % 2 === 0 ? "#fff" : "#faf5ff" }}>
-                                <td style={td({ textAlign: "center", fontWeight: 700, color: "#6a1b9a" })}>{a3.serie} {a3.numar}</td>
-                                <td style={td({ textAlign: "center" })}>{a3.data_incarcare}</td>
-                                <td style={td({ fontWeight: 600 })}>{a3.transportator}</td>
-                                <td style={td()}>{a3.expeditor}</td>
-                                <td style={td()}>{a3.destinatar}</td>
-                                <td style={td({ fontSize: 11 })}>{a3.categorie}</td>
-                                <td style={td({ textAlign: "right", fontWeight: 700 })}>{fmt(a3.kilograme)}</td>
-                                <td style={td({ textAlign: "center", fontSize: 10 })}>{a3.operator || "—"}</td>
-                                <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => printA3(a3)} style={{ background: "#f3e5f5", border: "1px solid #ce93d8", borderRadius: 4, cursor: "pointer", color: "#6a1b9a", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>🖨️</button></td>
-                                <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => delA3(a3)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
-                              </tr>
-                            ))}
-                            {a3Filtrate.length === 0 && <tr><td colSpan={10} style={{ padding: 20, textAlign: "center", color: "#999", fontSize: 12 }}>Nicio Anexă 3 {a3Luna || a3Filter ? "pentru filtrele alese" : "încă"}.</td></tr>}
+                            {a3Filtrate.map((a3, idx) => {
+                              const oi = anexa3List.indexOf(a3);
+                              const isExp = expandedA3 === a3.id;
+                              const rowBg = idx % 2 === 0 ? "#fff" : "#faf5ff";
+                              return (
+                                <Fragment key={a3.id}>
+                                  <tr style={{ background: rowBg }}>
+                                    <td style={td({ textAlign: "center", padding: 2 })}>
+                                      <button onClick={() => setExpandedA3(isExp ? null : a3.id)} title={isExp ? "Ascunde editare" : "Editează"} style={{ background: isExp ? "#6a1b9a" : "#f3e5f5", color: isExp ? "#fff" : "#6a1b9a", border: "1px solid #6a1b9a", borderRadius: 4, padding: "2px 6px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>{isExp ? "▼" : "▶"}</button>
+                                    </td>
+                                    <td style={{ ...td({ textAlign: "center", fontWeight: 700, color: "#6a1b9a" }), padding: 3 }}>
+                                      <div style={{ display: "flex", gap: 2, justifyContent: "center" }}>
+                                        <input style={{ ...inp({ textAlign: "center", fontWeight: 700, color: "#6a1b9a", width: 40 }) }} value={a3.serie || ""} onChange={(e) => updA3(oi, "serie", e.target.value)} />
+                                        <input style={{ ...inp({ textAlign: "center", fontWeight: 700, color: "#6a1b9a", width: 55 }) }} value={a3.numar || ""} onChange={(e) => updA3(oi, "numar", e.target.value)} />
+                                      </div>
+                                    </td>
+                                    <td style={td({ textAlign: "center", padding: 2 })}><DateInput value={a3.data_incarcare || ""} onChange={(v) => updA3(oi, "data_incarcare", v)} /></td>
+                                    <td style={{ ...td({ fontWeight: 600 }), padding: 2 }}><div style={ACB}><ACStrict value={a3.transportator || ""} options={firmeOpts} onChange={(v) => updA3Firma(a3, "transportator", v)} /></div></td>
+                                    <td style={{ ...td(), padding: 2 }}><div style={ACB}><ACStrict value={a3.expeditor || ""} options={firmeOpts} onChange={(v) => updA3Firma(a3, "expeditor", v)} /></div></td>
+                                    <td style={{ ...td(), padding: 2 }}><div style={ACB}><ACStrict value={a3.destinatar || ""} options={firmeOpts} onChange={(v) => updA3Firma(a3, "destinatar", v)} /></div></td>
+                                    <td style={{ ...td({ fontSize: 11 }), padding: 2 }}><div style={ACB}><ACStrict value={a3.categorie || ""} options={ANEXA3_CATEGORII} onChange={(v) => updA3(oi, "categorie", v)} /></div></td>
+                                    <td style={td({ textAlign: "right", fontWeight: 700, padding: 2 })}><input style={inp({ textAlign: "right", fontWeight: 700, width: 65 })} value={a3.kilograme ?? ""} onChange={(e) => updA3(oi, "kilograme", e.target.value === "" ? null : parseSuma(e.target.value))} /></td>
+                                    <td style={td({ textAlign: "center", fontSize: 10 })}>{a3.operator || "—"}</td>
+                                    <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => printA3(a3)} style={{ background: "#f3e5f5", border: "1px solid #ce93d8", borderRadius: 4, cursor: "pointer", color: "#6a1b9a", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>🖨️</button></td>
+                                    <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => delA3(a3)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
+                                  </tr>
+                                  {isExp && (
+                                    <tr>
+                                      <td colSpan={11} style={{ padding: 12, background: "#fafafa", borderTop: "2px solid #6a1b9a", borderBottom: "2px solid #6a1b9a" }}>
+                                        <div style={{ background: "#fff", border: "1px solid #ddd", borderRadius: 8, padding: 12, display: "flex", gap: 20, flexWrap: "wrap" }}>
+                                          <div style={{ minWidth: 160 }}>
+                                            <label style={FL}>Data Descărcare</label>
+                                            <DateInput value={a3.data_descarcare || ""} onChange={(v) => updA3(oi, "data_descarcare", v)} style={{ border: "1px solid #d5d5d5" }} />
+                                          </div>
+                                          <div style={{ minWidth: 180 }}>
+                                            <label style={FL}>Delegat (șofer)</label>
+                                            <input style={FI} value={a3.delegat_nume || ""} onChange={(e) => updA3(oi, "delegat_nume", e.target.value)} placeholder="Nume delegat" />
+                                          </div>
+                                          <div style={{ minWidth: 120 }}>
+                                            <label style={FL}>CI delegat</label>
+                                            <input style={FI} value={a3.delegat_ci || ""} onChange={(e) => updA3(oi, "delegat_ci", e.target.value)} placeholder="Serie+nr CI" />
+                                          </div>
+                                          <div style={{ minWidth: 120 }}>
+                                            <label style={FL}>Nr. auto</label>
+                                            <input style={FI} value={a3.delegat_auto || ""} onChange={(e) => updA3(oi, "delegat_auto", e.target.value)} placeholder="Nr. înmatriculare" />
+                                          </div>
+                                          <div style={{ minWidth: 140 }}>
+                                            <label style={FL}>Licență transport</label>
+                                            <input style={FI} value={a3.licenta || ""} onChange={(e) => updA3(oi, "licenta", e.target.value)} placeholder="Nr. licență" />
+                                          </div>
+                                          <div style={{ minWidth: 140 }}>
+                                            <label style={FL}>Licența expiră</label>
+                                            <DateInput value={a3.licenta_expira || ""} onChange={(v) => updA3(oi, "licenta_expira", v)} style={{ border: "1px solid #d5d5d5" }} />
+                                          </div>
+                                          <div style={{ minWidth: 180 }}>
+                                            <label style={FL}>Descriere destinație</label>
+                                            <select style={FI} value={a3.descriere_destinatie || ""} onChange={(e) => updA3(oi, "descriere_destinatie", e.target.value)}>
+                                              {DESTINATII.map((d) => <option key={d} value={d}>{d}</option>)}
+                                            </select>
+                                          </div>
+                                          <div style={{ flex: "1 1 200px", minWidth: 200 }}>
+                                            <label style={FL}>Observații</label>
+                                            <input style={FI} value={a3.obs || ""} onChange={(e) => updA3(oi, "obs", e.target.value)} placeholder="opțional" />
+                                          </div>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </Fragment>
+                              );
+                            })}
+                            {a3Filtrate.length === 0 && <tr><td colSpan={11} style={{ padding: 20, textAlign: "center", color: "#999", fontSize: 12 }}>Nicio Anexă 3 {a3Luna || a3Filter ? "pentru filtrele alese" : "încă"}.</td></tr>}
                           </tbody>
                         </table>
                       </div>
