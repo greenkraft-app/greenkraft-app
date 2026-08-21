@@ -2880,23 +2880,9 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
   const totDiv = avRows.filter((r) => r.tip === "dividend").reduce((s, r) => s + (parseSuma(r.suma) || 0), 0);
   const persList = [...new Set(avRows.map((r) => r.catre).filter(Boolean))];
 
-  // Bani aduși în casă computed — pentru fiecare adus, calculăm automat cât s-a cheltuit
-  // din Cheltuieli (categoria "Altele") și Achiziții (categoria "Diverse") până la următoarea aducere de bani
+  // Bani aduși în casă computed — plățile din acești bani se introduc manual (câmpul "decont")
   const baniAdusiRows = sortByDateAsc(avRows.filter((r) => r.tip === "bani_adus"));
-  const cheltuitDinCasa = (dataStart, dataEndExclusiv) => {
-    const dStart = parseDateRO(dataStart);
-    const dEnd = dataEndExclusiv ? parseDateRO(dataEndExclusiv) : null;
-    const inInterval = (dataStr) => {
-      const d = parseDateRO(dataStr);
-      if (!d || !dStart) return false;
-      if (d < dStart) return false;
-      if (dEnd && d >= dEnd) return false;
-      return true;
-    };
-    const totCh = chRows.filter((r) => r.cat === "Altele" && r.ach === "Da" && inInterval(r.data)).reduce((s, r) => s + (parseSuma(r.suma) || 0), 0);
-    const totCol = colRows.filter((r) => r.cat === "Diverse" && r.ach === "Da" && inInterval(r.data)).reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0);
-    return { totCh, totCol, total: totCh + totCol };
-  };
+  const platitManual = (r) => (r.decont || []).reduce((s, d) => s + (parseSuma(d.suma) || 0), 0);
 
   // Contracte computed
   const filtCT = sortByDateAsc(contracte.filter((r) => !ctSearch || r.companie?.toLowerCase().includes(ctSearch.toLowerCase()) || r.nr?.includes(ctSearch) || r.detalii?.toLowerCase().includes(ctSearch.toLowerCase())));
@@ -5356,51 +5342,110 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
             <div style={{ marginTop: 26 }}>
               <div style={{ fontWeight: 700, color: "#00838f", fontSize: 14, marginBottom: 10 }}>💵 Bani aduși în casă</div>
               <div style={{ overflowX: "auto" }}>
-                <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 960 }}>
-                  <colgroup><col style={{ width: 28 }} /><col style={{ width: 110 }} /><col style={{ width: 165 }} /><col style={{ width: 115 }} /><col style={{ width: 115 }} /><col style={{ width: 125 }} /><col style={{ width: 145 }} /><col style={{ width: 127 }} /><col style={{ width: 30 }} /></colgroup>
+                <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 1000 }}>
+                  <colgroup><col style={{ width: 28 }} /><col style={{ width: 28 }} /><col style={{ width: 100 }} /><col style={{ width: 155 }} /><col style={{ width: 105 }} /><col style={{ width: 105 }} /><col style={{ width: 115 }} /><col style={{ width: 120 }} /><col style={{ width: 122 }} /><col style={{ width: 30 }} /></colgroup>
                   <thead><tr style={{ background: "#00838f" }}>
+                    <th style={th({ background: "#00636b" })}></th>
                     <th style={th({ background: "#00636b" })}></th>
                     <th style={th({ textAlign: "center" })}>Data</th>
                     <th style={th({ textAlign: "center" })}>Adus de</th>
                     <th style={th({ textAlign: "center" })}>Sumă adusă</th>
                     <th style={th({ textAlign: "center" })} title="Câți bani mai erau în casă în ziua respectivă">Sold anterior</th>
                     <th style={th({ textAlign: "center" })}>Total disponibil</th>
-                    <th style={th({ textAlign: "center" })} title="Calculat automat: Cheltuieli (Altele) + Achiziții (Diverse) achitate (Da), de la această dată până la următoarea aducere de bani">Detalii (cheltuit)</th>
+                    <th style={th({ textAlign: "center" })} title="Introdus manual — vezi/adaugă plăți">Plătit (manual)</th>
                     <th style={th({ textAlign: "center" })}>Rămas în casă</th>
                     <th style={th({})}></th>
                   </tr></thead>
                   <tbody>
-                    {baniAdusiRows.length === 0 && <tr><td colSpan={9} style={{ textAlign: "center", padding: 20, color: "#aaa" }}>Nicio înregistrare.</td></tr>}
+                    {baniAdusiRows.length === 0 && <tr><td colSpan={10} style={{ textAlign: "center", padding: 20, color: "#aaa" }}>Nicio înregistrare.</td></tr>}
                     {baniAdusiRows.map((r, i) => {
                       const oi = avRows.indexOf(r);
                       const suma = parseSuma(r.suma) || 0;
                       const soldAnt = parseSuma(r.sold_anterior) || 0;
                       const totalDisp = suma + soldAnt;
-                      const nextData = baniAdusiRows[i + 1]?.data || null;
-                      const { totCh, totCol, total: cheltuit } = cheltuitDinCasa(r.data, nextData);
+                      const plati = r.decont || [];
+                      const cheltuit = platitManual(r);
                       const ramas = totalDisp - cheltuit;
+                      const isExpanded = expandedAv === r.id;
                       const rowBg = i % 2 === 0 ? "#fff" : "#e0f7fa";
                       return (
-                        <tr key={r.id || i} style={{ background: rowBg, height: 38 }}>
-                          <td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td>
-                          <td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updAV(oi, "data", v)} /></td>
-                          <td style={td({ background: rowBg, fontWeight: 600 })}><input style={inp({ textAlign: "center", fontWeight: 600 })} value={r.catre || ""} onChange={(e) => updAV(oi, "catre", e.target.value)} placeholder="Cine a adus" /></td>
-                          <td style={td({ background: "#e0f2f1", textAlign: "right", fontWeight: 700, color: "#00695c" })}><input style={inp({ textAlign: "right", fontWeight: 700, color: "#00695c" })} value={r.suma || ""} onChange={(e) => updAV(oi, "suma", e.target.value)} placeholder="0" /></td>
-                          <td style={td({ background: "#fff8e1", textAlign: "right" })}><input style={inp({ textAlign: "right" })} value={r.sold_anterior ?? ""} onChange={(e) => updAV(oi, "sold_anterior", e.target.value === "" ? null : e.target.value)} placeholder="0" /></td>
-                          <td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 700 })}>{fmt(totalDisp)}</td>
-                          <td style={td({ textAlign: "right", background: "#fce4d6", fontWeight: 600, color: "#bf360c" })} title={`Cheltuieli (Altele): ${fmt(totCh)} lei • Achiziții (Diverse): ${fmt(totCol)} lei`}>{fmt(cheltuit)}</td>
-                          <td style={td({ textAlign: "right", background: ramas < 0 ? "#ffebee" : "#e8f5e9", fontWeight: 700, color: ramas < 0 ? "#c62828" : G })}>{fmt(ramas)}</td>
-                          <td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delBaniAdusi(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 14 }}>✕</button></td>
-                        </tr>
+                        <Fragment key={r.id || i}>
+                          <tr style={{ background: rowBg, height: 38 }}>
+                            <td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td>
+                            <td style={td({ textAlign: "center", padding: 2 })}>
+                              <button onClick={() => setExpandedAv(isExpanded ? null : r.id)} title={isExpanded ? "Ascunde plăți" : "Vezi/Adaugă plăți"} style={{ background: isExpanded ? "#00838f" : "#e0f7fa", color: isExpanded ? "#fff" : "#00838f", border: "1px solid #00838f", borderRadius: 4, padding: "2px 7px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>{isExpanded ? "▼" : "▶"} {plati.length}</button>
+                            </td>
+                            <td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updAV(oi, "data", v)} /></td>
+                            <td style={td({ background: rowBg, fontWeight: 600 })}><input style={inp({ textAlign: "center", fontWeight: 600 })} value={r.catre || ""} onChange={(e) => updAV(oi, "catre", e.target.value)} placeholder="Cine a adus" /></td>
+                            <td style={td({ background: "#e0f2f1", textAlign: "right", fontWeight: 700, color: "#00695c" })}><input style={inp({ textAlign: "right", fontWeight: 700, color: "#00695c" })} value={r.suma || ""} onChange={(e) => updAV(oi, "suma", e.target.value)} placeholder="0" /></td>
+                            <td style={td({ background: "#fff8e1", textAlign: "right" })}><input style={inp({ textAlign: "right" })} value={r.sold_anterior ?? ""} onChange={(e) => updAV(oi, "sold_anterior", e.target.value === "" ? null : e.target.value)} placeholder="0" /></td>
+                            <td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 700 })}>{fmt(totalDisp)}</td>
+                            <td style={td({ textAlign: "right", background: "#fce4d6", fontWeight: 600, color: "#bf360c" })}>{fmt(cheltuit)}</td>
+                            <td style={td({ textAlign: "right", background: ramas < 0 ? "#ffebee" : "#e8f5e9", fontWeight: 700, color: ramas < 0 ? "#c62828" : G })}>{fmt(ramas)}</td>
+                            <td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delBaniAdusi(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 14 }}>✕</button></td>
+                          </tr>
+                          {isExpanded && (
+                            <tr>
+                              <td colSpan={10} style={{ padding: 12, background: "#fafafa", borderTop: "2px solid #00838f", borderBottom: "2px solid #00838f" }}>
+                                <div style={{ background: "#fff", border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
+                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                                    <div style={{ fontWeight: 700, color: "#00838f", fontSize: 13 }}>📋 Plăți din banii aduși de {r.catre || "—"} ({fmt(totalDisp)} lei disponibil)</div>
+                                    <button onClick={() => addDecontItem(r.id)} style={{ background: "#00838f", color: "#fff", border: "none", borderRadius: 5, padding: "5px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Adaugă Plată</button>
+                                  </div>
+                                  {plati.length === 0 ? (
+                                    <div style={{ textAlign: "center", padding: 14, color: "#aaa", fontSize: 12 }}>Nicio plată încă. Click pe "+ Adaugă Plată" mai sus.</div>
+                                  ) : (
+                                    <table style={{ borderCollapse: "collapse", width: "100%" }}>
+                                      <colgroup><col style={{ width: 28 }} /><col style={{ width: 120 }} /><col style={{ width: 110 }} /><col /><col style={{ width: 30 }} /></colgroup>
+                                      <thead><tr style={{ background: "#00636b" }}>
+                                        <th style={th({ background: "#00636b", textAlign: "center" })}>#</th>
+                                        <th style={th({ background: "#00838f", textAlign: "center" })}>Data</th>
+                                        <th style={th({ background: "#00838f", textAlign: "center" })}>Sumă (lei)</th>
+                                        <th style={th({ background: "#00838f", textAlign: "center" })}>Descriere</th>
+                                        <th style={th({ background: "#00636b" })}></th>
+                                      </tr></thead>
+                                      <tbody>
+                                        {plati.map((d, di) => (
+                                          <tr key={di} style={{ background: di % 2 === 0 ? "#fff" : "#f8fbf9" }}>
+                                            <td style={td({ textAlign: "center", color: "#888", fontSize: 10, background: "#f5f5f5" })}>{di + 1}</td>
+                                            <td style={td()}><DateInput value={d.data || ""} onChange={(v) => updDecontItem(r.id, di, "data", v)} /></td>
+                                            <td style={td({ textAlign: "right", background: "#fff8e1", fontWeight: 700, color: "#bf360c" })}>
+                                              <input style={inp({ textAlign: "right", fontWeight: 700, color: "#bf360c" })} value={d.suma || ""} onChange={(e) => updDecontItem(r.id, di, "suma", e.target.value)} placeholder="0" />
+                                            </td>
+                                            <td style={td()}><input style={inp({ textAlign: "center" })} value={d.det || ""} onChange={(e) => updDecontItem(r.id, di, "det", e.target.value)} placeholder="Descriere..." /></td>
+                                            <td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delDecontItem(r.id, di)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                      <tfoot>
+                                        <tr style={{ background: "#e0f7fa" }}>
+                                          <td colSpan={2} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12, color: "#00838f" }}>TOTAL PLĂTIT</td>
+                                          <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 700, color: "#00838f", fontSize: 12 }}>{fmt(cheltuit)} lei</td>
+                                          <td colSpan={2}></td>
+                                        </tr>
+                                        <tr style={{ background: ramas === 0 ? "#e8f5e9" : ramas < 0 ? "#ffebee" : "#fff8e1" }}>
+                                          <td colSpan={2} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12, color: ramas === 0 ? G : ramas < 0 ? "#c62828" : "#e65100" }}>RĂMAS ÎN CASĂ</td>
+                                          <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 800, color: ramas === 0 ? G : ramas < 0 ? "#c62828" : "#e65100", fontSize: 13 }}>{fmt(ramas)} lei</td>
+                                          <td colSpan={2}></td>
+                                        </tr>
+                                      </tfoot>
+                                    </table>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
                       );
                     })}
                   </tbody>
                   {baniAdusiRows.length > 0 && (
                     <tfoot><tr style={{ background: "#00838f", color: "#fff" }}>
-                      <td colSpan={3} style={{ padding: "7px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td>
+                      <td colSpan={4} style={{ padding: "7px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td>
                       <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700, fontSize: 13 }}>{fmt(baniAdusiRows.reduce((s, r) => s + (parseSuma(r.suma) || 0), 0))}</td>
-                      <td colSpan={3}></td>
-                      <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700, fontSize: 13 }}>{fmt(baniAdusiRows.reduce((s, r, i) => { const totalDisp = (parseSuma(r.suma) || 0) + (parseSuma(r.sold_anterior) || 0); const cheltuit = cheltuitDinCasa(r.data, baniAdusiRows[i + 1]?.data || null).total; return s + (totalDisp - cheltuit); }, 0))}</td>
+                      <td colSpan={2}></td>
+                      <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700, fontSize: 13 }}>{fmt(baniAdusiRows.reduce((s, r) => s + platitManual(r), 0))}</td>
+                      <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700, fontSize: 13 }}>{fmt(baniAdusiRows.reduce((s, r) => { const totalDisp = (parseSuma(r.suma) || 0) + (parseSuma(r.sold_anterior) || 0); return s + (totalDisp - platitManual(r)); }, 0))}</td>
                       <td></td>
                     </tr></tfoot>
                   )}
