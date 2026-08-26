@@ -1118,6 +1118,7 @@ export default function App() {
   const [ticSubTab, setTicSubTab] = useState("nou"); // nou | deschise | gol | registru
   const [ticFilter, setTicFilter] = useState("");
   const [ticLuna, setTicLuna] = useState("");
+  const [ticAzi, setTicAzi] = useState(false);
   const [ticTaraInput, setTicTaraInput] = useState({}); // { [id]: valoare }
   const [ticNou, setTicNou] = useState({ tip: "Intrare", prima: "plin", partener: "", partener_cui: "", client: "GREEN KRAFT SRL", transportator: "", transportator_cui: "", nr_masina: "", sofer: "", material: "", greutate: "", factura: "", aviz: "", obs: "" });
   const [ticEdit, setTicEdit] = useState(null); // { id, nr_tichet, factura, aviz, brut_la, tara_la, ora_intrare, ora_iesire }
@@ -4949,7 +4950,8 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
           const inchise = sortByDateAsc(ticheteList.filter((t) => t.status === "inchis"));
           const lunaOpts = [...new Set(ticheteList.map((t) => monthOf(t.data)).filter(Boolean))].sort();
           const filtrate = sortByDateAsc([...inchise, ...goale]).filter((t) => {
-            if (ticLuna && monthOf(t.data) !== ticLuna) return false;
+            if (ticAzi) { if (t.data !== today()) return false; }
+            else if (ticLuna && monthOf(t.data) !== ticLuna) return false;
             if (ticFilter) {
               const q = ticFilter.toLowerCase();
               if (!(t.partener?.toLowerCase().includes(q) || t.nr_masina?.toLowerCase().includes(q) || t.material?.toLowerCase().includes(q) || String(t.nr_tichet).includes(q))) return false;
@@ -5129,12 +5131,13 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
               {ticSubTab === "registru" && (
                 <div>
                   <div style={{ display: "flex", gap: 10, marginBottom: 10, alignItems: "center", flexWrap: "wrap" }}>
-                    <select style={{ padding: "6px 10px", border: "1px solid #ccc", borderRadius: 5, fontSize: 12 }} value={ticLuna} onChange={(e) => setTicLuna(e.target.value)}>
+                    <select style={{ padding: "6px 10px", border: "1px solid #ccc", borderRadius: 5, fontSize: 12 }} value={ticLuna} onChange={(e) => { setTicLuna(e.target.value); setTicAzi(false); }}>
                       <option value="">Toate lunile</option>
                       {lunaOpts.map((l) => <option key={l} value={l}>{l}</option>)}
                     </select>
+                    <button onClick={() => { setTicAzi((v) => !v); setTicLuna(""); }} style={{ padding: "6px 12px", border: `1px solid ${ticAzi ? G : "#ccc"}`, borderRadius: 5, background: ticAzi ? G : "#fff", color: ticAzi ? "#fff" : "#555", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>📅 Azi</button>
                     <input style={{ padding: "6px 10px", border: "1px solid #ccc", borderRadius: 5, fontSize: 12, width: 220 }} value={ticFilter} onChange={(e) => setTicFilter(e.target.value)} placeholder="🔍 Caută furnizor / mașină / material..." />
-                    {(ticLuna || ticFilter) && <button onClick={() => { setTicLuna(""); setTicFilter(""); }} style={{ padding: "5px 10px", border: "1px solid #ccc", borderRadius: 5, background: "#fff", cursor: "pointer", fontSize: 11 }}>↺ Reset</button>}
+                    {(ticLuna || ticAzi || ticFilter) && <button onClick={() => { setTicLuna(""); setTicAzi(false); setTicFilter(""); }} style={{ padding: "5px 10px", border: "1px solid #ccc", borderRadius: 5, background: "#fff", cursor: "pointer", fontSize: 11 }}>↺ Reset</button>}
                     <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
                       <SC label="Tichete" value={String(filtrate.length)} c={G} bg="#e8f5e9" />
                       <SC label="Total NET" value={fmt(totNet) + " kg"} c="#e65100" bg="#fff3e0" />
@@ -5164,7 +5167,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                             <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => delTichet(t)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
                           </tr>
                         ))}
-                        {filtrate.length === 0 && <tr><td colSpan={16} style={{ padding: 20, textAlign: "center", color: "#999", fontSize: 12 }}>Niciun tichet {ticLuna || ticFilter ? "pentru filtrele alese" : "încă"}.</td></tr>}
+                        {filtrate.length === 0 && <tr><td colSpan={16} style={{ padding: 20, textAlign: "center", color: "#999", fontSize: 12 }}>Niciun tichet {ticLuna || ticAzi || ticFilter ? "pentru filtrele alese" : "încă"}.</td></tr>}
                       </tbody>
                     </table>
                   </div>
