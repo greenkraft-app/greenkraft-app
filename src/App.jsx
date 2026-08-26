@@ -388,14 +388,17 @@ function ACStrict({ value, onChange, options, placeholder = "", style, strict = 
 // ── Filtru cu selecție multiplă (checkbox-uri într-un dropdown) ─
 function MultiSelectFilter({ value, onChange, options, placeholder }) {
   const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
   const ref = useRef(null);
   useEffect(() => {
     const onDocClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
+  useEffect(() => { if (!open) setQ(""); }, [open]);
   const toggle = (opt) => onChange(value.includes(opt) ? value.filter((v) => v !== opt) : [...value, opt]);
   const label = value.length === 0 ? placeholder : value.length === 1 ? value[0] : `${value.length} produse selectate`;
+  const filteredOptions = q ? options.filter((o) => o.toLowerCase().includes(q.toLowerCase())) : options;
   return (
     <div ref={ref} style={{ position: "relative" }}>
       <button
@@ -407,19 +410,26 @@ function MultiSelectFilter({ value, onChange, options, placeholder }) {
         <span style={{ fontSize: 9, color: "#777" }}>▾</span>
       </button>
       {open && (
-        <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 2, background: "#fff", border: "1px solid #ccc", borderRadius: 6, boxShadow: "0 4px 14px rgba(0,0,0,.15)", zIndex: 50, maxHeight: 260, overflowY: "auto", minWidth: 220, padding: 6 }}>
+        <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 2, background: "#fff", border: "1px solid #ccc", borderRadius: 6, boxShadow: "0 4px 14px rgba(0,0,0,.15)", zIndex: 50, maxHeight: 300, overflowY: "auto", minWidth: 220, padding: 6 }}>
+          <input
+            autoFocus
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="🔍 Caută..."
+            style={{ width: "100%", boxSizing: "border-box", border: "1px solid #ccc", borderRadius: 4, padding: "4px 6px", fontSize: 12, marginBottom: 4 }}
+          />
           {value.length > 0 && (
             <div onClick={() => onChange([])} style={{ padding: "4px 6px", fontSize: 11, color: "#e53935", cursor: "pointer", fontWeight: 600, borderBottom: "1px solid #eee", marginBottom: 4 }}>
               ✕ Deselectează tot
             </div>
           )}
-          {options.map((o) => (
+          {filteredOptions.map((o) => (
             <label key={o} style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 6px", fontSize: 12, cursor: "pointer", borderRadius: 4 }}>
               <input type="checkbox" checked={value.includes(o)} onChange={() => toggle(o)} style={{ cursor: "pointer" }} />
               {o}
             </label>
           ))}
-          {options.length === 0 && <div style={{ fontSize: 11, color: "#999", padding: "3px 6px" }}>—</div>}
+          {filteredOptions.length === 0 && <div style={{ fontSize: 11, color: "#999", padding: "3px 6px" }}>—</div>}
         </div>
       )}
     </div>
@@ -1014,6 +1024,8 @@ export default function App() {
   const [livMonth, setLivMonth] = useState(() => { const d = new Date(); return `${String(d.getMonth()+1).padStart(2,"0")}.${d.getFullYear()}`; });
   const [livDataDe, setLivDataDe] = useState("");
   const [livDataPana, setLivDataPana] = useState("");
+  const [livFact, setLivFact] = useState("");
+  const [livInc, setLivInc] = useState("");
   // ── Rapoarte state ────────────────────────────────────────
   const [rapDateStart, setRapDateStart] = useState("");
   const [rapDateEnd, setRapDateEnd] = useState("");
@@ -4570,6 +4582,8 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
             if (!inDateRange(r.data, livDataDe, livDataPana)) return false;
             if (livClient && r.client !== livClient) return false;
             if (livProdus.length && !livProdus.includes(r.produs)) return false;
+            if (livFact && (r.fact || "") !== livFact) return false;
+            if (livInc && (r.inc || "") !== livInc) return false;
             if (livSearch) { const q = livSearch.toLowerCase(); if (!(r.client?.toLowerCase().includes(q) || r.produs?.toLowerCase().includes(q) || r.det?.toLowerCase().includes(q) || String(r.nr).includes(q))) return false; }
             return true;
           }));
@@ -4599,7 +4613,18 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                 {clientFilterOptions.map(c => <option key={c}>{c}</option>)}
               </select>
               <MultiSelectFilter value={livProdus} onChange={setLivProdus} options={livProdusFilterOptions} placeholder="📦 Toate produsele" />
-              {(livSearch || livMonth || livClient || livProdus.length || livDataDe || livDataPana) && <button onClick={() => { setLivSearch(""); setLivMonth(""); setLivClient(""); setLivProdus([]); setLivDataDe(""); setLivDataPana(""); }} style={{ background: "#e53935", color: "#fff", border: "none", borderRadius: 5, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕ Reset</button>}
+              <select value={livFact} onChange={(e) => setLivFact(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}>
+                <option value="">🧾 Facturat: Toate</option>
+                <option value="DA">✅ Facturat</option>
+                <option value="NU">⏳ Nefacturat</option>
+              </select>
+              <select value={livInc} onChange={(e) => setLivInc(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}>
+                <option value="">💰 Încasat: Toate</option>
+                <option value="DA">✅ Încasat</option>
+                <option value="PARTIAL">🟡 Parțial</option>
+                <option value="NU">⏳ Neîncasat</option>
+              </select>
+              {(livSearch || livMonth || livClient || livProdus.length || livDataDe || livDataPana || livFact || livInc) && <button onClick={() => { setLivSearch(""); setLivMonth(""); setLivClient(""); setLivProdus([]); setLivDataDe(""); setLivDataPana(""); setLivFact(""); setLivInc(""); }} style={{ background: "#e53935", color: "#fff", border: "none", borderRadius: 5, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕ Reset</button>}
             </div>
             <div style={{ overflowX: "auto" }}>
               <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 1310 }}>
