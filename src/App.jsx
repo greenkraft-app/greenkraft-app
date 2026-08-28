@@ -2073,6 +2073,7 @@ export default function App() {
   const RAP_HEADERS = ["Serie borderou/PV", "NrBorderou/PV", "Data", "Furnizor", "Adresa", "CNP/CUI", "Denumire", "CodSAGA", "Cantitate", "PU", "CodFSaga", "Trasabilitate", "Nr NIR", "Denumire Deseu", "Impozit 10%", "Taxa Mediu 2%", "Valoare"];
   const RAP_HEADERS_VANZARI = ["Nr. doc.", "Data", "Client", "Denumire", "CodSAGA", "Cantitate", "PU", "Valoare", "Facturat", "Încasat"];
   const RAP_HEADERS_TICHETE = ["Serie", "Nr. Tichet", "Data", "Tip", "Status", "Ora Intrare", "Ora Ieșire", "Partener", "CUI Partener", "Transportator", "CUI Transportator", "Nr. Mașină", "Șofer", "Material", "Brut (kg)", "Tara (kg)", "Net (kg)", "Factură", "Aviz", "Operator", "Observații"];
+  const RAP_HEADERS_STOC = ["Deșeu", "Cod HG", "Cod SAGA", "Cant. Intrată (kg)", "Cant. Ieșită (kg)", "Stoc Rămas (kg)", "Preț Mediu (lei/kg)", "Valoare Stoc (lei)"];
 
   const buildPFRows = () => registru.filter(r => inRange(r.data)).map(r => {
     const cant = parseSuma(r.cantitate) || 0;
@@ -2131,6 +2132,19 @@ export default function App() {
       t.factura || "", t.aviz || "", t.operator || "", t.obs || "",
     ]);
 
+  const buildStocRows = () => {
+    const miscariFiltrate = getMiscari().filter(m => inRange(m.data));
+    return calcStoc(miscariFiltrate)
+      .slice()
+      .sort((a, b) => (a.produs || "").localeCompare(b.produs || ""))
+      .map(r => [
+        r.produs || "", r.cod || "", r.cod_art || "",
+        r.intrari || 0, r.iesiri || 0, r.cant || 0,
+        r.pm ? Math.round(r.pm * 100) / 100 : 0,
+        Math.round(Math.max(0, r.cant || 0) * (r.pm || 0)),
+      ]);
+  };
+
   const loadXLSX = async () => {
     if (window.XLSX) return window.XLSX;
     await new Promise((res) => {
@@ -2182,6 +2196,13 @@ export default function App() {
         ws["!cols"] = RAP_HEADERS_TICHETE.map(h => ({ wch: Math.max(12, h.length + 2) }));
         XLSX.utils.book_append_sheet(wb, ws, "Tichete Cântar");
         if (type === "tic") fileName = `raport_TicheteCantar_${today().replace(/\./g, "-")}.xlsx`;
+      }
+      if (type === "stoc" || type === "all") {
+        const rows = buildStocRows();
+        const ws = XLSX.utils.aoa_to_sheet([RAP_HEADERS_STOC, ...rows]);
+        ws["!cols"] = RAP_HEADERS_STOC.map(h => ({ wch: Math.max(12, h.length + 2) }));
+        XLSX.utils.book_append_sheet(wb, ws, "Stoc pe Deșeu");
+        if (type === "stoc") fileName = `raport_Stoc_${today().replace(/\./g, "-")}.xlsx`;
       }
       if (type === "all") fileName = `raport_complet_${today().replace(/\./g, "-")}.xlsx`;
       XLSX.writeFile(wb, fileName);
@@ -5878,10 +5899,19 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                 </button>
               </div>
 
+              <div style={{ background: "#fff", border: "2px solid #ef6c00", borderRadius: 10, padding: 16, textAlign: "center" }}>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>📦</div>
+                <div style={{ fontWeight: 700, color: "#ef6c00", fontSize: 14, marginBottom: 4 }}>Stoc pe Deșeu</div>
+                <div style={{ fontSize: 11, color: "#666", marginBottom: 12 }}>Cumulativ: intrat / ieșit / rămas<br/>{calcStoc(getMiscari().filter(m => inRange(m.data))).length} deșeuri distincte</div>
+                <button onClick={() => exportExcel("stoc")} disabled={rapLoading} style={{ width: "100%", padding: "10px", background: rapLoading ? "#ccc" : "#ef6c00", color: "#fff", border: "none", borderRadius: 6, cursor: rapLoading ? "wait" : "pointer", fontSize: 13, fontWeight: 700 }}>
+                  {rapLoading ? "⏳ Generez..." : "📥 Descarcă Excel Stoc"}
+                </button>
+              </div>
+
               <div style={{ background: "#fff", border: "2px solid #455a64", borderRadius: 10, padding: 16, textAlign: "center" }}>
                 <div style={{ fontSize: 32, marginBottom: 8 }}>📊</div>
                 <div style={{ fontWeight: 700, color: "#455a64", fontSize: 14, marginBottom: 4 }}>Raport Complet</div>
-                <div style={{ fontSize: 11, color: "#666", marginBottom: 12 }}>PF + PJ + Achiziții + Vânzări + Tichete<br/>{registru.length + pvList.length + colRows.filter(r => r.nr_doc).length + livRows.filter(r => r.nr).length + ticheteList.length} înregistrări</div>
+                <div style={{ fontSize: 11, color: "#666", marginBottom: 12 }}>PF + PJ + Achiziții + Vânzări + Tichete + Stoc<br/>{registru.length + pvList.length + colRows.filter(r => r.nr_doc).length + livRows.filter(r => r.nr).length + ticheteList.length} înregistrări</div>
                 <button onClick={() => exportExcel("all")} disabled={rapLoading || (registru.length === 0 && pvList.length === 0 && colRows.filter(r => r.nr_doc).length === 0 && livRows.filter(r => r.nr).length === 0 && ticheteList.length === 0)} style={{ width: "100%", padding: "10px", background: rapLoading ? "#ccc" : "#455a64", color: "#fff", border: "none", borderRadius: 6, cursor: rapLoading ? "wait" : "pointer", fontSize: 13, fontWeight: 700 }}>
                   {rapLoading ? "⏳ Generez..." : "📥 Descarcă Excel Complet"}
                 </button>
