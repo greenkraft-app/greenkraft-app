@@ -83,23 +83,35 @@ async function fillSearchCombobox(root, labelStart, searchText) {
   await sleep(350);
 
   const cautare = coreDenumire(searchText) || searchText;
-  const input = document.activeElement && document.activeElement.tagName === "INPUT" ? document.activeElement : document.querySelector('input[placeholder*="aut"], input[placeholder*="Cauta"], input:focus');
-  if (input) {
-    setNativeValue(input, cautare);
-    await sleep(600);
+  // Campul pe care l-am apasat (trigger) e chiar inputul de cautare in acest
+  // formular — scriem direct in el. Nu cautam un input separat prin pagina:
+  // un selector generic gen input[placeholder*="aut"] prinde din greseala si
+  // bara de cautare din capul paginii (placeholder "Caută ..." contine "aut").
+  if (trigger.tagName === "INPUT") {
+    setNativeValue(trigger, cautare);
+  } else {
+    const input = document.activeElement && document.activeElement.tagName === "INPUT" ? document.activeElement : root.querySelector("input:focus");
+    if (input) setNativeValue(input, cautare);
   }
-  // Site-ul (shadcn) randeaza optiunile ca <button> simple in dropdown, fara role="option" —
-  // le prindem dupa clasele lor tipice, cu fallback pe role="option" daca structura se schimba.
-  const dropdownButtons = Array.from(document.querySelectorAll("button")).filter((b) => {
-    const cls = b.className || "";
-    return typeof cls === "string" && cls.includes("hover:bg-accent") && cls.includes("justify-between");
-  });
-  const roleOptions = Array.from(document.querySelectorAll('[role="option"]'));
-  const options = [...dropdownButtons, ...roleOptions].filter((o) => o.getBoundingClientRect().width > 0);
   const target = normalizeDenumire(searchText);
   const targetCore = coreDenumire(searchText);
-  const match = options.find((o) => normalizeDenumire(o.textContent).startsWith(target))
-    || options.find((o) => normalizeDenumire(o.textContent).startsWith(targetCore));
+  // Rezultatele cautarii pot veni async (cerere catre server) — interogam
+  // repetat pana la 3 secunde in loc sa asteptam o singura data un timp fix,
+  // ca sa functionam corect si cand reteaua/serverul raspund mai greu.
+  let match = null;
+  for (let waited = 0; waited < 3000 && !match; waited += 200) {
+    await sleep(200);
+    // Site-ul (shadcn) randeaza optiunile ca <button> simple in dropdown, fara role="option" —
+    // le prindem dupa clasele lor tipice, cu fallback pe role="option" daca structura se schimba.
+    const dropdownButtons = Array.from(document.querySelectorAll("button")).filter((b) => {
+      const cls = b.className || "";
+      return typeof cls === "string" && cls.includes("hover:bg-accent") && cls.includes("justify-between");
+    });
+    const roleOptions = Array.from(document.querySelectorAll('[role="option"]'));
+    const options = [...dropdownButtons, ...roleOptions].filter((o) => o.getBoundingClientRect().width > 0);
+    match = options.find((o) => normalizeDenumire(o.textContent).startsWith(target))
+      || options.find((o) => normalizeDenumire(o.textContent).startsWith(targetCore));
+  }
   if (match) {
     realClick(match);
     await sleep(150);
@@ -115,6 +127,31 @@ function fillTextInput(root, labelStart, value) {
   if (!field || field.tagName !== "INPUT") return "camp-negasit";
   setNativeValue(field, value);
   return "ok";
+}
+
+// Unele campuri sunt input text simplu cand nu s-a ales inca un Transportator,
+// dar devin dropdown ("Selecteaza...") cu doar valorile deja inregistrate la
+// acel transportator, imediat ce Transportatorul e completat (ex: Sofer).
+// Verificam tipul efectiv al campului si alegem metoda potrivita.
+async function fillTextOrCombobox(root, labelStart, value) {
+  if (!value) return "skip";
+  const field = fieldByLabel(root, labelStart);
+  if (!field) return "camp-negasit";
+  if (field.tagName === "INPUT") return fillTextInput(root, labelStart, value);
+  if (field.tagName === "BUTTON") return await fillSearchCombobox(root, labelStart, value);
+  return "camp-negasit";
+}
+
+// Campul "Nr. Auto" e input text simplu cand nu s-a ales inca un Transportator
+// cunoscut, dar devine dropdown "Masina (Nr. Auto)" cu doar vehiculele deja
+// inregistrate la acel transportator, imediat ce Transportatorul e completat —
+// eticheta lui se schimba, deci nu-l gaseste fillTextOrCombobox (care cauta
+// aceeasi eticheta in ambele variante).
+async function fillNrAuto(root, value) {
+  if (!value) return "skip";
+  const comboField = fieldByLabel(root, "Mașină");
+  if (comboField && comboField.tagName === "BUTTON") return await fillSearchCombobox(root, "Mașină", value);
+  return fillTextInput(root, "Nr. Auto", value);
 }
 
 function fillDateInput(root, labelStart, dmyValue) {
@@ -202,12 +239,17 @@ async function runTransfer(payload) {
   rezultate.push(["Cod HG856", await fillSearchCombobox(dialog, "Cod HG856", payload.cod_hg856)]);
   rezultate.push(["Greutate Totală", fillTextInput(dialog, "Greutate Totală", payload.greutate_kg)]);
   rezultate.push(["Data Colectare", fillDateInput(dialog, "Data Colectare", payload.data_colectare)]);
+  // Ordinea conteaza: alegerea Transportatorului transforma campul Nr. Auto
+  // intr-un dropdown cu doar vehiculele lui inregistrate, iar alegerea acolo
+  // a unui vehicul transforma la randul ei campul Sofer intr-un dropdown cu
+  // soferii acelui vehicul. Bifa "Fara licenta" o verificam ultima, dupa toate
+  // aceste selectii in cascada, pentru ca alegerea Soferului o poate reseta.
   rezultate.push(["Transportator", await fillSearchCombobox(dialog, "Transportator", payload.transportator)]);
+  rezultate.push(["Nr. Auto", await fillNrAuto(dialog, payload.nr_auto)]);
+  rezultate.push(["Șofer", await fillTextOrCombobox(dialog, "Șofer", payload.sofer)]);
   if (payload.fara_licenta) {
     rezultate.push(["Fără licență transport", checkCheckboxByText(dialog, "fara licenta", "no-license-transport")]);
   }
-  rezultate.push(["Nr. Auto", fillTextInput(dialog, "Nr. Auto", payload.nr_auto)]);
-  rezultate.push(["Șofer", fillTextInput(dialog, "Șofer", payload.sofer)]);
   rezultate.push(["Observații", fillTextarea(dialog, "Observații", payload.observatii)]);
 
   const neaflate = rezultate.filter(([, r]) => r === "nu-s-a-gasit" || r === "camp-negasit");
