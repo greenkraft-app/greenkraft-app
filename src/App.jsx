@@ -2072,6 +2072,7 @@ export default function App() {
 
   const RAP_HEADERS = ["Serie borderou/PV", "NrBorderou/PV", "Data", "Furnizor", "Adresa", "CNP/CUI", "Denumire", "CodSAGA", "Cantitate", "PU", "CodFSaga", "Trasabilitate", "Nr NIR", "Denumire Deseu", "Impozit 10%", "Taxa Mediu 2%", "Valoare"];
   const RAP_HEADERS_VANZARI = ["Nr. doc.", "Data", "Client", "Denumire", "CodSAGA", "Cantitate", "PU", "Valoare", "Facturat", "Încasat"];
+  const RAP_HEADERS_TICHETE = ["Serie", "Nr. Tichet", "Data", "Tip", "Status", "Ora Intrare", "Ora Ieșire", "Partener", "CUI Partener", "Transportator", "CUI Transportator", "Nr. Mașină", "Șofer", "Material", "Brut (kg)", "Tara (kg)", "Net (kg)", "Factură", "Aviz", "Operator", "Observații"];
 
   const buildPFRows = () => registru.filter(r => inRange(r.data)).map(r => {
     const cant = parseSuma(r.cantitate) || 0;
@@ -2117,6 +2118,19 @@ export default function App() {
     return [r.nr || "", r.data || "", r.client || "", denSaga, codSaga, cant, pu, v, r.fact || "", r.inc || ""];
   });
 
+  const buildTicheteRows = () => ticheteList
+    .filter(t => inRange(t.data))
+    .slice()
+    .sort((a, b) => (parseInt(a.nr_tichet) || 0) - (parseInt(b.nr_tichet) || 0))
+    .map(t => [
+      t.serie || "", t.nr_tichet || "", t.data || "", t.tip || "", t.status || "",
+      t.ora_intrare || "", t.ora_iesire || "",
+      t.partener || "", t.partener_cui || "", t.transportator || "", t.transportator_cui || "",
+      t.nr_masina || "", t.sofer || "", t.material || "",
+      parseSuma(t.brut) || "", parseSuma(t.tara) || "", parseSuma(t.net) || "",
+      t.factura || "", t.aviz || "", t.operator || "", t.obs || "",
+    ]);
+
   const loadXLSX = async () => {
     if (window.XLSX) return window.XLSX;
     await new Promise((res) => {
@@ -2161,6 +2175,13 @@ export default function App() {
         ws["!cols"] = RAP_HEADERS_VANZARI.map(h => ({ wch: Math.max(12, h.length + 2) }));
         XLSX.utils.book_append_sheet(wb, ws, "Vânzări");
         if (type === "liv") fileName = `raport_Vanzari_${today().replace(/\./g, "-")}.xlsx`;
+      }
+      if (type === "tic" || type === "all") {
+        const rows = buildTicheteRows();
+        const ws = XLSX.utils.aoa_to_sheet([RAP_HEADERS_TICHETE, ...rows]);
+        ws["!cols"] = RAP_HEADERS_TICHETE.map(h => ({ wch: Math.max(12, h.length + 2) }));
+        XLSX.utils.book_append_sheet(wb, ws, "Tichete Cântar");
+        if (type === "tic") fileName = `raport_TicheteCantar_${today().replace(/\./g, "-")}.xlsx`;
       }
       if (type === "all") fileName = `raport_complet_${today().replace(/\./g, "-")}.xlsx`;
       XLSX.writeFile(wb, fileName);
@@ -5848,11 +5869,20 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                 </button>
               </div>
 
+              <div style={{ background: "#fff", border: "2px solid #00838f", borderRadius: 10, padding: 16, textAlign: "center" }}>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>⚖️</div>
+                <div style={{ fontWeight: 700, color: "#00838f", fontSize: 14, marginBottom: 4 }}>Tichete Cântar</div>
+                <div style={{ fontSize: 11, color: "#666", marginBottom: 12 }}>Toate tichetele (intrare + ieșire)<br/>{ticheteList.length} tichete disponibile</div>
+                <button onClick={() => exportExcel("tic")} disabled={rapLoading || ticheteList.length === 0} style={{ width: "100%", padding: "10px", background: rapLoading ? "#ccc" : "#00838f", color: "#fff", border: "none", borderRadius: 6, cursor: rapLoading ? "wait" : "pointer", fontSize: 13, fontWeight: 700 }}>
+                  {rapLoading ? "⏳ Generez..." : "📥 Descarcă Excel Tichete"}
+                </button>
+              </div>
+
               <div style={{ background: "#fff", border: "2px solid #455a64", borderRadius: 10, padding: 16, textAlign: "center" }}>
                 <div style={{ fontSize: 32, marginBottom: 8 }}>📊</div>
                 <div style={{ fontWeight: 700, color: "#455a64", fontSize: 14, marginBottom: 4 }}>Raport Complet</div>
-                <div style={{ fontSize: 11, color: "#666", marginBottom: 12 }}>PF + PJ + Achiziții + Vânzări eligibile<br/>{registru.length + pvList.length + colRows.filter(r => r.nr_doc).length + livRows.filter(r => r.nr).length} înregistrări</div>
-                <button onClick={() => exportExcel("all")} disabled={rapLoading || (registru.length === 0 && pvList.length === 0 && colRows.filter(r => r.nr_doc).length === 0 && livRows.filter(r => r.nr).length === 0)} style={{ width: "100%", padding: "10px", background: rapLoading ? "#ccc" : "#455a64", color: "#fff", border: "none", borderRadius: 6, cursor: rapLoading ? "wait" : "pointer", fontSize: 13, fontWeight: 700 }}>
+                <div style={{ fontSize: 11, color: "#666", marginBottom: 12 }}>PF + PJ + Achiziții + Vânzări + Tichete<br/>{registru.length + pvList.length + colRows.filter(r => r.nr_doc).length + livRows.filter(r => r.nr).length + ticheteList.length} înregistrări</div>
+                <button onClick={() => exportExcel("all")} disabled={rapLoading || (registru.length === 0 && pvList.length === 0 && colRows.filter(r => r.nr_doc).length === 0 && livRows.filter(r => r.nr).length === 0 && ticheteList.length === 0)} style={{ width: "100%", padding: "10px", background: rapLoading ? "#ccc" : "#455a64", color: "#fff", border: "none", borderRadius: 6, cursor: rapLoading ? "wait" : "pointer", fontSize: 13, fontWeight: 700 }}>
                   {rapLoading ? "⏳ Generez..." : "📥 Descarcă Excel Complet"}
                 </button>
               </div>
