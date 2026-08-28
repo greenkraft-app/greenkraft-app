@@ -688,7 +688,8 @@ export default function App() {
     const key = `${table}-${id}`;
     clearTimeout(debounce.current[key]);
     debounce.current[key] = setTimeout(async () => {
-      await sb.from(table).update(changes).eq("id", id);
+      const { error } = await sb.from(table).update(changes).eq("id", id);
+      if (!error) logAction("update", table, id, changes);
     }, 700);
   };
 
@@ -922,21 +923,23 @@ export default function App() {
     try {
       const { error } = await sb.from("taskuri").insert({ text: text.trim(), scadenta, prioritate, done: false, creat_de: currentUser });
       if (error) alert("Eroare: " + error.message);
+      else logAction("add", "taskuri", "", { text: text.trim() });
     } catch (e) { alert("Eroare: " + e.message); }
   };
   const toggleTask = async (id, done) => {
-    try { await sb.from("taskuri").update({ done: !done }).eq("id", id); } catch (e) {}
+    try { await sb.from("taskuri").update({ done: !done }).eq("id", id); logAction("update", "taskuri", id, { done: !done }); } catch (e) {}
   };
   const updTask = (id, field, value) => {
     setTaskuri((p) => p.map((t) => (t.id === id ? { ...t, [field]: value } : t)));
     const key = `task-${id}`;
     clearTimeout(debounce.current[key]);
     debounce.current[key] = setTimeout(async () => {
-      try { await sb.from("taskuri").update({ [field]: value }).eq("id", id); } catch (e) {}
+      try { await sb.from("taskuri").update({ [field]: value }).eq("id", id); logAction("update", "taskuri", id, { [field]: value }); } catch (e) {}
     }, 600);
   };
   const delTask = async (id) => {
-    try { await sb.from("taskuri").delete().eq("id", id); } catch (e) {}
+    const t = taskuri.find((x) => x.id === id);
+    try { await sb.from("taskuri").delete().eq("id", id); logAction("delete", "taskuri", id, t ? { text: t.text } : null); } catch (e) {}
   };
 
   const generateBackup = async () => {
@@ -1182,9 +1185,10 @@ export default function App() {
   };
   const mkDel = (setRows, table, label = "această înregistrare") => async (id) => {
     if (!confirmDel(label)) return;
-    setRows((p) => p.filter((r) => r.id !== id));
+    let removed = null;
+    setRows((p) => { removed = p.find((r) => r.id === id) || null; return p.filter((r) => r.id !== id); });
     await sb.from(table).delete().eq("id", id);
-    await logAction("delete", table, id);
+    await logAction("delete", table, id, removed ? { denumire: removed.denumire, den: removed.den, nume: removed.nume, data: removed.data } : null);
   };
 
   // Cheltuieli
@@ -1193,7 +1197,7 @@ export default function App() {
   const addCH = async () => {
     const row = { data: today(), gk: "Deee", suma: "", cat: "Diverse", det: "", ach: "", ach_de: "", note: "" };
     const { data } = await sb.from("cheltuieli").insert(row).select();
-    if (data) setChRows((p) => [...p, data[0]]);
+    if (data) { setChRows((p) => [...p, data[0]]); logAction("add", "cheltuieli", data[0].id); }
   };
 
   // Colectari
@@ -1202,7 +1206,7 @@ export default function App() {
   const addCOL = async () => {
     const row = { data: today(), agent: "", furn: "", nr_doc: "", cat: "Curte", produs: "", cant: 0, pret: 0, ach: "", ach_de: "", det: "" };
     const { data } = await sb.from("colectari").insert(row).select();
-    if (data && data.length) setColRows((p) => [...p, data[0]]);
+    if (data && data.length) { setColRows((p) => [...p, data[0]]); logAction("add", "colectari", data[0].id); }
   };
 
   // ── Transfer catre WiseWeee (extensie Chrome) ──────────────
@@ -1223,12 +1227,11 @@ export default function App() {
     return m ? `${m[1]} ${m[2]} ${m[3]}` : "";
   };
   const [wwSent, setWwSent] = useState({}); // { [rowId]: timestamp } - feedback vizual dupa trimitere
-  // Mașinile proprii GREEN KRAFT sub 3,5t, care circulă fără licență de transport
-  const MASINI_PROPRII_FARA_LICENTA = ["IF55KFT", "IF88KFT"];
   const trimiteWiseWeee = (r) => {
     const tichet = findTichetPentruColectare(r);
     const nrAuto = (tichet?.nr_masina || "").toUpperCase().replace(/\s+/g, "");
-    const masinaProprieFaraLicenta = MASINI_PROPRII_FARA_LICENTA.includes(nrAuto);
+    const masinaProprie = masiniList.find((m) => (m.nr_auto || "").toUpperCase().replace(/\s+/g, "") === nrAuto);
+    const masinaProprieFaraLicenta = !!masinaProprie && !masinaProprie.licenta;
     const payload = {
       source: "greenkraft",
       furnizor: r.furn || "",
@@ -1237,7 +1240,7 @@ export default function App() {
       greutate_kg: r.cant || "",
       data_colectare: r.data || "",
       nr_ticket_cantar: tichet?.nr_tichet || "",
-      transportator: masinaProprieFaraLicenta ? "GREEN KRAFT SRL" : (tichet?.transportator || tichet?.partener || ""),
+      transportator: masinaProprie ? "GREEN KRAFT SRL" : (tichet?.transportator || tichet?.partener || ""),
       nr_auto: tichet?.nr_masina || "",
       sofer: tichet?.sofer || "",
       fara_licenta: masinaProprieFaraLicenta,
@@ -1254,7 +1257,7 @@ export default function App() {
   const addLIV = async () => {
     const row = { data: today(), nr: "", client: "", produs: "", cant: 0, pret: 0, fact: "", inc: "", det: "" };
     const { data } = await sb.from("livrari").insert(row).select();
-    if (data && data.length) setLivRows((p) => [...p, data[0]]);
+    if (data && data.length) { setLivRows((p) => [...p, data[0]]); logAction("add", "livrari", data[0].id); }
   };
 
   // Datorii
@@ -1263,7 +1266,7 @@ export default function App() {
   const addDAT = async () => {
     const row = { data: today(), nume: "", suma: "", det: "" };
     const { data } = await sb.from("datorii").insert(row).select();
-    if (data) setDatRows((p) => [...p, data[0]]);
+    if (data) { setDatRows((p) => [...p, data[0]]); logAction("add", "datorii", data[0].id); }
   };
 
   // Avansuri
@@ -1272,7 +1275,7 @@ export default function App() {
   const addAV = async (tip) => {
     const row = { data: today(), catre: "", suma: "", tip, det: "", decont: [] };
     const { data } = await sb.from("avansuri").insert(row).select();
-    if (data && data.length) setAvRows((p) => [...p, data[0]]);
+    if (data && data.length) { setAvRows((p) => [...p, data[0]]); logAction("add", "avansuri", data[0].id, { tip }); }
   };
   // Bani aduși în casă — folosește tot tabelul "avansuri", cu tip="bani_adus"
   const delBaniAdusi = mkDel(setAvRows, "avansuri", "această înregistrare de bani aduși");
@@ -1280,7 +1283,7 @@ export default function App() {
     const row = { data: today(), catre: "", suma: "", tip: "bani_adus", det: "", decont: [], sold_anterior: null };
     const { data, error } = await sb.from("avansuri").insert(row).select();
     if (error) { alert("Eroare: " + error.message + "\n\nAsigură-te că există coloana \"sold_anterior\" (numeric) în tabelul avansuri din Supabase."); return; }
-    if (data && data.length) setAvRows((p) => [...p, data[0]]);
+    if (data && data.length) { setAvRows((p) => [...p, data[0]]); logAction("add", "avansuri", data[0].id, { tip: "bani_adus" }); }
   };
   // Decont items
   const addDecontItem = async (avansId) => {
@@ -1291,6 +1294,7 @@ export default function App() {
     try {
       await sb.from("avansuri").update({ decont: newDecont }).eq("id", avansId);
       setAvRows(p => p.map(r => r.id === avansId ? { ...r, decont: newDecont } : r));
+      logAction("update", "avansuri", avansId, { decont_adaugat: newItem });
     } catch (e) { alert("Eroare: " + e.message); }
   };
   const updDecontItem = async (avansId, idx, field, value) => {
@@ -1301,6 +1305,7 @@ export default function App() {
     try {
       await sb.from("avansuri").update({ decont: newDecont }).eq("id", avansId);
       setAvRows(p => p.map(r => r.id === avansId ? { ...r, decont: newDecont } : r));
+      logAction("update", "avansuri", avansId, { decont_modificat: { idx, [field]: value } });
     } catch (e) { alert("Eroare: " + e.message); }
   };
   const delDecontItem = async (avansId, idx) => {
@@ -1311,6 +1316,7 @@ export default function App() {
     try {
       await sb.from("avansuri").update({ decont: newDecont }).eq("id", avansId);
       setAvRows(p => p.map(r => r.id === avansId ? { ...r, decont: newDecont } : r));
+      logAction("update", "avansuri", avansId, { decont_sters: idx });
     } catch (e) { alert("Eroare: " + e.message); }
   };
 
@@ -1321,7 +1327,7 @@ export default function App() {
     const maxNr = contracte.reduce((m, r) => Math.max(m, parseInt(r.nr) || 0), 0);
     const row = { nr: String(maxNr + 1), companie: "", data: today(), detalii: "" };
     const { data } = await sb.from("contracte").insert(row).select();
-    if (data) setContracte((p) => [...p, data[0]]);
+    if (data) { setContracte((p) => [...p, data[0]]); logAction("add", "contracte", data[0].id); }
   };
 
   // Furnizori PF
@@ -1332,7 +1338,7 @@ export default function App() {
     const cod = String((codes.length ? Math.max(...codes) : 0) + 1).padStart(5, "0");
     const row = { cod, denumire: denumirePrefill, cod_fiscal: "", analitic: `401.${cod}`, tara: "RO", judet: "", adresa: "", reg_com: "", inf_supl: "" };
     const { data } = await sb.from("furnizori_pf").insert(row).select();
-    if (data) setPfList((p) => [...p, data[0]]);
+    if (data) { setPfList((p) => [...p, data[0]]); logAction("add", "furnizori_pf", data[0].id, { denumire: denumirePrefill }); }
   };
 
   // Furnizori PJ
@@ -1341,7 +1347,7 @@ export default function App() {
   const addPJ = async (denumirePrefill = "") => {
     const row = { cod: "", denumire: denumirePrefill, cod_fiscal: "", analitic: "", tara: "RO", judet: "B", adresa: "", cont_banca: "", banca: "", reg_com: "", grupa: "", tel: "" };
     const { data } = await sb.from("furnizori_pj").insert(row).select();
-    if (data) setPjList((p) => [...p, data[0]]);
+    if (data) { setPjList((p) => [...p, data[0]]); logAction("add", "furnizori_pj", data[0].id, { denumire: denumirePrefill }); }
   };
 
   // Parole
@@ -1354,7 +1360,7 @@ export default function App() {
   const addPAR = async () => {
     const row = { platforma: "", cat: "Platformă", utilizator: "", parola: "", note: "" };
     const { data } = await sb.from("parole").insert(row).select();
-    if (data) setParole((p) => [...p, { ...data[0], user: data[0].utilizator }]);
+    if (data) { setParole((p) => [...p, { ...data[0], user: data[0].utilizator }]); logAction("add", "parole", data[0].id); }
   };
 
   // Salariati
@@ -1366,7 +1372,7 @@ export default function App() {
   const addSAL = async () => {
     const row = { nume: "Nume Nou", functie: "", net: 0, taxe: 0, co: 21, ef: 0, conc: [] };
     const { data } = await sb.from("salariati").insert(row).select();
-    if (data) setSalRows((p) => [...p, data[0]]);
+    if (data) { setSalRows((p) => [...p, data[0]]); logAction("add", "salariati", data[0].id); }
   };
   const delConc = async (si, ci) => {
     const row = salRows[si];
@@ -1374,6 +1380,7 @@ export default function App() {
     const ef = conc.reduce((s, x) => s + x.zile, 0);
     setSalRows((p) => { const n = [...p]; n[si] = { ...n[si], conc, ef }; return n; });
     await sb.from("salariati").update({ conc, ef }).eq("id", row.id);
+    logAction("update", "salariati", row.id, { concediu_sters: row.conc[ci] });
   };
   const addConc = async (si) => {
     const row = salRows[si];
@@ -1381,6 +1388,7 @@ export default function App() {
     const ef = conc.reduce((s, x) => s + x.zile, 0);
     setSalRows((p) => { const n = [...p]; n[si] = { ...n[si], conc, ef }; return n; });
     await sb.from("salariati").update({ conc, ef }).eq("id", row.id);
+    logAction("update", "salariati", row.id, { concediu_adaugat: conc[conc.length - 1] });
     setSelSal(null);
   };
 
@@ -1391,7 +1399,7 @@ export default function App() {
     const fd = produseList.find((p) => p.den === newM.produs);
     const row = { ...newM, cod: newM.cod || fd?.cod || "" };
     const { data } = await sb.from("stoc_manual").insert(row).select();
-    if (data) setManMisc((p) => [...p, data[0]]);
+    if (data) { setManMisc((p) => [...p, data[0]]); logAction("add", "stoc_manual", data[0].id, { produs: row.produs, cant: row.cant, tip: row.tip }); }
     setNewM({ data: today(), tip: "intrare", produs: "", cod: "", cant: "", pu: "", sursa: "" });
   };
 
@@ -1408,6 +1416,7 @@ export default function App() {
     const { data: ins, error } = await sb.from("registru").insert(newEntries).select();
     if (error) { alert("❌ Eroare salvare Borderou: " + error.message); return; }
     if (ins) setRegistru(p => [...p, ...ins]);
+    logAction("add", "registru", `${b.serie} ${b.nr}`, { furnizor: b.det, linii: newEntries.length });
     alert(`✅ Borderou ${b.serie} ${b.nr} salvat!`);
     const updatedReg = [...registru, ...(ins || newEntries)];
     setBorderouri(p => { const n = [...p]; n[activeBord] = newBord(b.serie, updatedReg); return n; });
@@ -1820,6 +1829,7 @@ export default function App() {
     const { data: ins, error } = await sb.from("procese_verbale").insert(row).select();
     if (error) { alert("❌ Eroare salvare PV: " + error.message); return; }
     if (ins) setPvList(p => [...p, ins[0]]);
+    logAction("add", "procese_verbale", `${pv.serie} ${pv.nr_pv}`, { client: pv.client_denumire });
     alert(`✅ PV ${pv.serie} ${pv.nr_pv} salvat!`);
     setPvBorderouri(p => { const n = [...p]; n[activePV] = newPV([...pvList, ...(ins || [row])], pv.serie); return n; });
     setPjSearchPV("");
@@ -2469,9 +2479,11 @@ export default function App() {
     if (entry.type === "PF") {
       setRegistru(p => p.map(r => r.id === entry.refId ? { ...r, trasabilitate: value } : r));
       await sb.from("registru").update({ trasabilitate: value }).eq("id", entry.refId);
+      logAction("update", "registru", entry.refId, { trasabilitate: value });
     } else {
       setPvList(p => p.map(x => x.id === entry.refId ? { ...x, trasabilitate: value } : x));
       await sb.from("procese_verbale").update({ trasabilitate: value }).eq("id", entry.refId);
+      logAction("update", "procese_verbale", entry.refId, { trasabilitate: value });
     }
   };
 
@@ -2667,6 +2679,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
 
       // Save to DB
       await sb.from("declaratii").insert(insertsToSave);
+      logAction("add", "declaratii", trasCompany, { luna: trasMonth, numar: insertsToSave.length });
 
       const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Declaratie ${trasCompany} ${trasMonth}</title>
 <style>@page { size: A4 portrait; margin: 0; } body { margin: 0; }</style>
@@ -2839,7 +2852,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
       const cod = String((codes.length ? Math.max(...codes) : 0) + 1).padStart(5, "0");
       const row = { cod, denumire: parsed.denumire || "", cod_fiscal: parsed.cod_fiscal || "", analitic: `401.${cod}`, tara: "RO", judet: parsed.judet || "", adresa: parsed.adresa || "", reg_com: parsed.reg_com || "", inf_supl: parsed.inf_supl || "" };
       const { data: ins } = await sb.from("furnizori_pf").insert(row).select();
-      if (ins) { setPfList(p => [...p, ins[0]]); alert(`✅ ${parsed.denumire} adăugat cu succes!`); }
+      if (ins) { setPfList(p => [...p, ins[0]]); logAction("add", "furnizori_pf", ins[0].id, { denumire: parsed.denumire, sursa: "scan CI" }); alert(`✅ ${parsed.denumire} adăugat cu succes!`); }
     } catch (e) { alert("Eroare la scanare: " + e.message); }
     setScanLoading(false);
   };
@@ -2865,7 +2878,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
     const cod = String((codes.length ? Math.max(...codes) : 0) + 1).padStart(5, "0");
     const row = { cod, denumire: cuiResult.denumire || "", cod_fiscal: cuiResult.cod_fiscal || "RO" + cuiSearch.replace(/\D/g, ""), analitic: `401.${cod}`, tara: "RO", judet: cuiResult.judet || "", adresa: cuiResult.adresa || "", cont_banca: "", banca: "", reg_com: cuiResult.reg_com || "", grupa: "", tel: cuiResult.tel || "" };
     const { data } = await sb.from("furnizori_pj").insert(row).select();
-    if (data) setPjList((p) => [...p, data[0]]);
+    if (data) { setPjList((p) => [...p, data[0]]); logAction("add", "furnizori_pj", data[0].id, { denumire: row.denumire, sursa: "cautare CUI" }); }
     setCuiResult(null); setCuiSearch("");
   };
 
@@ -4670,6 +4683,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
             try {
               const { error } = await sb.from("produse").update({ [field]: value }).eq("id", id);
               if (error) alert("Eroare: " + error.message);
+              else logAction("update", "produse", id, { [field]: value });
             } catch (e) { alert("Eroare: " + e.message); }
           };
           const delProdus = async (id, den) => {
@@ -4694,7 +4708,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
             } catch (e) { alert("Eroare: " + e.message); }
           };
           const updDelegat = async (id, field, value) => {
-            try { await sb.from("delegati").update({ [field]: value }).eq("id", id); } catch (e) { alert("Eroare: " + e.message); }
+            try { await sb.from("delegati").update({ [field]: value }).eq("id", id); logAction("update", "delegati", id, { [field]: value }); } catch (e) { alert("Eroare: " + e.message); }
           };
           const delDelegat = async (id, nume) => {
             if (!confirmDel(`delegatul "${nume}"`)) return;
@@ -4716,7 +4730,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
             } catch (e) { alert("Eroare: " + e.message); }
           };
           const updMasina = async (id, field, value) => {
-            try { await sb.from("masini").update({ [field]: value }).eq("id", id); } catch (e) { alert("Eroare: " + e.message); }
+            try { await sb.from("masini").update({ [field]: value }).eq("id", id); logAction("update", "masini", id, { [field]: value }); } catch (e) { alert("Eroare: " + e.message); }
           };
           const delMasina = async (id, nr_auto) => {
             if (!confirmDel(`mașina "${nr_auto}"`)) return;
