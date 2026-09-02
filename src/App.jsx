@@ -5001,10 +5001,32 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
 
         {/* ══ STOCURI ══ */}
         {tab === "cantar" && (() => {
-          const ultimulTicAviz = ticNou.partener
-            ? ticheteList.filter((t) => t.aviz && (t.partener || "").trim().toLowerCase() === ticNou.partener.trim().toLowerCase())
-                .sort((a, b) => (parseInt(b.nr_tichet) || 0) - (parseInt(a.nr_tichet) || 0))[0]
-            : null;
+          const ultimulTicAviz = (() => {
+            const partnerLC = (ticNou.partener || "").trim().toLowerCase();
+            if (!partnerLC) return null;
+            // data e stocata fie ca DD.MM.YYYY (tichete_cantar, si achizitii/vanzari create automat din tichet), fie ca YYYY-MM-DD
+            // (randuri de achizitii/vanzari adaugate manual, din <input type="date">) — normalizam inainte de comparat
+            const dataMs = (s) => {
+              if (!s) return 0;
+              const iso = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/);
+              if (iso) return new Date(+iso[1], +iso[2] - 1, +iso[3]).getTime();
+              const ro = String(s).match(/^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2,4})/);
+              if (ro) { const y = +ro[3] < 100 ? 2000 + +ro[3] : +ro[3]; return new Date(y, +ro[2] - 1, +ro[1]).getTime(); }
+              return 0;
+            };
+            // Avizul poate fi completat pe tichet, dar in practica e completat mai des ulterior in Achizitii ("Nr. doc.") / Vânzări ("Nr.") — cautam in toate 3 sursele
+            const dinTichete = ticheteList
+              .filter((t) => t.aviz && (t.partener || "").trim().toLowerCase() === partnerLC)
+              .map((t) => ({ aviz: t.aviz, data: t.data, nr_tichet: t.nr_tichet }));
+            const dinAchizitii = colRows
+              .filter((r) => r.nr_doc && (r.furn || "").trim().toLowerCase() === partnerLC)
+              .map((r) => ({ aviz: r.nr_doc, data: r.data, nr_tichet: ticheteList.find((t) => String(t.id) === String(r.tichet_id))?.nr_tichet || "" }));
+            const dinVanzari = livRows
+              .filter((r) => r.nr && (r.client || "").trim().toLowerCase() === partnerLC)
+              .map((r) => ({ aviz: r.nr, data: r.data, nr_tichet: "" }));
+            return [...dinTichete, ...dinAchizitii, ...dinVanzari]
+              .sort((a, b) => dataMs(b.data) - dataMs(a.data) || (parseInt(b.nr_tichet) || 0) - (parseInt(a.nr_tichet) || 0))[0] || null;
+          })();
           const deschise = ticheteList.filter((t) => t.status === "deschis");
           const goale = sortByDateAsc(ticheteList.filter((t) => t.status === "gol"));
           const inchise = sortByDateAsc(ticheteList.filter((t) => t.status === "inchis"));
@@ -5106,7 +5128,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                         <div style={{ flex: 1 }}>
                           <label style={FL}>Aviz</label>
                           <input style={FI} value={ticNou.aviz} onChange={(e) => setTicNou((p) => ({ ...p, aviz: e.target.value }))} placeholder="opțional" />
-                          {ultimulTicAviz && <div style={{ fontSize: 10, color: "#888", marginTop: 3 }}>Ultimul aviz {ticNou.partener}: <strong>{ultimulTicAviz.aviz}</strong> (TC #{ultimulTicAviz.nr_tichet}, {ultimulTicAviz.data})</div>}
+                          {ultimulTicAviz && <div style={{ fontSize: 10, color: "#888", marginTop: 3 }}>Ultimul aviz {ticNou.partener}: <strong>{ultimulTicAviz.aviz}</strong> {ultimulTicAviz.nr_tichet ? `(TC #${ultimulTicAviz.nr_tichet}, ${ultimulTicAviz.data})` : `(${ultimulTicAviz.data})`}</div>}
                         </div>
                         <div style={{ flex: 1 }}><label style={FL}>Observații</label><input style={FI} value={ticNou.obs} onChange={(e) => setTicNou((p) => ({ ...p, obs: e.target.value }))} placeholder="opțional" /></div>
                       </div>
