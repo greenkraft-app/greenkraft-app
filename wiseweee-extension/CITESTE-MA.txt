@@ -11,10 +11,13 @@ Apasandu-l, extensia:
   3. Deschide (sau focalizeaza) tab-ul WiseWeee si completeaza automat
      formularul "Document Nou" -> "Completeaza manual"
 
-IMPORTANT: extensia NU apasa niciodata "Urmatorul Pas" sau "Salveaza".
-Tu verifici datele completate si continui manual, ca de obicei.
+Daca toate campurile s-au completat cu succes (niciunul negasit), extensia
+apasa automat si butonul verde "Urmatorul Pas". Daca lipseste vreun camp,
+NU apasa nimic — ramane pe formular ca sa completezi manual ce lipseste.
+Extensia NU apasa NICIODATA "Salveaza" sau "Trimite in SIATD" — pasul final
+il faci tu, dupa ce verifici datele.
 Un mesaj (banner) aparut in coltul din dreapta-sus iti arata ce s-a completat
-automat si ce trebuie verificat/completat manual.
+automat, daca s-a apasat "Urmatorul Pas" si ce trebuie verificat/completat manual.
 
 
 INSTALARE (o singura data)
@@ -32,8 +35,10 @@ CUM SE FOLOSESTE
 2. Gaseste randul pe care vrei sa-l trimiti si apasa butonul "📤"
 3. Se deschide automat WiseWeee (daca nu era deja deschis) si formularul
    se completeaza singur
-4. Verifici campurile, completezi ce lipseste (ex: daca nu s-a gasit un
-   tichet de cantar potrivit) si continui normal cu "Urmatorul Pas"
+4. Daca toate campurile s-au completat, extensia a apasat deja "Urmatorul
+   Pas" — verifici datele si continui de-acolo. Daca lipseste ceva (ex:
+   nu s-a gasit un tichet de cantar potrivit), completezi manual campul
+   respectiv si apesi tu "Urmatorul Pas"
 
 
 DE RETINUT

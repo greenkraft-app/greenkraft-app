@@ -3,8 +3,10 @@
 // "Document Nou" -> "Completeaza manual" si completeaza campurile cunoscute.
 //
 // IMPORTANT — reguli de siguranta:
-//  - Nu apasa NICIODATA "Urmatorul Pas", "Salveaza" sau "Trimite in SIATD".
-//  - Utilizatorul verifica intotdeauna datele si continua manual.
+//  - Apasa automat "Urmatorul Pas" DOAR daca toate campurile s-au completat cu succes
+//    (niciun camp negasit / neidentificat). Daca lipseste ceva, se lasa neapasat.
+//  - Nu apasa NICIODATA "Salveaza" sau "Trimite in SIATD" — utilizatorul verifica
+//    si continua manual pasul final.
 //  - Daca un camp nu poate fi gasit/completat, se noteaza clar in bannerul afisat,
 //    nu se incearca ghicit sau fortat.
 
@@ -202,6 +204,17 @@ function checkCheckboxByText(root, textIncludes, knownId) {
   return "ok";
 }
 
+// Cauta butonul "Urmatorul Pas" (verde, pasul final al formularului) si il apasa.
+// Cautam dupa textul exact al butonului (fara diacritice), nu dupa culoare, ca sa
+// nu depindem de clasele CSS ale site-ului. Intoarce true daca l-a gasit si apasat.
+function clickUrmatorulPas(root) {
+  const buttons = Array.from((root || document).querySelectorAll("button"));
+  const btn = buttons.find((b) => normalizeTxt(b.textContent).replace(/\s+/g, " ").trim() === "urmatorul pas");
+  if (!btn || btn.disabled) return false;
+  realClick(btn);
+  return true;
+}
+
 function showBanner(lines, isError) {
   const old = document.getElementById("gk-transfer-banner");
   if (old) old.remove();
@@ -258,8 +271,16 @@ async function runTransfer(payload) {
   const linii = [`${completate.length} câmpuri completate automat.`];
   if (neaflate.length) {
     linii.push(`De verificat/completat manual: ${neaflate.map(([n]) => n).join(", ")}.`);
+    showBanner(linii, true);
+    return;
   }
-  showBanner(linii, neaflate.length > 0);
+
+  await sleep(200);
+  const apasat = clickUrmatorulPas(dialog);
+  linii.push(apasat
+    ? "✅ Toate câmpurile s-au completat — am apăsat automat „Următorul Pas”."
+    : "Toate câmpurile s-au completat, dar nu am găsit butonul „Următorul Pas” — apasă-l manual.");
+  showBanner(linii, !apasat);
 }
 
 async function checkPendingTransfer() {
