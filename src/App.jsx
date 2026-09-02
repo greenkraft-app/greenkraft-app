@@ -1499,10 +1499,11 @@ export default function App() {
     ticSavingRef.current = true;
     setTicSaving(true);
     try {
+      const ts = timestampAcum();
       const row = {
         serie: "TC", nr_tichet: getNextTichetNr(), data: today(), ora_intrare: oraAcum(), ora_iesire: "",
         tip, partener: "", partener_cui: "", client: "GREEN KRAFT SRL", transportator: "", transportator_cui: "",
-        nr_masina: "", sofer: "", material: "", brut: null, tara: null, net: null, brut_la: "", tara_la: "",
+        nr_masina: "", sofer: "", material: "", brut: null, tara: null, net: null, brut_la: ts, tara_la: ts,
         status: "gol", operator: currentUser || "", factura: "", aviz: "", obs: "",
       };
       const { data, error } = await sb.from("tichete_cantar").insert(row).select();
