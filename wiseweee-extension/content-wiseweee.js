@@ -206,13 +206,22 @@ function checkCheckboxByText(root, textIncludes, knownId) {
 
 // Cauta butonul "Urmatorul Pas" (verde, pasul final al formularului) si il apasa.
 // Cautam dupa textul exact al butonului (fara diacritice), nu dupa culoare, ca sa
-// nu depindem de clasele CSS ale site-ului. Intoarce true daca l-a gasit si apasat.
-function clickUrmatorulPas(root) {
-  const buttons = Array.from((root || document).querySelectorAll("button"));
-  const btn = buttons.find((b) => normalizeTxt(b.textContent).replace(/\s+/g, " ").trim() === "urmatorul pas");
-  if (!btn || btn.disabled) return false;
-  realClick(btn);
-  return true;
+// nu depindem de clasele CSS ale site-ului. Cautam in tot documentul (nu doar in
+// dialog-ul completat de noi) pentru ca acest buton poate fi randat intr-un footer
+// separat al wizard-ului. Formularul isi valideaza campurile async (React), asa ca
+// butonul poate fi inca disabled imediat dupa completare — asteptam pana la 3s ca
+// validarea sa se termine si sa devina apasabil, in loc sa renuntam imediat.
+async function clickUrmatorulPas() {
+  for (let waited = 0; waited < 3000; waited += 200) {
+    const buttons = Array.from(document.querySelectorAll("button"));
+    const btn = buttons.find((b) => normalizeTxt(b.textContent).replace(/\s+/g, " ").trim() === "urmatorul pas");
+    if (btn && !btn.disabled && btn.getAttribute("aria-disabled") !== "true") {
+      realClick(btn);
+      return true;
+    }
+    await sleep(200);
+  }
+  return false;
 }
 
 function showBanner(lines, isError) {
@@ -276,7 +285,7 @@ async function runTransfer(payload) {
   }
 
   await sleep(200);
-  const apasat = clickUrmatorulPas(dialog);
+  const apasat = await clickUrmatorulPas();
   linii.push(apasat
     ? "✅ Toate câmpurile s-au completat — am apăsat automat „Următorul Pas”."
     : "Toate câmpurile s-au completat, dar nu am găsit butonul „Următorul Pas” — apasă-l manual.");
