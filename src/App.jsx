@@ -5001,6 +5001,10 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
 
         {/* ══ STOCURI ══ */}
         {tab === "cantar" && (() => {
+          const ultimulTicAviz = ticNou.partener
+            ? ticheteList.filter((t) => t.aviz && (t.partener || "").trim().toLowerCase() === ticNou.partener.trim().toLowerCase())
+                .sort((a, b) => (parseInt(b.nr_tichet) || 0) - (parseInt(a.nr_tichet) || 0))[0]
+            : null;
           const deschise = ticheteList.filter((t) => t.status === "deschis");
           const goale = sortByDateAsc(ticheteList.filter((t) => t.status === "gol"));
           const inchise = sortByDateAsc(ticheteList.filter((t) => t.status === "inchis"));
@@ -5099,7 +5103,11 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                       <div style={{ marginBottom: 10 }}><label style={FL}>Material / Deșeu</label><div style={ACB}><ACStrict value={ticNou.material} options={PRODUSE_DYN} placeholder="Selectează..." style={{ width: "100%", padding: "7px 9px", border: "1px solid #d5d5d5", borderRadius: 6, fontSize: 13, boxSizing: "border-box" }} onChange={(v) => setTicNou((p) => ({ ...p, material: v }))} /></div></div>
                       <div style={{ display: "flex", gap: 8 }}>
                         <div style={{ flex: 1 }}><label style={FL}>Factura</label><input style={FI} value={ticNou.factura} onChange={(e) => setTicNou((p) => ({ ...p, factura: e.target.value }))} placeholder="opțional" /></div>
-                        <div style={{ flex: 1 }}><label style={FL}>Aviz</label><input style={FI} value={ticNou.aviz} onChange={(e) => setTicNou((p) => ({ ...p, aviz: e.target.value }))} placeholder="opțional" /></div>
+                        <div style={{ flex: 1 }}>
+                          <label style={FL}>Aviz</label>
+                          <input style={FI} value={ticNou.aviz} onChange={(e) => setTicNou((p) => ({ ...p, aviz: e.target.value }))} placeholder="opțional" />
+                          {ultimulTicAviz && <div style={{ fontSize: 10, color: "#888", marginTop: 3 }}>Ultimul aviz {ticNou.partener}: <strong>{ultimulTicAviz.aviz}</strong> (TC #{ultimulTicAviz.nr_tichet}, {ultimulTicAviz.data})</div>}
+                        </div>
                         <div style={{ flex: 1 }}><label style={FL}>Observații</label><input style={FI} value={ticNou.obs} onChange={(e) => setTicNou((p) => ({ ...p, obs: e.target.value }))} placeholder="opțional" /></div>
                       </div>
                     </div>
