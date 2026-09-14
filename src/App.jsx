@@ -1949,24 +1949,24 @@ export default function App() {
         "<div>Date de identificare expeditor</div>" +
         "<div style=\"font-weight:bold;font-style:italic;\">" + (a3.expeditor || "").toUpperCase() + "</div>" +
         (expCuiRegCom ? "<div>" + expCuiRegCom + "</div>" : "") +
-        "<div>" + expAdresa + "</div>" +
-        "<div>Autorizatie de mediu nr. " + expAutMediu + "</div>" +
-        "<div>Revizuita " + (expAutRevizuita || "") + "</div>" +
-        "<div>Data la care expira autorizatia de mediu</div>" +
-        "<div>Viza anuala</div>" +
-        "<div style=\"text-align:center;\">Semnatura si stampila</div>",
+        "<div>" + expAdresa + "</div>",
+      "<div>Autorizatie de mediu nr. " + expAutMediu + "</div>" +
+        "<div>Revizuita " + (expAutRevizuita || "") + "</div>",
+      "<div>Data la care expira autorizatia de mediu</div>" +
+        "<div>Viza anuala</div>",
+      "<div style=\"text-align:center;\">Semnatura si stampila</div>",
     ]);
     const col5b = cellFill([
       "<div style=\"text-align:center;font-weight:bold;\">DESCARCAREA</div>" +
         "<div>Date identificare destinatar</div>" +
         "<div style=\"font-weight:bold;font-style:italic;\">" + (a3.destinatar || "").toUpperCase() + "</div>" +
         (destCuiRegCom ? "<div>" + destCuiRegCom + "</div>" : "") +
-        "<div>" + destAdresa + "</div>" +
-        "<div>Autorizatie de mediu nr. " + destAutMediu + "</div>" +
-        "<div>Revizuita " + (destAutRevizuita || "") + "</div>" +
-        "<div>Data la care expira autorizatia de mediu</div>" +
-        "<div>Viza anuala</div>" +
-        "<div style=\"text-align:center;\">Semnatura si stampila</div>",
+        "<div>" + destAdresa + "</div>",
+      "<div>Autorizatie de mediu nr. " + destAutMediu + "</div>" +
+        "<div>Revizuita " + (destAutRevizuita || "") + "</div>",
+      "<div>Data la care expira autorizatia de mediu</div>" +
+        "<div>Viza anuala</div>",
+      "<div style=\"text-align:center;\">Semnatura si stampila</div>",
     ]);
     const html =
       "<div style=\"font-family:'Times New Roman',serif;font-size:12px;color:#000;background:#fff;\">" +
