@@ -501,9 +501,9 @@ function BordPrint({ b }) {
 // rezolva fiabil pe un div din interiorul unui <td> (inaltimea celulei e un rezultat calculat al layout-ului de
 // tabel, nu o valoare CSS "specificata"), asa ca folosim position:absolute;inset (celula parinte are position:relative),
 // doar pentru chenar/latime, nu pentru a forta textul sa atinga marginea de jos.
-function Fill({ groups, inset = 8 }) {
+function Fill({ groups, inset = 8, gap = 26 }) {
   return (
-    <div style={{ position: "absolute", inset, display: "flex", flexDirection: "column", gap: 26 }}>
+    <div style={{ position: "absolute", inset, display: "flex", flexDirection: "column", gap }}>
       {groups.map((g, i) => <div key={i}>{g}</div>)}
     </div>
   );
@@ -578,11 +578,12 @@ function PVPrint({ pv }) {
           <tbody>
             <tr style={{ height: "100%" }}>
               <td style={{ border: "1px solid #000", position: "relative", lineHeight: 1.6 }}>
-                <Fill groups={[
+                <Fill gap={32} groups={[
                   <>
                     <div>Date identificare:</div>
                     <div><strong>GREEN KRAFT S.R.L.</strong></div>
                     <div>{GREEN_KRAFT_IDENTITATE.cui}, {GREEN_KRAFT_IDENTITATE.reg_com}</div>
+                    <div>{GREEN_KRAFT_IDENTITATE.adresa}</div>
                   </>,
                   <>
                     <div>Date de identificare delegat</div>
@@ -1922,6 +1923,7 @@ export default function App() {
     const trCuiRegCom = [a3.transportator_cui || trInfo.cui, trInfo.reg_com].filter(Boolean).join(", ");
     const expCuiRegCom = [a3.expeditor_cui || expInfo.cui, expInfo.reg_com].filter(Boolean).join(", ");
     const destCuiRegCom = [a3.destinatar_cui || destInfo.cui, destInfo.reg_com].filter(Boolean).join(", ");
+    const trAdresa = a3.transportator_adresa || trInfo.adresa || "";
     const expAdresa = a3.expeditor_adresa || expInfo.adresa || "";
     const destAdresa = a3.destinatar_adresa || destInfo.adresa || "";
     const expAutMediu = a3.expeditor_aut_mediu || expInfo.aut_mediu || "";
@@ -1933,10 +1935,10 @@ export default function App() {
     // (folosita cand totul statea intr-un singur rand, inalt cat toata pagina) ar face continutul sa se
     // reverse peste randul urmator, pentru ca un element position:absolute nu-si mai calculeaza inaltimea
     // parintelui. Asezare normala, de sus in jos, cu spatiu moderat intre campuri.
-    const cellFill = (groups) => "<div style=\"padding:6px;display:flex;flex-direction:column;gap:10px;\">" + groups.map((g) => "<div>" + g + "</div>").join("") + "</div>";
+    const cellFill = (groups) => "<div style=\"padding:6px;display:flex;flex-direction:column;gap:18px;\">" + groups.map((g) => "<div>" + g + "</div>").join("") + "</div>";
 
     const col1 = cellFill([
-      "<div>Date de identificare:</div><div><strong>" + (a3.transportator || "") + "</strong></div>" + (trCuiRegCom ? "<div>" + trCuiRegCom + "</div>" : ""),
+      "<div>Date de identificare:</div><div><strong>" + (a3.transportator || "") + "</strong></div>" + (trCuiRegCom ? "<div>" + trCuiRegCom + "</div>" : "") + (trAdresa ? "<div>" + trAdresa + "</div>" : ""),
       "<div>Date de identificare delegat</div><div>si nr. inmatriculare mijloc de transport</div>" + (a3.delegat_nume ? "<div><strong>" + a3.delegat_nume + "</strong></div>" : "") + (a3.delegat_ci ? "<div>CI " + a3.delegat_ci + "</div>" : "") + (a3.delegat_auto ? "<div><strong>" + a3.delegat_auto + "</strong></div>" : ""),
       "<div>Licenta de transport marfuri nepericuloase nr.</div><div>" + (a3.licenta || "nu e cazul") + "</div>",
       "<div>Data la care expira licenta de transport marfuri nepericuloase</div><div>" + (a3.licenta_expira || "") + "</div>",
