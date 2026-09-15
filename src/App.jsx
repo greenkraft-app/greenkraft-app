@@ -1435,6 +1435,9 @@ export default function App() {
   // ── Tichete Cantar helpers ────────────────────────────────
   const oraAcum = () => { const d = new Date(); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
   const timestampAcum = () => { const d = new Date(); return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`; };
+  // Extrage "HH:MM" dintr-un timestamp "DD.MM.YYYY HH:MM:SS" (sau orice text ce contine un HH:MM) —
+  // folosit ca sa tina Ora intrare/iesire sincronizata cu Cantarit BRUT/TARA la, editate manual.
+  const extractOra = (ts) => { const m = String(ts || "").match(/(\d{1,2}):(\d{2})/); return m ? `${m[1].padStart(2, "0")}:${m[2]}` : null; };
   const getNextTichetNr = () => {
     const nrs = ticheteList.map((t) => parseInt(t.nr_tichet) || 0);
     const maxNr = nrs.length ? Math.max(...nrs) : 0;
@@ -3438,11 +3441,11 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
               </div>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 700, color: "#6a1b9a" }}>⚖️ Cântărit BRUT la</label>
-                <input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ce93d8", borderRadius: 5, fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }} value={ticEdit.brut_la} onChange={(e) => setTicEdit((p) => ({ ...p, brut_la: e.target.value }))} placeholder="DD.MM.YYYY HH:MM:SS" />
+                <input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ce93d8", borderRadius: 5, fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }} value={ticEdit.brut_la} onChange={(e) => { const v = e.target.value; const ora = extractOra(v); setTicEdit((p) => ({ ...p, brut_la: v, ...(ora ? { ora_intrare: ora } : {}) })); }} placeholder="DD.MM.YYYY HH:MM:SS" />
               </div>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 700, color: "#6a1b9a" }}>⚖️ Cântărit TARA la</label>
-                <input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ce93d8", borderRadius: 5, fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }} value={ticEdit.tara_la} onChange={(e) => setTicEdit((p) => ({ ...p, tara_la: e.target.value }))} placeholder="DD.MM.YYYY HH:MM:SS" />
+                <input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ce93d8", borderRadius: 5, fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }} value={ticEdit.tara_la} onChange={(e) => { const v = e.target.value; const ora = extractOra(v); setTicEdit((p) => ({ ...p, tara_la: v, ...(ora ? { ora_iesire: ora } : {}) })); }} placeholder="DD.MM.YYYY HH:MM:SS" />
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Ora intrare</label><input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }} value={ticEdit.ora_intrare} onChange={(e) => setTicEdit((p) => ({ ...p, ora_intrare: e.target.value }))} placeholder="HH:MM" /></div>
