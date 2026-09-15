@@ -2973,6 +2973,9 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
   // Bani aduși în casă computed — plățile din acești bani se introduc manual (câmpul "decont")
   const baniAdusiRows = sortByDateAsc(avRows.filter((r) => r.tip === "bani_adus"));
   const platitManual = (r) => (r.decont || []).reduce((s, d) => s + (parseSuma(d.suma) || 0), 0);
+  // Total "Rămas în casă" — suma peste toate depunerile de bani aduși (suma + sold anterior - plătit manual),
+  // afișat si in headerul aplicatiei pentru vizibilitate rapida.
+  const ramasInCasaTotal = baniAdusiRows.reduce((s, r) => { const totalDisp = (parseSuma(r.suma) || 0) + (parseSuma(r.sold_anterior) || 0); return s + (totalDisp - platitManual(r)); }, 0);
 
   // Contracte computed
   const filtCT = sortByDateAsc(contracte.filter((r) => !ctSearch || r.companie?.toLowerCase().includes(ctSearch.toLowerCase()) || r.nr?.includes(ctSearch) || r.detalii?.toLowerCase().includes(ctSearch.toLowerCase())));
@@ -3089,6 +3092,10 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <div style={{ display: "flex", gap: 6, fontSize: 11, opacity: 0.8 }}><span>📍 Afumați, Jud. Ilfov</span><span onClick={() => setShowAutMediu(true)} title="Deschide Autorizația de Mediu" style={{ cursor: "pointer", textDecoration: "underline dotted", textUnderlineOffset: 3 }}>📋 Aut. Mediu: 233/22.12.2021</span></div>
+          <div onClick={() => setTab("avansuri")} title="Vezi detalii în Avansuri & Dividende" style={{ display: "flex", alignItems: "center", gap: 5, background: ramasInCasaTotal < 0 ? "rgba(198,40,40,0.35)" : "rgba(255,255,255,0.15)", borderRadius: 6, padding: "4px 10px", cursor: "pointer" }}>
+            <span style={{ fontSize: 11 }}>💰 Rămas în casă:</span>
+            <span style={{ fontSize: 12, fontWeight: 700 }}>{fmt(ramasInCasaTotal)} lei</span>
+          </div>
           <div style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(255,255,255,0.15)", borderRadius: 6, padding: "4px 10px" }}>
             <span style={{ fontSize: 11 }}>👤</span>
             <span style={{ fontSize: 12, fontWeight: 700 }}>{currentUser || "—"}</span>
