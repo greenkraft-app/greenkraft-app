@@ -3448,11 +3448,11 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
               </div>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 700, color: "#6a1b9a" }}>⚖️ Cântărit BRUT la</label>
-                <input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ce93d8", borderRadius: 5, fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }} value={ticEdit.brut_la} onChange={(e) => { const v = e.target.value; const ora = extractOra(v); setTicEdit((p) => ({ ...p, brut_la: v, ...(ora ? { ora_intrare: ora } : {}) })); }} placeholder="DD.MM.YYYY HH:MM:SS" />
+                <input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ce93d8", borderRadius: 5, fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }} value={ticEdit.brut_la} onChange={(e) => { const v = e.target.value; const ora = extractOra(v); setTicEdit((p) => { if (!ora) return { ...p, brut_la: v }; const oraField = p.tip === "Iesire" ? "ora_iesire" : "ora_intrare"; return { ...p, brut_la: v, [oraField]: ora }; }); }} placeholder="DD.MM.YYYY HH:MM:SS" />
               </div>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 700, color: "#6a1b9a" }}>⚖️ Cântărit TARA la</label>
-                <input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ce93d8", borderRadius: 5, fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }} value={ticEdit.tara_la} onChange={(e) => { const v = e.target.value; const ora = extractOra(v); setTicEdit((p) => ({ ...p, tara_la: v, ...(ora ? { ora_iesire: ora } : {}) })); }} placeholder="DD.MM.YYYY HH:MM:SS" />
+                <input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ce93d8", borderRadius: 5, fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }} value={ticEdit.tara_la} onChange={(e) => { const v = e.target.value; const ora = extractOra(v); setTicEdit((p) => { if (!ora) return { ...p, tara_la: v }; const oraField = p.tip === "Iesire" ? "ora_intrare" : "ora_iesire"; return { ...p, tara_la: v, [oraField]: ora }; }); }} placeholder="DD.MM.YYYY HH:MM:SS" />
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Ora intrare</label><input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }} value={ticEdit.ora_intrare} onChange={(e) => setTicEdit((p) => ({ ...p, ora_intrare: e.target.value }))} placeholder="HH:MM" /></div>
