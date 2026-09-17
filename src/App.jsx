@@ -1922,7 +1922,9 @@ export default function App() {
     await sb.from("anexa3").update(patch).eq("id", a3.id);
     logAction("Editare", "Anexa 3", a3.serie + " " + a3.numar, rol + " → " + valoare);
   };
-  const printA3 = (a3) => {
+  // Construieste continutul HTML al formularului Anexa 3 (fara <html>/<body> in jur) —
+  // folosit atat la print (fereastra noua + window.print) cat si la exportul PDF de o pagina.
+  const buildA3Html = (a3) => {
     const kgTxt = a3.kilograme != null ? fmt(a3.kilograme) + " Kg" : "* se cantareste la destinatie";
     const destRows = DESTINATII.map((d) =>
       "<div style=\"font-size:10px;\">" + d + " " + (a3.descriere_destinatie === d ? "\u25cf" : "\u25cb") + "</div>"
@@ -2011,9 +2013,51 @@ export default function App() {
           "</table>" +
         "</div>" +
       "</div>";
+    return html;
+  };
+
+  const printA3 = (a3) => {
+    const html = buildA3Html(a3);
     const w = window.open("", "_blank");
     w.document.write("<html><head><title>Anexa 3 " + a3.serie + " " + a3.numar + "</title><style>html,body{margin:0;height:100%;} @page{size:A4 portrait;margin:10mm;}</style></head><body>" + html + "<scr" + "ipt>window.onload=function(){setTimeout(function(){window.print();},300);};</scr" + "ipt></body></html>");
     w.document.close(); w.focus();
+  };
+
+  // ── Descarca Anexa 3 ca PDF de o singura pagina ────────────
+  // Print-ul din browser (mai ales pe telefon) nu respecta mereu @page{size:A4}, iar continutul
+  // poate depasi o pagina fizica si se imparte pe 2-3 pagini. Randam formularul offscreen la
+  // dimensiunea exacta a unei pagini A4 (in px, la o rezolutie mai mare pentru claritate), il
+  // "fotografiem" cu html2canvas si punem acea imagine pe o singura pagina PDF — garantat 1 pagina,
+  // indiferent de browser/telefon.
+  const loadPdfLibs = async () => {
+    const load = (src) => new Promise((res, rej) => {
+      const s = document.createElement("script");
+      s.src = src; s.onload = res; s.onerror = rej;
+      document.head.appendChild(s);
+    });
+    if (!window.html2canvas) await load("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");
+    if (!window.jspdf) await load("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
+    return { html2canvas: window.html2canvas, jsPDF: window.jspdf.jsPDF };
+  };
+  const [a3PdfLoading, setA3PdfLoading] = useState(null); // id-ul anexei 3 aflate in curs de export
+  const downloadA3Pdf = async (a3) => {
+    setA3PdfLoading(a3.id);
+    try {
+      const { html2canvas, jsPDF } = await loadPdfLibs();
+      const A4_W = 1587, A4_H = 2245; // px la ~192dpi (2x fata de 96dpi) — imagine clara, dimensiuni exacte A4
+      const host = document.createElement("div");
+      host.style.cssText = `position:fixed;left:-99999px;top:0;width:${A4_W}px;height:${A4_H}px;background:#fff;overflow:hidden;`;
+      // inlocuim min-height:100vh (gandit pt. fereastra de print) cu height:100% din containerul fix A4
+      host.innerHTML = buildA3Html(a3).replace("min-height:100vh", "height:100%");
+      document.body.appendChild(host);
+      await new Promise((r) => setTimeout(r, 50)); // lasam layout-ul sa se stabilizeze
+      const canvas = await html2canvas(host, { width: A4_W, height: A4_H, scale: 1, backgroundColor: "#ffffff" });
+      document.body.removeChild(host);
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, 210, 297);
+      pdf.save(`Anexa3_${a3.serie || ""}${a3.numar || ""}.pdf`);
+    } catch (e) { alert("Eroare la generarea PDF: " + e.message); }
+    setA3PdfLoading(null);
   };
 
   const handlePrintPV = () => {
@@ -4453,7 +4497,10 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                                     <td style={{ ...td({ fontSize: 11 }), padding: 2 }}><div style={ACB}><ACStrict value={a3.categorie || ""} options={ANEXA3_CATEGORII} onChange={(v) => updA3(oi, "categorie", v)} /></div></td>
                                     <td style={td({ textAlign: "right", fontWeight: 700, padding: 2 })}><input style={inp({ textAlign: "right", fontWeight: 700, width: 65 })} value={a3.kilograme ?? ""} onChange={(e) => updA3(oi, "kilograme", e.target.value === "" ? null : parseSuma(e.target.value))} /></td>
                                     <td style={td({ textAlign: "center", fontSize: 10 })}>{a3.operator || "—"}</td>
-                                    <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => printA3(a3)} style={{ background: "#f3e5f5", border: "1px solid #ce93d8", borderRadius: 4, cursor: "pointer", color: "#6a1b9a", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>🖨️</button></td>
+                                    <td style={td({ textAlign: "center", padding: 2, whiteSpace: "nowrap" })}>
+                                      <button onClick={() => printA3(a3)} title="Printează" style={{ background: "#f3e5f5", border: "1px solid #ce93d8", borderRadius: 4, cursor: "pointer", color: "#6a1b9a", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>🖨️</button>{" "}
+                                      <button onClick={() => downloadA3Pdf(a3)} disabled={a3PdfLoading === a3.id} title="Descarcă PDF (1 pagină)" style={{ background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 4, cursor: a3PdfLoading === a3.id ? "wait" : "pointer", color: "#1565c0", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>{a3PdfLoading === a3.id ? "⏳" : "📄"}</button>
+                                    </td>
                                     <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => delA3(a3)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
                                   </tr>
                                   {isExp && (
