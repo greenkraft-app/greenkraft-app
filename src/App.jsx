@@ -5294,7 +5294,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   </div>
                   <div style={{ overflowX: "auto" }}>
                     <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12 }}>
-                      <thead><tr>{["Nr.", "Data", "Ore", "Status", "Tip", "Furnizor", "Mașină", "Șofer", "Material", "Brut", "Tara", "NET (kg)", "Operator", "🖨️", "✏️", ""].map((h, i) => <th key={i} style={th({ background: G })}>{h}</th>)}</tr></thead>
+                      <thead><tr>{["Nr.", "Data", "Ore", "Status", "Tip", "Furnizor", "Mașină", "Șofer", "Material", "Brut", "Tara", "NET (kg)", "Operator", "🖨️", "📤", "✏️", ""].map((h, i) => <th key={i} style={th({ background: G })} title={h === "📤" ? "Trimite către WiseWeee" : undefined}>{h}</th>)}</tr></thead>
                       <tbody>
                         {filtrate.map((t, idx) => (
                           <tr key={t.id} style={{ background: t.status === "gol" ? "#fff8e1" : idx % 2 === 0 ? "#fff" : "#f8fbf9" }}>
@@ -5312,11 +5312,12 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                             <td style={td({ textAlign: "right", fontWeight: 700, background: "#fff8e1", color: "#e65100" })}>{fmt(t.net)}</td>
                             <td style={td({ textAlign: "center", fontSize: 10 })}>{t.operator || "—"}</td>
                             <td style={td({ textAlign: "center", padding: 2, whiteSpace: "nowrap" })}><button onClick={() => printTichet(t)} style={{ background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 4, cursor: "pointer", color: "#1565c0", fontSize: 11, fontWeight: 700, padding: "2px 8px" }} title="Printează aici">🖨️</button> <button onClick={() => trimiteLaPrint(t)} style={{ background: "#ede7f6", border: "1px solid #b39ddb", borderRadius: 4, cursor: "pointer", color: "#6a1b9a", fontSize: 11, fontWeight: 700, padding: "2px 6px" }} title="Trimite la imprimanta de la birou">📡🖨️</button></td>
+                            <td style={td({ textAlign: "center", padding: 2 })}>{t.status === "gol" ? "—" : wwSent[t.id] ? <span style={{ color: G, fontSize: 15 }} title="Trimis">✓</span> : <button onClick={() => trimiteWiseWeee({ id: t.id, furn: t.partener, nr_doc: t.aviz, produs: t.material, cant: t.net, data: t.data, tichet_id: String(t.id) })} title="Trimite spre WiseWeee" style={{ background: "#fff3e0", border: "1px solid #ffb74d", borderRadius: 4, cursor: "pointer", fontSize: 13, padding: "2px 5px" }}>📤</button>}</td>
                             <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => setTicEdit({ id: t.id, status: t.status, tip: t.tip, nr_tichet: t.nr_tichet, data: t.data || "", partener: t.partener || "", transportator: t.transportator || "", transportator_cui: t.transportator_cui || "", nr_masina: t.nr_masina || "", sofer: t.sofer || "", material: t.material || "", brut: t.brut != null ? String(t.brut) : "", tara: t.tara != null ? String(t.tara) : "", factura: t.factura || "", aviz: t.aviz || "", brut_la: t.brut_la || "", tara_la: t.tara_la || "", ora_intrare: t.ora_intrare || "", ora_iesire: t.ora_iesire || "" })} style={{ background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 4, cursor: "pointer", color: "#e65100", fontSize: 11, fontWeight: 700, padding: "2px 8px" }} title="Editează tichetul">✏️</button></td>
                             <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => delTichet(t)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
                           </tr>
                         ))}
-                        {filtrate.length === 0 && <tr><td colSpan={16} style={{ padding: 20, textAlign: "center", color: "#999", fontSize: 12 }}>Niciun tichet {ticLuna || ticAzi || ticFilter ? "pentru filtrele alese" : "încă"}.</td></tr>}
+                        {filtrate.length === 0 && <tr><td colSpan={17} style={{ padding: 20, textAlign: "center", color: "#999", fontSize: 12 }}>Niciun tichet {ticLuna || ticAzi || ticFilter ? "pentru filtrele alese" : "încă"}.</td></tr>}
                       </tbody>
                     </table>
                   </div>
