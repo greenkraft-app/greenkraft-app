@@ -208,6 +208,7 @@ const LUNI = ["Ian","Feb","Mar","Apr","Mai","Iun","Iul","Aug","Sep","Oct","Nov",
 const SERII = ["GK","GKR"];
 const CAT_PAROLE = ["Email","Bancă","Card","Platformă","WiFi","Altele"];
 const PIN_CORRECT = "336699";
+const USER_PASSWORDS = { Catalin: "Kraft$888", Alexandru: "310890", Mihai: "336699" };
 
 // ── PV constants ──────────────────────────────────────────────
 const PV_MATERIALE = [
@@ -697,6 +698,11 @@ export default function App() {
   // ── UI state ─────────────────────────────────────────────
   const [tab, setTab] = useState("dashboard");
   const [currentUser, setCurrentUser] = useState(() => localStorage.getItem("currentUser") || "");
+  // Login (nume + parolă) — parola se verifică doar o dată; dupa aceea currentUser
+  // ramane in localStorage si nu mai e ceruta din nou pe acel telefon/calculator.
+  const [loginPendingUser, setLoginPendingUser] = useState(null);
+  const [loginPass, setLoginPass] = useState("");
+  const [loginError, setLoginError] = useState(false);
   const [backupLoading, setBackupLoading] = useState(false);
   const [auditLog, setAuditLog] = useState([]);
   const [showAutMediu, setShowAutMediu] = useState(false);
@@ -3041,16 +3047,46 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
               <span style={{ fontSize: 26, fontWeight: 900, color: G, letterSpacing: -0.5 }}>Green</span>
               <span style={{ fontSize: 26, fontWeight: 900, color: "#4caf50", letterSpacing: -0.5 }}>kraft</span>
             </div>
-            <div style={{ fontSize: 13, color: "#666", marginBottom: 24 }}>Cine ești?</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {["Catalin", "Alexandru", "Mihai"].map(u => (
-                <button key={u} onClick={() => { setCurrentUser(u); localStorage.setItem("currentUser", u); }} style={{ background: `linear-gradient(135deg,${G},#43a047)`, color: "#fff", border: "none", borderRadius: 8, padding: "12px 20px", cursor: "pointer", fontSize: 15, fontWeight: 700, transition: "transform .1s" }}
-                  onMouseEnter={(e) => e.currentTarget.style.transform = "scale(1.03)"}
-                  onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}
-                >👤 {u}</button>
-              ))}
-            </div>
-            <div style={{ marginTop: 16, fontSize: 10, color: "#aaa" }}>Modificările tale vor fi înregistrate în istoric</div>
+            {!loginPendingUser ? (
+              <>
+                <div style={{ fontSize: 13, color: "#666", marginBottom: 24 }}>Cine ești?</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {["Catalin", "Alexandru", "Mihai"].map(u => (
+                    <button key={u} onClick={() => { setLoginPendingUser(u); setLoginPass(""); setLoginError(false); }} style={{ background: `linear-gradient(135deg,${G},#43a047)`, color: "#fff", border: "none", borderRadius: 8, padding: "12px 20px", cursor: "pointer", fontSize: 15, fontWeight: 700, transition: "transform .1s" }}
+                      onMouseEnter={(e) => e.currentTarget.style.transform = "scale(1.03)"}
+                      onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}
+                    >👤 {u}</button>
+                  ))}
+                </div>
+                <div style={{ marginTop: 16, fontSize: 10, color: "#aaa" }}>Modificările tale vor fi înregistrate în istoric</div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 16, fontWeight: 700, color: "#333", marginBottom: 20 }}>👤 {loginPendingUser}</div>
+                <input
+                  type="password"
+                  autoFocus
+                  autoComplete="current-password"
+                  value={loginPass}
+                  onChange={(e) => { setLoginPass(e.target.value); setLoginError(false); }}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter") return;
+                    if (loginPass === USER_PASSWORDS[loginPendingUser]) { setCurrentUser(loginPendingUser); localStorage.setItem("currentUser", loginPendingUser); }
+                    else setLoginError(true);
+                  }}
+                  placeholder="Parolă"
+                  style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", border: `1.5px solid ${loginError ? "#e53935" : "#ccc"}`, borderRadius: 8, fontSize: 15, textAlign: "center", marginBottom: 10 }}
+                />
+                {loginError && <div style={{ color: "#e53935", fontSize: 12, fontWeight: 600, marginBottom: 10 }}>❌ Parolă greșită</div>}
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button onClick={() => setLoginPendingUser(null)} style={{ flex: 1, background: "#f5f5f5", color: "#555", border: "1px solid #ccc", borderRadius: 8, padding: "10px 16px", cursor: "pointer", fontSize: 14, fontWeight: 600 }}>← Înapoi</button>
+                  <button onClick={() => {
+                    if (loginPass === USER_PASSWORDS[loginPendingUser]) { setCurrentUser(loginPendingUser); localStorage.setItem("currentUser", loginPendingUser); }
+                    else setLoginError(true);
+                  }} style={{ flex: 1, background: `linear-gradient(135deg,${G},#43a047)`, color: "#fff", border: "none", borderRadius: 8, padding: "10px 16px", cursor: "pointer", fontSize: 14, fontWeight: 700 }}>Intră →</button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -3100,7 +3136,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
           <div style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(255,255,255,0.15)", borderRadius: 6, padding: "4px 10px" }}>
             <span style={{ fontSize: 11 }}>👤</span>
             <span style={{ fontSize: 12, fontWeight: 700 }}>{currentUser || "—"}</span>
-            <button onClick={() => { if (window.confirm("Schimbi user-ul?")) { localStorage.removeItem("currentUser"); setCurrentUser(""); } }} title="Schimbă user" style={{ background: "transparent", border: "none", color: "#fff", cursor: "pointer", fontSize: 10, marginLeft: 4, opacity: 0.7 }}>🔄</button>
+            <button onClick={() => { if (window.confirm("Schimbi user-ul?")) { localStorage.removeItem("currentUser"); setCurrentUser(""); setLoginPendingUser(null); setLoginPass(""); setLoginError(false); } }} title="Schimbă user" style={{ background: "transparent", border: "none", color: "#fff", cursor: "pointer", fontSize: 10, marginLeft: 4, opacity: 0.7 }}>🔄</button>
           </div>
           <button onClick={generateBackup} disabled={backupLoading} title="Descarcă backup JSON" style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.3)", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: backupLoading ? "wait" : "pointer", fontSize: 11, fontWeight: 600 }}>{backupLoading ? "⏳" : "💾 Backup"}</button>
         </div>
