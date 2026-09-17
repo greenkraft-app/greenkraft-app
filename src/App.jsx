@@ -5087,10 +5087,13 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
               .sort((a, b) => dataMs(b.data) - dataMs(a.data) || (parseInt(b.nr_tichet) || 0) - (parseInt(a.nr_tichet) || 0))[0] || null;
           })();
           const deschise = ticheteList.filter((t) => t.status === "deschis");
-          const goale = sortByDateAsc(ticheteList.filter((t) => t.status === "gol"));
+          // Cele rezervate (fara cantarire inca) se ordoneaza dupa nr. de tichet, nu dupa data/ora —
+          // n-au o ora reala de cantarire, doar ora la care au fost rezervate, care poate insela.
+          const sortByNrTichetAsc = (arr) => [...arr].sort((a, b) => (parseInt(a.nr_tichet) || 0) - (parseInt(b.nr_tichet) || 0));
+          const goale = sortByNrTichetAsc(ticheteList.filter((t) => t.status === "gol"));
           const inchise = sortByDateAsc(ticheteList.filter((t) => t.status === "inchis"));
           const lunaOpts = [...new Set(ticheteList.map((t) => monthOf(t.data)).filter(Boolean))].sort();
-          const filtrate = sortByDateAsc([...inchise, ...goale]).filter((t) => {
+          const filtrate = [...inchise, ...goale].filter((t) => {
             if (ticAzi) { if (t.data !== today()) return false; }
             else if (ticLuna && monthOf(t.data) !== ticLuna) return false;
             if (ticFilter) {
