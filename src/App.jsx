@@ -2025,10 +2025,11 @@ export default function App() {
 
   // ── Descarca Anexa 3 ca PDF de o singura pagina ────────────
   // Print-ul din browser (mai ales pe telefon) nu respecta mereu @page{size:A4}, iar continutul
-  // poate depasi o pagina fizica si se imparte pe 2-3 pagini. Randam formularul offscreen la
-  // dimensiunea exacta a unei pagini A4 (in px, la o rezolutie mai mare pentru claritate), il
-  // "fotografiem" cu html2canvas si punem acea imagine pe o singura pagina PDF — garantat 1 pagina,
-  // indiferent de browser/telefon.
+  // poate depasi o pagina fizica si se imparte pe 2-3 pagini. NU modificam deloc HTML-ul/stilul
+  // folosit la print (buildA3Html, neatins) — il randam, neschimbat, intr-un <iframe> care ARE
+  // propriul lui viewport, cu dimensiuni fixe cat o pagina A4. Asa "min-height:100vh" din interior
+  // se raporteaza la acel iframe (o "pagina"), nu la fereastra browserului — exact cum arata si la
+  // print, dar cu inaltimea de referinta corecta, garantat pe o singura pagina.
   const loadPdfLibs = async () => {
     const load = (src) => new Promise((res, rej) => {
       const s = document.createElement("script");
@@ -2044,17 +2045,25 @@ export default function App() {
     setA3PdfLoading(a3.id);
     try {
       const { html2canvas, jsPDF } = await loadPdfLibs();
-      const A4_W = 1587, A4_H = 2245; // px la ~192dpi (2x fata de 96dpi) — imagine clara, dimensiuni exacte A4
-      const host = document.createElement("div");
-      host.style.cssText = `position:fixed;left:-99999px;top:0;width:${A4_W}px;height:${A4_H}px;background:#fff;overflow:hidden;`;
-      // inlocuim min-height:100vh (gandit pt. fereastra de print) cu height:100% din containerul fix A4
-      host.innerHTML = buildA3Html(a3).replace("min-height:100vh", "height:100%");
-      document.body.appendChild(host);
-      await new Promise((r) => setTimeout(r, 50)); // lasam layout-ul sa se stabilizeze
-      const canvas = await html2canvas(host, { width: A4_W, height: A4_H, scale: 1, backgroundColor: "#ffffff" });
-      document.body.removeChild(host);
+      // Zona utila a paginii la print: A4 (210x297mm) minus marginile de 10mm din @page => 190x277mm.
+      // O randam in px la 96dpi (cum mapeaza browserul px-ii la print), ca fonturile fixe in px
+      // (11-12px) sa iasa la aceeasi marime fizica ca la print. Claritatea o dam din scale, nu din
+      // marirea viewportului — altfel textul ar aparea de 2x mai mic fata de pagina.
+      const MARGIN_MM = 10, CONTENT_W_MM = 190, CONTENT_H_MM = 277;
+      const PX_PER_MM = 96 / 25.4;
+      const W = Math.round(CONTENT_W_MM * PX_PER_MM), H = Math.round(CONTENT_H_MM * PX_PER_MM); // ~718 x 1047 px
+      const iframe = document.createElement("iframe");
+      iframe.style.cssText = `position:fixed;left:-99999px;top:0;width:${W}px;height:${H}px;border:none;`;
+      document.body.appendChild(iframe);
+      const html = buildA3Html(a3); // acelasi HTML, neschimbat, ca la Print
+      iframe.contentDocument.open();
+      iframe.contentDocument.write("<html><head><style>html,body{margin:0;overflow:hidden;}</style></head><body>" + html + "</body></html>");
+      iframe.contentDocument.close();
+      await new Promise((r) => setTimeout(r, 100)); // lasam iframe-ul sa-si calculeze layout-ul
+      const canvas = await html2canvas(iframe.contentDocument.body, { width: W, height: H, windowWidth: W, windowHeight: H, scale: 3, backgroundColor: "#ffffff" });
+      document.body.removeChild(iframe);
       const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-      pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, 210, 297);
+      pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", MARGIN_MM, MARGIN_MM, CONTENT_W_MM, CONTENT_H_MM);
       pdf.save(`Anexa3_${a3.serie || ""}${a3.numar || ""}.pdf`);
     } catch (e) { alert("Eroare la generarea PDF: " + e.message); }
     setA3PdfLoading(null);
