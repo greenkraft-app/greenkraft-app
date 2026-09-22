@@ -436,10 +436,33 @@ function MultiSelectFilter({ value, onChange, options, placeholder }) {
     </div>
   );
 }
+// ── Retineri borderou ─────────────────────────────────────────
+// Deseurile din gospodaria proprie sunt scutite de impozitul pe venit de 10%; taxa de mediu de 2% se retine mereu.
+const calcRetineri = (v, sursa) => {
+  const imp = sursa === "gospodarie" ? 0 : Math.round(v * 0.1);
+  const tax = Math.round(v * 0.02);
+  return { imp, tax, rest: v - imp - tax };
+};
+// Registrul nu retine sursa; o deducem din valoarea neta salvata (la gospodarie lipseste impozitul de 10%).
+const sursaDinValoare = (v, valoare) => {
+  const net = parseSuma(valoare);
+  if (!v || !net) return "alte";
+  const netGosp = Math.round(calcRetineri(v, "gospodarie").rest);
+  const netAlte = Math.round(calcRetineri(v, "alte").rest);
+  return netGosp !== netAlte && Math.abs(net - netGosp) < 1 ? "gospodarie" : "alte";
+};
+const sursaDinRegistru = (rows) => {
+  for (const r of rows) {
+    const v = (parseSuma(r.cantitate) || 0) * (parseSuma(r.pu) || 0);
+    if (v) return sursaDinValoare(v, r.valoare);
+  }
+  return "alte";
+};
+
 // ── Borderou Print ────────────────────────────────────────────
 function BordPrint({ b }) {
   const tot = b.produse.reduce((s, p) => s + (parseSuma(p.cant) || 0) * (parseSuma(p.pret) || 0), 0);
-  const imp = Math.round(tot * 0.1), tax = Math.round(tot * 0.02), rest = tot - imp - tax;
+  const { imp, tax, rest } = calcRetineri(tot, b.sursa);
   const tS = { width: "100%", borderCollapse: "collapse", margin: "8px 0", fontSize: 11 };
   const thP = (x = {}) => ({ border: "1px solid #000", padding: "4px 6px", fontWeight: "bold", textAlign: "center", background: "#f5f5f5", ...x });
   const tdP = (x = {}) => ({ border: "1px solid #000", padding: "4px 6px", textAlign: "center", ...x });
@@ -476,7 +499,7 @@ function BordPrint({ b }) {
       </table>
       <div style={{ margin: "8px 0", fontSize: 11 }}>Se achita suma de <strong>{Math.round(rest)} Lei</strong>, adica (<em>{litere(Math.round(rest))} lei</em>) reprezentand contravaloarea deseurilor achizitionate cu chitanta nr. {b.nr}, sau la termen de maximum 3 zile lucratoare de la data prezentei, prin virament bancar in contul detinatorului nr. ______________________________, deschis la ______________________________.</div>
       <div style={{ fontSize: 10, margin: "6px 0", lineHeight: 1.6 }}>
-        <p style={{ margin: "0 0 5px" }}>Impozitul pe venit de 10% si contributia de 2% la Administratia Fondului pentru Mediu (conf. Ordonantei de urgenta a Guvernului nr. 196/2005 privind Fondul pentru mediu, aprobata cu modificari si completari prin Legea nr. 105/2006, cu modificarile si completarile ulterioare) din contravaloarea deseurilor predate, au fost retinute la sursa din valoarea bruta.</p>
+        <p style={{ margin: "0 0 5px" }}>{b.sursa === "gospodarie" ? "Contributia" : "Impozitul pe venit de 10% si contributia"} de 2% la Administratia Fondului pentru Mediu (conf. Ordonantei de urgenta a Guvernului nr. 196/2005 privind Fondul pentru mediu, aprobata cu modificari si completari prin Legea nr. 105/2006, cu modificarile si completarile ulterioare) din contravaloarea deseurilor predate, {b.sursa === "gospodarie" ? "a fost retinuta" : "au fost retinute"} la sursa din valoarea bruta.</p>
         <p style={{ margin: "0 0 5px" }}>Imi exprim acordul cu privire la utilizarea si prelucrarea datelor mele cu caracter personal de catre societatea GREEN KRAFT S.R.L. Sunt informat de catre beneficiar- ca aceste date vor fi tratate confidential, in conformitate cu prevederile Regulamentului (UE) 2016/679 privind protectia persoanelor fizice in ceea ce priveste prelucrarea datelor cu caracter personal si privind libera circulatie a acestor date.</p>
         <p style={{ margin: "0" }}>Datele dumneavoastra personale sunt prelucrate de societatea GREEN KRAFT S.R.L. in conformitate cu Regulamentul (UE) 2016/679 privind protectia persoanelor fizice in ceea ce priveste prelucrarea datelor cu caracter personal si privind libera circulatie a acestor date in scopul completarii si transmiterii declaratiilor si raportarilor legale.</p>
       </div>
@@ -1084,7 +1107,7 @@ export default function App() {
   const lastRegLen = useRef(0);
   const updP = (i, f, v) => setB((b) => { const ps = [...b.produse]; ps[i] = { ...ps[i], [f]: v }; if (f === "den") { const fd = produseList.find((p) => p.den === v); if (fd) { ps[i].cod = fd.cod; ps[i].cod_art = fd.cod_art; } } return { ...b, produse: ps }; });
   const bTot = b.produse.reduce((s, p) => s + (parseSuma(p.cant) || 0) * (parseSuma(p.pret) || 0), 0);
-  const bImp = Math.round(bTot * 0.1), bTax = Math.round(bTot * 0.02), bRest = bTot - bImp - bTax;
+  const { imp: bImp, tax: bTax, rest: bRest } = calcRetineri(bTot, b.sursa);
 
   // ── Supabase-backed data ──────────────────────────────────
   const [registru, setRegistru] = useState([]);
@@ -1417,8 +1440,7 @@ export default function App() {
     if (registru.some(x => x.serie === b.serie && String(x.nr) === String(b.nr))) { alert(`⚠️ Borderou ${b.serie} ${b.nr} există deja în Registru!`); return; }
     const newEntries = pr.map((p) => {
       const v = (parseSuma(p.cant) || 0) * (parseSuma(p.pret) || 0);
-      const imp = Math.round(v * 0.1), tx = Math.round(v * 0.02);
-      return { serie: b.serie, nr: b.nr, data: b.data, furnizor: b.det, adresa: b.dom, cnp: b.cnp, denumire: p.den.toUpperCase(), cantitate: parseSuma(p.cant) || 0, pu: parseSuma(p.pret) || 0, valoare: Math.round(v - imp - tx) };
+      return { serie: b.serie, nr: b.nr, data: b.data, furnizor: b.det, adresa: b.dom, cnp: b.cnp, denumire: p.den.toUpperCase(), cantitate: parseSuma(p.cant) || 0, pu: parseSuma(p.pret) || 0, valoare: Math.round(calcRetineri(v, b.sursa).rest) };
     });
     const { data: ins, error } = await sb.from("registru").insert(newEntries).select();
     if (error) { alert("❌ Eroare salvare Borderou: " + error.message); return; }
@@ -2145,8 +2167,7 @@ export default function App() {
     const cant = parseSuma(r.cantitate) || 0;
     const pu = parseSuma(r.pu) || 0;
     const v = cant * pu;
-    const imp = Math.round(v * 0.1);
-    const tax = Math.round(v * 0.02);
+    const { imp, tax } = calcRetineri(v, sursaDinValoare(v, r.valoare));
     const fd = produseList.find(p => p.den === r.denumire || p.den.toUpperCase() === r.denumire);
     const codSaga = fd?.cod_art || "";
     const denSaga = fd?.den || r.denumire || "";
@@ -2830,7 +2851,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
         ci_s: "", ci_n: "", ci_e: "", ci_v: "",
         cnp: first.cnp || "",
         trans: "Auto",
-        sursa: "alte",
+        sursa: sursaDinRegistru(rows),
         produse: rows.map(r => {
           const fd = produseList.find(p => p.den === r.denumire || p.den.toUpperCase() === r.denumire);
           return { den: r.denumire || "", cod: fd?.cod || "", cant: r.cantitate || "", pret: r.pu || "" };
@@ -2868,7 +2889,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
       ci_s: "", ci_n: "", ci_e: "", ci_v: "",
       cnp: first.cnp || "",
       trans: "Auto",
-      sursa: "alte",
+      sursa: sursaDinRegistru(rows),
       produse: rows.map((r) => {
         const fd = produseList.find((p) => p.den === r.denumire || p.den.toUpperCase() === r.denumire);
         return {
