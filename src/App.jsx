@@ -4150,6 +4150,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   <SC label="Total" value={filteredReg.length + " / " + registru.length + " buc."} c={G} bg="#e8f5e9" />
                   <SC label="Cant." value={fmt(filteredReg.reduce((s, r) => s + (parseSuma(r.cantitate) || 0), 0)) + " kg"} c="#1565c0" bg="#e3f2fd" />
                   <SC label="Valoare" value={fmt(filteredReg.reduce((s, r) => s + (parseSuma(r.valoare) || 0), 0)) + " lei"} c="#6a1b9a" bg="#f3e5f5" />
+                  <SC label="Taxa mediu 2%" value={fmt(filteredReg.reduce((s, r) => s + calcRetineri((parseSuma(r.cantitate) || 0) * (parseSuma(r.pu) || 0), "gospodarie").tax, 0)) + " lei"} c="#c62828" bg="#ffebee" />
                   <button onClick={() => setBordSubTab("editor")} style={{ marginLeft: "auto", padding: "6px 14px", background: G, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Borderou nou</button>
                 </div>
                 <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
