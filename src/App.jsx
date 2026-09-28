@@ -1103,6 +1103,10 @@ export default function App() {
   const [borderouri, setBorderouri] = useState([newBord()]);
   // Cand editam un borderou deja emis: { serie, nr } al celui din registru, ca sa-l inlocuim la salvare
   const [editBord, setEditBord] = useState(null);
+  // Generare automata de borderouri (parametri + lista propusa, inainte de salvare)
+  const [autoCfg, setAutoCfg] = useState({ serie: "GK", data: today(), cate: 5, deseu: "", pret: "", cantMin: 300, cantMax: 500, pas: 20, sursa: "gospodarie" });
+  const [autoRows, setAutoRows] = useState([]);
+  const [autoSaving, setAutoSaving] = useState(false);
   const b = borderouri[activeBord] || newBord();
   const setB = (fn) => setBorderouri((p) => { const n = [...p]; n[activeBord] = fn(n[activeBord]); return n; });
   const updB = (f, v) => setB((b) => f === "serie" ? { ...b, serie: v, nr: getNextNr(v, registru) } : { ...b, [f]: v });
@@ -1496,6 +1500,67 @@ export default function App() {
     setBorderouri(p => { const n = [...p]; n[activeBord] = newBord(b.serie, updatedReg); return n; });
     setDetSearch("");
     setBordSubTab("registru");
+  };
+
+  // ── Generare automata de borderouri ───────────────────────
+  // Alege persoane fizice care nu au mai predat deseuri in luna respectiva (nici in registru, nici
+  // in lotul curent), cu cantitati aleatorii multiplu de 20 intre pragurile alese.
+  const genereazaBorderouri = () => {
+    const { serie, data, cate, deseu, pret, cantMin, cantMax, pas } = autoCfg;
+    const n = parseInt(cate) || 0;
+    const min = parseSuma(cantMin), max = parseSuma(cantMax), step = parseSuma(pas) || 20;
+    if (!data) { alert("Alege data borderourilor!"); return; }
+    if (n < 1) { alert("Alege câte borderouri vrei să generezi!"); return; }
+    if (!deseu) { alert("Alege tipul de deșeu!"); return; }
+    if (!parseSuma(pret)) { alert("Completează prețul (lei/kg)!"); return; }
+    const lo = Math.ceil(min / step), hi = Math.floor(max / step);
+    if (!min || !max || hi < lo) { alert(`Intervalul de cantitate nu conține niciun multiplu de ${step}!`); return; }
+
+    const luna = monthOf(data);
+    const cnpFolosite = new Set(registru.filter(r => monthOf(r.data) === luna).map(r => (r.cnp || "").trim()).filter(Boolean));
+    const numeFolosite = new Set(registru.filter(r => monthOf(r.data) === luna).map(r => (r.furnizor || "").trim().toUpperCase()).filter(Boolean));
+    const disponibili = pfList.filter(f => f.denumire && f.cod_fiscal
+      && !cnpFolosite.has(String(f.cod_fiscal).trim())
+      && !numeFolosite.has(f.denumire.trim().toUpperCase()));
+    if (!disponibili.length) { alert(`Nicio persoană fizică disponibilă în luna ${luna} — toate au deja borderouri.`); return; }
+
+    // amestecam si luam primele n
+    const pool = [...disponibili];
+    for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+    const alesi = pool.slice(0, n);
+    const fd = produseList.find(p => p.den === deseu);
+    const startNr = parseInt(getNextNr(serie, registru)) || 1;
+    const rows = alesi.map((f, i) => {
+      const cant = (lo + Math.floor(Math.random() * (hi - lo + 1))) * step;
+      const v = cant * parseSuma(pret);
+      return {
+        serie, nr: String(startNr + i), data,
+        det: f.denumire, dom: f.adresa || "", cnp: f.cod_fiscal || "",
+        denumire: deseu.toUpperCase(), cod: fd?.cod || "",
+        cant, pret: parseSuma(pret), valoare: Math.round(calcRetineri(v, autoCfg.sursa).rest),
+      };
+    });
+    setAutoRows(rows);
+    if (alesi.length < n) alert(`Am găsit doar ${alesi.length} persoane disponibile în luna ${luna} (din ${n} cerute).`);
+  };
+  const salveazaBorderouriGenerate = async () => {
+    if (!autoRows.length) return;
+    if (!window.confirm(`Salvezi ${autoRows.length} borderouri în Registru?`)) return;
+    setAutoSaving(true);
+    try {
+      const entries = autoRows.map(r => ({
+        serie: r.serie, nr: r.nr, data: r.data, furnizor: r.det, adresa: r.dom, cnp: r.cnp,
+        denumire: r.denumire, cantitate: r.cant, pu: r.pret, valoare: r.valoare,
+      }));
+      const { data: ins, error } = await sb.from("registru").insert(entries).select();
+      if (error) { alert("❌ Eroare la salvare: " + error.message); return; }
+      if (ins) setRegistru(p => [...p, ...ins]);
+      logAction("add", "registru", `${autoCfg.serie} ${autoRows[0].nr}-${autoRows[autoRows.length - 1].nr}`, { generate: autoRows.length, deseu: autoCfg.deseu });
+      alert(`✅ ${autoRows.length} borderouri salvate!`);
+      setAutoRows([]);
+      setBordSubTab("registru");
+    } catch (e) { alert("Eroare: " + e.message); }
+    setAutoSaving(false);
   };
 
   const handlePrint = () => {
@@ -3976,6 +4041,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
             <div style={{ display: "flex", borderBottom: "2px solid #e0e0e0", marginBottom: 12, flexWrap: "wrap", gap: 2 }}>
               <button style={subTabSt("editor")} onClick={() => setBordSubTab("editor")}>✏️ Editor PF</button>
               <button style={subTabSt("registru")} onClick={() => setBordSubTab("registru")}>📋 Registru PF <span style={{ marginLeft: 4, background: "#e53935", color: "#fff", borderRadius: 10, padding: "1px 5px", fontSize: 10, fontWeight: 700 }}>{registru.length}</span></button>
+              <button style={subTabSt("auto")} onClick={() => setBordSubTab("auto")}>⚙️ Generare automată</button>
               <button style={subTabSt("pf")} onClick={() => setBordSubTab("pf")}>👤 Pers. Fizice <span style={{ marginLeft: 4, background: "#1565c0", color: "#fff", borderRadius: 10, padding: "1px 5px", fontSize: 10, fontWeight: 700 }}>{pfList.length}</span></button>
             </div>
 
@@ -4119,6 +4185,77 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   </table>
                 </div>
               </div>
+              );
+            })()}
+
+            {bordSubTab === "auto" && (() => {
+              const luna = monthOf(autoCfg.data);
+              const folositi = new Set(registru.filter(r => monthOf(r.data) === luna).map(r => (r.cnp || "").trim()).filter(Boolean));
+              const disponibili = pfList.filter(f => f.denumire && f.cod_fiscal && !folositi.has(String(f.cod_fiscal).trim())).length;
+              const totalKg = autoRows.reduce((s, r) => s + r.cant, 0);
+              const totalVal = autoRows.reduce((s, r) => s + r.valoare, 0);
+              const fld = { ...IFS, marginTop: 2 };
+              return (
+                <div>
+                  <div style={{ background: "#e8f5e9", border: "1px solid #a5d6a7", borderRadius: 8, padding: 14, marginBottom: 12 }}>
+                    <div style={{ fontWeight: 700, color: G, marginBottom: 10, fontSize: 13 }}>⚙️ Generare automată borderouri</div>
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
+                      <div style={{ flex: "0 0 80px" }}><label style={LSt}>Seria</label><select style={{ ...fld, fontWeight: 700, color: G }} value={autoCfg.serie} onChange={(e) => setAutoCfg(p => ({ ...p, serie: e.target.value }))}>{SERII.map(s => <option key={s}>{s}</option>)}</select></div>
+                      <div style={{ flex: "0 0 150px" }}><label style={LSt}>Data emiterii</label><DateInput value={autoCfg.data} onChange={(v) => setAutoCfg(p => ({ ...p, data: v }))} style={fld} /></div>
+                      <div style={{ flex: "0 0 110px" }}><label style={LSt}>Câte borderouri</label><input type="number" min="1" style={fld} value={autoCfg.cate} onChange={(e) => setAutoCfg(p => ({ ...p, cate: e.target.value }))} /></div>
+                      <div style={{ flex: "1 1 240px", minWidth: 200 }}><label style={LSt}>Deșeu</label><div style={{ border: "1px solid #ccc", borderRadius: 4, padding: "2px 4px", background: "#fff" }}><ACStrict value={autoCfg.deseu} options={PRODUSE_DYN} placeholder="Selectează deșeul..." onChange={(v) => setAutoCfg(p => ({ ...p, deseu: v }))} /></div></div>
+                      <div style={{ flex: "0 0 110px" }}><label style={LSt}>Preț (lei/kg)</label><input style={fld} inputMode="decimal" value={autoCfg.pret} onChange={(e) => setAutoCfg(p => ({ ...p, pret: e.target.value }))} placeholder="0,80" /></div>
+                      <div style={{ flex: "0 0 100px" }}><label style={LSt}>Cant. min</label><input style={fld} inputMode="decimal" value={autoCfg.cantMin} onChange={(e) => setAutoCfg(p => ({ ...p, cantMin: e.target.value }))} /></div>
+                      <div style={{ flex: "0 0 100px" }}><label style={LSt}>Cant. max</label><input style={fld} inputMode="decimal" value={autoCfg.cantMax} onChange={(e) => setAutoCfg(p => ({ ...p, cantMax: e.target.value }))} /></div>
+                      <div style={{ flex: "0 0 100px" }}><label style={LSt}>Multiplu de</label><input style={fld} inputMode="numeric" value={autoCfg.pas} onChange={(e) => setAutoCfg(p => ({ ...p, pas: e.target.value }))} /></div>
+                      <div style={{ flex: "0 0 170px" }}><label style={LSt}>Sursa deșeurilor</label>
+                        <div style={{ display: "flex", gap: 10, fontSize: 12, marginTop: 6 }}>
+                          <label style={{ cursor: "pointer" }}><input type="radio" name="autoSursa" value="gospodarie" checked={autoCfg.sursa === "gospodarie"} onChange={(e) => setAutoCfg(p => ({ ...p, sursa: e.target.value }))} /> Gospodărie</label>
+                          <label style={{ cursor: "pointer" }}><input type="radio" name="autoSursa" value="alte" checked={autoCfg.sursa === "alte"} onChange={(e) => setAutoCfg(p => ({ ...p, sursa: e.target.value }))} /> Alte surse</label>
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
+                      <button onClick={genereazaBorderouri} style={{ padding: "7px 16px", background: G, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>🎲 Generează</button>
+                      {autoRows.length > 0 && <button onClick={() => setAutoRows([])} style={{ padding: "7px 14px", background: "#fff", border: "1px solid #c62828", color: "#c62828", borderRadius: 6, cursor: "pointer", fontSize: 12 }}>✕ Golește lista</button>}
+                      <span style={{ fontSize: 11, color: "#666" }}>Persoane disponibile în {luna || "luna aleasă"}: <strong style={{ color: disponibili ? G : "#c62828" }}>{disponibili}</strong> (nu se repetă nimeni în aceeași lună)</span>
+                    </div>
+                  </div>
+
+                  {autoRows.length > 0 && (
+                    <div>
+                      <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
+                        <SC label="Borderouri" value={autoRows.length + " buc."} c={G} bg="#e8f5e9" />
+                        <SC label="Total cant." value={fmt(totalKg) + " kg"} c="#1565c0" bg="#e3f2fd" />
+                        <SC label="Total de plată" value={fmt(totalVal) + " lei"} c="#6a1b9a" bg="#f3e5f5" />
+                        <button onClick={salveazaBorderouriGenerate} disabled={autoSaving} style={{ marginLeft: "auto", padding: "7px 16px", background: autoSaving ? "#ccc" : "#e65100", color: "#fff", border: "none", borderRadius: 6, cursor: autoSaving ? "wait" : "pointer", fontSize: 12, fontWeight: 700 }}>{autoSaving ? "⏳ Salvez..." : `💾 Salvează ${autoRows.length} borderouri`}</button>
+                      </div>
+                      <div style={{ overflowX: "auto" }}>
+                        <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 760 }}>
+                          <thead><tr>{["#", "Serie", "Nr", "Data", "Deținător", "CNP", "Deșeu", "Cant.(kg)", "PU", "De plată", ""].map((h, i) => <th key={i} style={th({ background: G })}>{h}</th>)}</tr></thead>
+                          <tbody>
+                            {autoRows.map((r, i) => (
+                              <tr key={i} style={{ background: i % 2 === 0 ? "#fff" : "#f7faf8" }}>
+                                <td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td>
+                                <td style={td({ textAlign: "center", fontWeight: 600 })}>{r.serie}</td>
+                                <td style={td({ textAlign: "center", fontWeight: 600, color: "#1565c0" })}>{r.nr}</td>
+                                <td style={td({ textAlign: "center" })}>{r.data}</td>
+                                <td style={td({ fontWeight: 600 })}>{r.det}</td>
+                                <td style={td({ textAlign: "center", fontFamily: "monospace", fontSize: 11 })}>{r.cnp}</td>
+                                <td style={td({ fontSize: 11 })}>{r.denumire}</td>
+                                <td style={td({ textAlign: "right", fontWeight: 700 })}>{fmt(r.cant)}</td>
+                                <td style={td({ textAlign: "right" })}>{fmt(r.pret)}</td>
+                                <td style={td({ textAlign: "right", fontWeight: 700, background: "#e8f5e9", color: G })}>{fmt(r.valoare)}</td>
+                                <td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => setAutoRows(p => p.filter((_, j) => j !== i))} title="Scoate din listă" style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div style={{ marginTop: 8, fontSize: 11, color: "#666" }}>💡 Verifică lista înainte de salvare. Poți scoate rânduri cu ✕ sau genera din nou pentru alte persoane/cantități.</div>
+                    </div>
+                  )}
+                </div>
               );
             })()}
 
