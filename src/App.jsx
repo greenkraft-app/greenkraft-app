@@ -1445,19 +1445,7 @@ export default function App() {
   const editeazaRegistruBord = (serie, nr) => {
     const rows = registru.filter((r) => r.serie === serie && String(r.nr) === String(nr));
     if (!rows.length) return;
-    const first = rows[0];
-    const pf = pfList.find((f) => f.cod_fiscal && f.cod_fiscal === first.cnp);
-    const bord = {
-      serie, nr: String(nr), data: first.data || "",
-      det: first.furnizor || "", dom: first.adresa || "", cnp: first.cnp || "",
-      ci_s: pf?.reg_com?.slice(0, 2) || "", ci_n: pf?.reg_com?.slice(2) || "",
-      ci_e: pf?.inf_supl?.split("-")[0]?.trim() || "", ci_v: pf?.inf_supl?.split("-").slice(1).join("-").trim() || "",
-      trans: "Auto", sursa: sursaDinRegistru(rows),
-      produse: rows.map((r) => {
-        const fd = produseList.find((p) => p.den === r.denumire || p.den.toUpperCase() === r.denumire);
-        return { den: fd?.den || r.denumire || "", cod: fd?.cod || "", cod_art: fd?.cod_art || "", cant: r.cantitate ?? "", pret: r.pu ?? "" };
-      }),
-    };
+    const bord = bordDinRegistru(serie, nr, rows);
     setBorderouri((p) => { const n = [...p]; n[activeBord] = bord; return n; });
     setEditBord({ serie, nr: String(nr) });
     setDetSearch(bord.det);
@@ -3000,16 +2988,18 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
   };
 
   // ── Print borderou din Registru ───────────────────────────
-  const printRegistruBord = (serie, nr) => {
-    const rows = registru.filter((r) => r.serie === serie && String(r.nr) === String(nr));
-    if (!rows.length) return;
+  // Reface borderoul din liniile lui de registru: sursa se deduce din valoarea neta, iar datele de
+  // CI (care nu se salveaza in registru) se completeaza din fisa persoanei fizice, dupa CNP.
+  const bordDinRegistru = (serie, nr, rows) => {
     const first = rows[0];
-    const bord = {
-      serie, nr,
+    const pf = pfList.find((f) => f.cod_fiscal && f.cod_fiscal === first.cnp);
+    return {
+      serie, nr: String(nr),
       data: first.data || "",
       det: first.furnizor || "",
       dom: first.adresa || "",
-      ci_s: "", ci_n: "", ci_e: "", ci_v: "",
+      ci_s: pf?.reg_com?.slice(0, 2) || "", ci_n: pf?.reg_com?.slice(2) || "",
+      ci_e: pf?.inf_supl?.split("-")[0]?.trim() || "", ci_v: pf?.inf_supl?.split("-").slice(1).join("-").trim() || "",
       cnp: first.cnp || "",
       trans: "Auto",
       sursa: sursaDinRegistru(rows),
@@ -3023,6 +3013,32 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
         };
       }),
     };
+  };
+  // Printeaza dintr-o data toate borderourile din lista primita (ex. cele filtrate pe o luna),
+  // fiecare pe pagina lui.
+  const printBorderouriLista = (rows) => {
+    const chei = [...new Set(rows.map((r) => `${r.serie}__${r.nr}`))];
+    if (!chei.length) { alert("Nu există borderouri de printat pentru filtrele alese."); return; }
+    if (chei.length > 40 && !window.confirm(`Se vor printa ${chei.length} borderouri. Continui?`)) return;
+    const bordList = chei.map((k) => {
+      const [serie, nr] = k.split("__");
+      const grup = registru.filter((r) => r.serie === serie && String(r.nr) === String(nr));
+      return grup.length ? bordDinRegistru(serie, nr, grup) : null;
+    }).filter(Boolean).sort((a, b) => (parseInt(a.nr) || 0) - (parseInt(b.nr) || 0));
+    setPdfBundle({ borderouri: bordList, pvuri: [] });
+    setTimeout(() => {
+      if (!pdfBundleRef.current) return;
+      const c = pdfBundleRef.current.innerHTML;
+      const w = window.open("", "_blank");
+      w.document.write(`<html><head><title>Borderouri (${bordList.length})</title><style>body{margin:0;padding:0;font-family:'Times New Roman',serif;} @page{size:A4;margin:10mm;}</style></head><body>${c}</body></html>`);
+      w.document.close(); w.focus();
+      setTimeout(() => w.print(), 400);
+    }, 400);
+  };
+  const printRegistruBord = (serie, nr) => {
+    const rows = registru.filter((r) => r.serie === serie && String(r.nr) === String(nr));
+    if (!rows.length) return;
+    const bord = bordDinRegistru(serie, nr, rows);
     setPrintBord(bord);
     setTimeout(() => {
       if (regPrintRef.current) {
@@ -4143,6 +4159,12 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   </select>
                   <input type="text" placeholder="🔍 Caută furnizor, CNP, nr, denumire..." value={regPfSearch} onChange={(e) => setRegPfSearch(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 6, padding: "6px 10px", fontSize: 12, minWidth: 280, flex: 1 }} />
                   {(regPfMonth || regPfSearch) && <button onClick={() => { setRegPfMonth(""); setRegPfSearch(""); }} style={{ background: "#fff", border: "1px solid #c62828", color: "#c62828", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontSize: 12 }}>✕ Resetează</button>}
+                  {(() => {
+                    const nrBorderouri = new Set(filteredReg.map(r => `${r.serie}__${r.nr}`)).size;
+                    return (
+                      <button onClick={() => printBorderouriLista(filteredReg)} disabled={!nrBorderouri} title="Printează toate borderourile filtrate, fiecare pe pagina lui" style={{ marginLeft: "auto", background: nrBorderouri ? "#1565c0" : "#ccc", color: "#fff", border: "none", borderRadius: 6, padding: "6px 14px", cursor: nrBorderouri ? "pointer" : "not-allowed", fontSize: 12, fontWeight: 600 }}>🖨️ Printează {nrBorderouri} borderouri</button>
+                    );
+                  })()}
                 </div>
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 800 }}>
