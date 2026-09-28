@@ -1097,10 +1097,12 @@ export default function App() {
   // Borderouri (local only — saved to registru on submit)
   const newBord = (serie = "GK", reg = []) => ({
     serie, nr: getNextNr(serie, reg), data: today(),
-    det: "", dom: "", ci_s: "", ci_n: "", ci_e: "", ci_v: "", cnp: "", trans: "Auto", sursa: "alte",
+    det: "", dom: "", ci_s: "", ci_n: "", ci_e: "", ci_v: "", cnp: "", trans: "Auto", sursa: "gospodarie",
     produse: [{ den: "", cod: "", cod_art: "", cant: "", pret: "" }],
   });
   const [borderouri, setBorderouri] = useState([newBord()]);
+  // Cand editam un borderou deja emis: { serie, nr } al celui din registru, ca sa-l inlocuim la salvare
+  const [editBord, setEditBord] = useState(null);
   const b = borderouri[activeBord] || newBord();
   const setB = (fn) => setBorderouri((p) => { const n = [...p]; n[activeBord] = fn(n[activeBord]); return n; });
   const updB = (f, v) => setB((b) => f === "serie" ? { ...b, serie: v, nr: getNextNr(v, registru) } : { ...b, [f]: v });
@@ -1433,21 +1435,64 @@ export default function App() {
     setNewM({ data: today(), tip: "intrare", produs: "", cod: "", cant: "", pu: "", sursa: "" });
   };
 
-  // Salveaza borderou → registru
+  // Incarca un borderou deja emis inapoi in editor. Registrul nu retine seria/nr. CI, mijlocul de
+  // transport sau sursa, asa ca le completam din fisa persoanei fizice (dupa CNP), respectiv le
+  // deducem din valoarea neta salvata.
+  const editeazaRegistruBord = (serie, nr) => {
+    const rows = registru.filter((r) => r.serie === serie && String(r.nr) === String(nr));
+    if (!rows.length) return;
+    const first = rows[0];
+    const pf = pfList.find((f) => f.cod_fiscal && f.cod_fiscal === first.cnp);
+    const bord = {
+      serie, nr: String(nr), data: first.data || "",
+      det: first.furnizor || "", dom: first.adresa || "", cnp: first.cnp || "",
+      ci_s: pf?.reg_com?.slice(0, 2) || "", ci_n: pf?.reg_com?.slice(2) || "",
+      ci_e: pf?.inf_supl?.split("-")[0]?.trim() || "", ci_v: pf?.inf_supl?.split("-").slice(1).join("-").trim() || "",
+      trans: "Auto", sursa: sursaDinRegistru(rows),
+      produse: rows.map((r) => {
+        const fd = produseList.find((p) => p.den === r.denumire || p.den.toUpperCase() === r.denumire);
+        return { den: fd?.den || r.denumire || "", cod: fd?.cod || "", cod_art: fd?.cod_art || "", cant: r.cantitate ?? "", pret: r.pu ?? "" };
+      }),
+    };
+    setBorderouri((p) => { const n = [...p]; n[activeBord] = bord; return n; });
+    setEditBord({ serie, nr: String(nr) });
+    setDetSearch(bord.det);
+    setPreviewMode(false);
+    setBordSubTab("editor");
+  };
+  const renuntaEditBord = () => {
+    setEditBord(null);
+    setBorderouri((p) => { const n = [...p]; n[activeBord] = newBord(b.serie, registru); return n; });
+    setDetSearch("");
+  };
+
+  // Salveaza borderou → registru (adauga unul nou sau inlocuieste liniile celui editat)
   const salveaza = async () => {
     const pr = b.produse.filter((p) => p.den && p.cant);
     if (!pr.length) { alert("Completați cel puțin un produs!"); return; }
-    if (registru.some(x => x.serie === b.serie && String(x.nr) === String(b.nr))) { alert(`⚠️ Borderou ${b.serie} ${b.nr} există deja în Registru!`); return; }
+    const vechi = editBord ? registru.filter(x => x.serie === editBord.serie && String(x.nr) === String(editBord.nr)) : [];
+    const dejaExista = registru.some(x => x.serie === b.serie && String(x.nr) === String(b.nr)
+      && !(editBord && x.serie === editBord.serie && String(x.nr) === String(editBord.nr)));
+    if (dejaExista) { alert(`⚠️ Borderou ${b.serie} ${b.nr} există deja în Registru!`); return; }
     const newEntries = pr.map((p) => {
       const v = (parseSuma(p.cant) || 0) * (parseSuma(p.pret) || 0);
-      return { serie: b.serie, nr: b.nr, data: b.data, furnizor: b.det, adresa: b.dom, cnp: b.cnp, denumire: p.den.toUpperCase(), cantitate: parseSuma(p.cant) || 0, pu: parseSuma(p.pret) || 0, valoare: Math.round(calcRetineri(v, b.sursa).rest) };
+      const denumire = p.den.toUpperCase();
+      // pastram trasabilitatea deja alocata liniei cu acelasi deseu
+      const vechiRand = vechi.find(x => (x.denumire || "").toUpperCase() === denumire);
+      return { serie: b.serie, nr: b.nr, data: b.data, furnizor: b.det, adresa: b.dom, cnp: b.cnp, denumire, cantitate: parseSuma(p.cant) || 0, pu: parseSuma(p.pret) || 0, valoare: Math.round(calcRetineri(v, b.sursa).rest), ...(vechiRand?.trasabilitate ? { trasabilitate: vechiRand.trasabilitate } : {}) };
     });
+    if (editBord && vechi.length) {
+      const { error: delErr } = await sb.from("registru").delete().in("id", vechi.map(x => x.id));
+      if (delErr) { alert("❌ Eroare la actualizarea borderoului: " + delErr.message); return; }
+    }
     const { data: ins, error } = await sb.from("registru").insert(newEntries).select();
     if (error) { alert("❌ Eroare salvare Borderou: " + error.message); return; }
-    if (ins) setRegistru(p => [...p, ...ins]);
-    logAction("add", "registru", `${b.serie} ${b.nr}`, { furnizor: b.det, linii: newEntries.length });
-    alert(`✅ Borderou ${b.serie} ${b.nr} salvat!`);
-    const updatedReg = [...registru, ...(ins || newEntries)];
+    const idsVechi = new Set(vechi.map(x => x.id));
+    if (ins) setRegistru(p => [...p.filter(x => !idsVechi.has(x.id)), ...ins]);
+    logAction(editBord ? "update" : "add", "registru", `${b.serie} ${b.nr}`, { furnizor: b.det, linii: newEntries.length });
+    alert(editBord ? `✅ Borderou ${b.serie} ${b.nr} actualizat!` : `✅ Borderou ${b.serie} ${b.nr} salvat!`);
+    const updatedReg = [...registru.filter(x => !idsVechi.has(x.id)), ...(ins || newEntries)];
+    setEditBord(null);
     setBorderouri(p => { const n = [...p]; n[activeBord] = newBord(b.serie, updatedReg); return n; });
     setDetSearch("");
     setBordSubTab("registru");
@@ -3940,11 +3985,17 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                   {borderouri.map((_, i) => (<button key={i} onClick={() => { setActiveBord(i); setPreviewMode(false); setDetSearch(borderouri[i].det || ""); }} style={{ padding: "4px 12px", border: `2px solid ${activeBord === i ? G : "#ccc"}`, borderRadius: 20, background: activeBord === i ? G : "#fff", color: activeBord === i ? "#fff" : "#555", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>{borderouri[i].serie} #{borderouri[i].nr || "nou"}</button>))}
                   <button onClick={() => { setBorderouri((p) => [...p, newBord("GK", registru)]); setActiveBord(borderouri.length); setPreviewMode(false); setDetSearch(""); }} style={{ padding: "4px 12px", border: "2px dashed #aaa", borderRadius: 20, background: "#f9f9f9", color: "#666", cursor: "pointer", fontSize: 12 }}>+ Borderou nou</button>
                   <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-                    <button onClick={salveaza} style={{ padding: "6px 14px", background: "#e65100", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>💾 Salvează</button>
+                    <button onClick={salveaza} style={{ padding: "6px 14px", background: "#e65100", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>{editBord ? "💾 Salvează modificările" : "💾 Salvează"}</button>
                     <button onClick={() => setPreviewMode((p) => !p)} style={{ padding: "6px 14px", background: previewMode ? "#1565c0" : G, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>{previewMode ? "✏️ Editare" : "👁️ Preview"}</button>
                     {previewMode && <button onClick={handlePrint} style={{ padding: "6px 14px", background: "#333", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>🖨️ Print</button>}
                   </div>
                 </div>
+                {editBord && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 12, color: "#e65100", fontWeight: 600 }}>
+                    <span>✏️ Editezi borderoul {editBord.serie} {editBord.nr} (deja emis) — la salvare înlocuiește liniile din Registru.</span>
+                    <button onClick={renuntaEditBord} style={{ marginLeft: "auto", background: "#fff", border: "1px solid #e65100", color: "#e65100", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕ Renunță</button>
+                  </div>
+                )}
                 {!previewMode && (
                   <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
                     <div style={{ flex: "0 0 296px", minWidth: 256 }}>
@@ -4029,7 +4080,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                 </div>
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 800 }}>
-                    <thead><tr>{[{ l: "", w: 28 }, ...regCols, { l: "🖨️ Print", w: 70 }, { l: "", w: 30 }].map((c, i) => <th key={i} style={{ ...th({ background: G }), width: c.w }}>{c.l}</th>)}</tr></thead>
+                    <thead><tr>{[{ l: "", w: 28 }, ...regCols, { l: "🖨️ Print", w: 70 }, { l: "✏️", w: 40 }, { l: "", w: 30 }].map((c, i) => <th key={i} style={{ ...th({ background: G }), width: c.w }}>{c.l}</th>)}</tr></thead>
                     <tbody>{sortByDateAsc(filteredReg).map((r, i, sortedReg) => {
                       const rowBg = i % 2 === 0 ? "#fff" : "#f7faf8";
                       // Show print button only on first row of each serie+nr group
@@ -4051,11 +4102,20 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                               >🖨️ {groupSize > 1 ? `(${groupSize})` : ""}</button>
                             )}
                           </td>
+                          <td style={td({ textAlign: "center", padding: 3 })}>
+                            {isFirstInGroup && (
+                              <button
+                                onClick={() => editeazaRegistruBord(r.serie, r.nr)}
+                                title={`Editează borderou ${r.serie} ${r.nr}`}
+                                style={{ background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 4, cursor: "pointer", color: "#e65100", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}
+                              >✏️</button>
+                            )}
+                          </td>
                           <td style={td({ textAlign: "center", padding: 3 })}><button onClick={async () => { if (!confirmDel("acest borderou")) return; await sb.from("registru").delete().eq("id", r.id); setRegistru(p => p.filter(x => x.id !== r.id)); await logAction("delete", "registru", r.id); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
                         </tr>
                       );
                     })}</tbody>
-                    <tfoot><tr style={{ background: G, color: "#fff" }}><td></td><td colSpan={6} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(filteredReg.reduce((s, r) => s + (parseSuma(r.cantitate) || 0), 0))}</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(filteredReg.reduce((s, r) => s + (parseSuma(r.valoare) || 0), 0))}</td><td></td><td></td></tr></tfoot>
+                    <tfoot><tr style={{ background: G, color: "#fff" }}><td></td><td colSpan={6} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(filteredReg.reduce((s, r) => s + (parseSuma(r.cantitate) || 0), 0))}</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(filteredReg.reduce((s, r) => s + (parseSuma(r.valoare) || 0), 0))}</td><td></td><td></td><td></td></tr></tfoot>
                   </table>
                 </div>
               </div>
