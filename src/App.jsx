@@ -1172,7 +1172,8 @@ export default function App() {
   const [a3Nou, setA3Nou] = useState({
     serie: "GK", numar: "",
     transportator: "", data_incarcare: today(), delegat: null, masina: null,
-    categorie: "", kg_cunoscut: true, kilograme: "",
+    // un formular poate avea mai multe categorii de deseu, fiecare cu cantitatea ei
+    linii: [{ categorie: "", kilograme: "" }], kg_cunoscut: true,
     expeditor: "", data_descarcare: today(), destinatar: "GREEN KRAFT SRL",
     descriere_destinatie: "Valorificare", obs: "",
   });
@@ -1997,7 +1998,8 @@ export default function App() {
     if (!a3Nou.transportator) { alert("Selectați Transportatorul!"); return; }
     if (!a3Nou.expeditor) { alert("Selectați Expeditorul!"); return; }
     if (!a3Nou.destinatar) { alert("Selectați Destinatarul!"); return; }
-    if (!a3Nou.categorie) { alert("Selectați Categoria de deșeu!"); return; }
+    const linii = (a3Nou.linii || []).filter((l) => l.categorie);
+    if (!linii.length) { alert("Selectați cel puțin o Categorie de deșeu!"); return; }
     if (anexa3List.some((x) => x.serie === a3Nou.serie && String(x.numar) === String(a3Nou.numar))) {
       alert("Anexa 3 seria " + a3Nou.serie + " nr. " + a3Nou.numar + " există deja!"); return;
     }
@@ -2006,14 +2008,13 @@ export default function App() {
     const dest = a3FirmaInfo(a3Nou.destinatar) || {};
     const del = a3Nou.delegat || {};
     const masina = a3Nou.masina || {};
-    const kgCunoscut = a3Nou.kg_cunoscut && a3Nou.kilograme !== "";
-    const row = {
+    const kgCunoscut = a3Nou.kg_cunoscut;
+    const comun = {
       serie: a3Nou.serie, numar: a3Nou.numar,
       transportator: a3Nou.transportator, transportator_cui: tr.cui || "",
       delegat_nume: del.nume || "", delegat_ci: del.ci || "", delegat_auto: masina.auto || "",
       licenta: masina.licenta || "", licenta_expira: masina.licenta_expira || "",
-      data_incarcare: a3Nou.data_incarcare, categorie: a3Nou.categorie,
-      kilograme: kgCunoscut ? parseSuma(a3Nou.kilograme) : null,
+      data_incarcare: a3Nou.data_incarcare,
       expeditor: a3Nou.expeditor, expeditor_cui: exp.cui || "", expeditor_adresa: exp.adresa || "",
       expeditor_aut_mediu: exp.aut_mediu || "", expeditor_aut_revizuita: exp.aut_mediu_revizuita || "", expeditor_aut_expira: exp.aut_mediu_expira || "",
       data_descarcare: a3Nou.data_descarcare,
@@ -2022,12 +2023,19 @@ export default function App() {
       descriere_destinatie: a3Nou.descriere_destinatie,
       operator: currentUser || "", obs: a3Nou.obs || "",
     };
-    const { data, error } = await sb.from("anexa3").insert(row).select();
+    // cate un rand per categorie — randurile cu aceeasi serie+numar formeaza un singur formular
+    const rows = linii.map((l) => ({
+      ...comun,
+      categorie: l.categorie,
+      kilograme: kgCunoscut && l.kilograme !== "" ? parseSuma(l.kilograme) : null,
+    }));
+    const { data, error } = await sb.from("anexa3").insert(rows).select();
     if (error) { alert("Eroare la salvare: " + error.message); return; }
-    if (data) setAnexa3List((p) => [...p, data[0]]);
-    logAction("Creare", "Anexa 3", row.serie + " " + row.numar, row.transportator + " • " + row.categorie + (kgCunoscut ? " • " + row.kilograme + " kg" : " • greutate in asteptare"));
-    setA3Nou((p) => ({ ...p, numar: "", categorie: "", kilograme: "", obs: "", delegat: null, masina: null }));
-    setA3SubTab(kgCunoscut ? "registru" : "asteptare");
+    if (data) setAnexa3List((p) => [...p, ...data]);
+    const totalKg = rows.reduce((s, r) => s + (r.kilograme || 0), 0);
+    logAction("Creare", "Anexa 3", comun.serie + " " + comun.numar, comun.transportator + " • " + rows.map(r => r.categorie).join(" + ") + (totalKg ? " • " + totalKg + " kg" : " • greutate in asteptare"));
+    setA3Nou((p) => ({ ...p, numar: "", linii: [{ categorie: "", kilograme: "" }], obs: "", delegat: null, masina: null }));
+    setA3SubTab(rows.some(r => r.kilograme == null) ? "asteptare" : "registru");
   };
   const completeazaA3Kg = async (a3) => {
     const v = parseSuma(a3KgInput[a3.id]);
@@ -2039,26 +2047,41 @@ export default function App() {
     setA3KgInput((p) => { const n = { ...p }; delete n[a3.id]; return n; });
   };
   const delA3 = async (a3) => {
-    if (!confirmDel("Anexa 3 seria " + a3.serie + " nr. " + a3.numar)) return;
+    const nrLinii = anexa3List.filter((x) => x.serie === a3.serie && String(x.numar) === String(a3.numar)).length;
+    const ce = nrLinii > 1 ? `linia „${a3.categorie}" din Anexa 3 seria ${a3.serie} nr. ${a3.numar}` : `Anexa 3 seria ${a3.serie} nr. ${a3.numar}`;
+    if (!confirmDel(ce)) return;
     await sb.from("anexa3").delete().eq("id", a3.id);
     setAnexa3List((p) => p.filter((x) => x.id !== a3.id));
     logAction("Ștergere", "Anexa 3", a3.serie + " " + a3.numar, a3.transportator);
   };
   // Editare Anexa 3 dupa emitere — orice camp poate fi corectat ulterior
   const updA3 = mkUpd(anexa3List, setAnexa3List, "anexa3");
+  // Liniile aceluiasi formular (serie+numar) impart datele documentului — o modificare pe una
+  // dintre ele se aplica tuturor. Doar categoria si cantitatea raman per linie (updA3).
+  const liniiA3 = (a3) => anexa3List.filter((x) => x.serie === a3.serie && String(x.numar) === String(a3.numar));
+  const updA3Doc = (a3, field, value) => {
+    const ids = liniiA3(a3).map((x) => x.id);
+    setAnexa3List((p) => p.map((x) => (ids.includes(x.id) ? { ...x, [field]: value } : x)));
+    ids.forEach((id) => dbSave("anexa3", id, { [field]: value }));
+  };
   const updA3Firma = async (a3, rol, valoare) => {
     const info = a3FirmaInfo(valoare) || {};
     const patch = { [rol]: valoare };
     if (rol === "transportator") patch.transportator_cui = info.cui || "";
     else Object.assign(patch, { [rol + "_cui"]: info.cui || "", [rol + "_adresa"]: info.adresa || "", [rol + "_aut_mediu"]: info.aut_mediu || "", [rol + "_aut_revizuita"]: info.aut_mediu_revizuita || "", [rol + "_aut_expira"]: info.aut_mediu_expira || "" });
-    setAnexa3List((p) => p.map((x) => (x.id === a3.id ? { ...x, ...patch } : x)));
-    await sb.from("anexa3").update(patch).eq("id", a3.id);
+    const ids = liniiA3(a3).map((x) => x.id);
+    setAnexa3List((p) => p.map((x) => (ids.includes(x.id) ? { ...x, ...patch } : x)));
+    await sb.from("anexa3").update(patch).in("id", ids);
     logAction("Editare", "Anexa 3", a3.serie + " " + a3.numar, rol + " → " + valoare);
   };
   // Construieste continutul HTML al formularului Anexa 3 (fara <html>/<body> in jur) —
   // folosit atat la print (fereastra noua + window.print) cat si la exportul PDF de o pagina.
   const buildA3Html = (a3) => {
-    const kgTxt = a3.kilograme != null ? fmt(a3.kilograme) + " Kg" : "* se cantareste la destinatie";
+    // toate liniile formularului (aceeasi serie + numar), fiecare cu categoria si cantitatea ei
+    const linii = anexa3List.filter((x) => x.serie === a3.serie && String(x.numar) === String(a3.numar));
+    const liniiDoc = linii.length ? linii : [a3];
+    const catTxt = liniiDoc.map((l) => "<div style=\"margin-top:4px;\">" + (l.categorie || "") + "</div>").join("");
+    const kgTxt = liniiDoc.map((l) => "<div style=\"margin-top:4px;font-weight:bold;\">" + (l.kilograme != null ? fmt(l.kilograme) + " Kg" : "* se cantareste la destinatie") + "</div>").join("");
     const destRows = DESTINATII.map((d) =>
       "<div style=\"font-size:10px;\">" + d + " " + (a3.descriere_destinatie === d ? "\u25cf" : "\u25cb") + "</div>"
     ).join("");
@@ -2132,13 +2155,13 @@ export default function App() {
               "<tr>" +
                 "<td rowspan=\"2\" style=\"border:1px solid #000;vertical-align:top;line-height:1.6;\">" + col1 + "</td>" +
                 "<td style=\"border:1px solid #000;padding:6px;vertical-align:top;\"><div>Incarcare</div><div style=\"margin-top:4px;\"><strong>" + (a3.data_incarcare || "") + "</strong></div></td>" +
-                "<td style=\"border:1px solid #000;padding:6px;vertical-align:top;line-height:1.4;\"><div style=\"font-size:10px;\">Categorii deseuri</div><div style=\"margin-top:4px;\">" + (a3.categorie || "") + "</div></td>" +
-                "<td style=\"border:1px solid #000;padding:6px;vertical-align:top;text-align:center;\"><div style=\"font-size:10px;\">Kilograme</div><div style=\"margin-top:4px;font-weight:bold;\">" + kgTxt + "</div></td>" +
+                "<td style=\"border:1px solid #000;padding:6px;vertical-align:top;line-height:1.4;\"><div style=\"font-size:10px;\">Categorii deseuri</div>" + catTxt + "</td>" +
+                "<td style=\"border:1px solid #000;padding:6px;vertical-align:top;text-align:center;\"><div style=\"font-size:10px;\">Kilograme</div>" + kgTxt + "</td>" +
                 "<td style=\"border:1px solid #000;vertical-align:top;line-height:1.6;\">" + col5a + "</td>" +
               "</tr>" +
               "<tr>" +
                 "<td style=\"border:1px solid #000;padding:6px;vertical-align:top;\"><div>Descarcare</div><div style=\"margin-top:4px;\"><strong>" + (a3.data_descarcare || "") + "</strong></div></td>" +
-                "<td style=\"border:1px solid #000;padding:6px;vertical-align:top;line-height:1.4;\"><div style=\"font-size:10px;\">Categorii deseuri</div><div style=\"margin-top:4px;\">" + (a3.categorie || "") + "</div><div style=\"margin-top:14px;font-weight:bold;\">Descriere destinatie:</div>" + destRows + "</td>" +
+                "<td style=\"border:1px solid #000;padding:6px;vertical-align:top;line-height:1.4;\"><div style=\"font-size:10px;\">Categorii deseuri</div>" + catTxt + "<div style=\"margin-top:14px;font-weight:bold;\">Descriere destinatie:</div>" + destRows + "</td>" +
                 "<td style=\"border:1px solid #000;\"></td>" +
                 "<td style=\"border:1px solid #000;vertical-align:top;line-height:1.6;\">" + col5b + "</td>" +
               "</tr>" +
@@ -4649,8 +4672,19 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                             <div style={{ flex: 1 }}><label style={FL}>Data Descărcare</label><DateInput value={a3Nou.data_descarcare} onChange={(v) => setA3Nou((p) => ({ ...p, data_descarcare: v }))} style={{ border: "1px solid #d5d5d5" }} /></div>
                           </div>
                           <div style={{ marginBottom: 10 }}>
-                            <label style={FL}>Categorie deșeu <span style={{ color: "#c62828" }}>*</span></label>
-                            <div style={ACB}><ACStrict value={a3Nou.categorie} options={ANEXA3_CATEGORII} placeholder="Selectează sau scrie..." onChange={(v) => setA3Nou((p) => ({ ...p, categorie: v }))} /></div>
+                            <label style={FL}>Categorii deșeu <span style={{ color: "#c62828" }}>*</span></label>
+                            {a3Nou.linii.map((l, li) => (
+                              <div key={li} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
+                                <div style={{ ...ACB, flex: 1 }}><ACStrict value={l.categorie} options={ANEXA3_CATEGORII} placeholder="Selectează sau scrie..." onChange={(v) => setA3Nou((p) => ({ ...p, linii: p.linii.map((x, j) => j === li ? { ...x, categorie: v } : x) }))} /></div>
+                                {a3Nou.kg_cunoscut && (
+                                  <input style={{ width: 90, padding: "7px 8px", border: "1.5px solid #6a1b9a", borderRadius: 6, fontSize: 13, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="text" inputMode="decimal" value={l.kilograme} onChange={(e) => setA3Nou((p) => ({ ...p, linii: p.linii.map((x, j) => j === li ? { ...x, kilograme: e.target.value } : x) }))} placeholder="kg" />
+                                )}
+                                {a3Nou.linii.length > 1 && (
+                                  <button onClick={() => setA3Nou((p) => ({ ...p, linii: p.linii.filter((_, j) => j !== li) }))} title="Șterge categoria" style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 14 }}>✕</button>
+                                )}
+                              </div>
+                            ))}
+                            <button onClick={() => setA3Nou((p) => ({ ...p, linii: [...p.linii, { categorie: "", kilograme: "" }] }))} style={{ background: "#f3e5f5", border: "1px dashed #6a1b9a", color: "#6a1b9a", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Adaugă categorie</button>
                           </div>
                           <div style={{ marginBottom: 10 }}>
                             <label style={FL}>Expeditor (cine predă marfa) <span style={{ color: "#c62828" }}>*</span></label>
@@ -4679,9 +4713,18 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                             <button onClick={() => setA3Nou((p) => ({ ...p, kg_cunoscut: false }))} style={{ flex: 1, padding: "8px", border: !a3Nou.kg_cunoscut ? "2px solid #6a1b9a" : "2px solid #ddd", borderRadius: 7, background: !a3Nou.kg_cunoscut ? "#f3e5f5" : "#fff", cursor: "pointer", fontWeight: 700, color: !a3Nou.kg_cunoscut ? "#6a1b9a" : "#999", fontSize: 11 }}>⏳ La destinație</button>
                           </div>
                           {a3Nou.kg_cunoscut ? (
-                            <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-                              <input style={{ flex: 1, padding: "12px", border: "2px solid #6a1b9a", borderRadius: 8, fontSize: 22, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="text" inputMode="decimal" value={a3Nou.kilograme} onChange={(e) => setA3Nou((p) => ({ ...p, kilograme: e.target.value }))} placeholder="0" />
-                              <span style={{ alignSelf: "center", fontSize: 13, color: "#888" }}>kg</span>
+                            <div style={{ marginBottom: 8 }}>
+                              <div style={{ fontSize: 11, color: "#888", marginBottom: 6 }}>Completează cantitatea lângă fiecare categorie, în stânga.</div>
+                              {a3Nou.linii.filter((l) => l.categorie).map((l, li) => (
+                                <div key={li} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11, padding: "3px 0", borderBottom: "1px solid #f0e6f5" }}>
+                                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.categorie}</span>
+                                  <strong style={{ color: "#6a1b9a", whiteSpace: "nowrap" }}>{l.kilograme ? fmt(parseSuma(l.kilograme)) + " kg" : "—"}</strong>
+                                </div>
+                              ))}
+                              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 13, fontWeight: 700, color: "#4a148c" }}>
+                                <span>TOTAL</span>
+                                <span style={{ fontFamily: "monospace" }}>{fmt(a3Nou.linii.reduce((s, l) => s + (parseSuma(l.kilograme) || 0), 0))} kg</span>
+                              </div>
                             </div>
                           ) : (
                             <div style={{ background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 8, padding: 12, fontSize: 11, color: "#795548", marginBottom: 8 }}>
@@ -4728,7 +4771,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                         <input style={{ padding: "6px 10px", border: "1px solid #ccc", borderRadius: 5, fontSize: 12, width: 240 }} value={a3Filter} onChange={(e) => setA3Filter(e.target.value)} placeholder="🔍 Caută transportator / firmă / categorie..." />
                         {(a3Luna || a3Filter) && <button onClick={() => { setA3Luna(""); setA3Filter(""); }} style={{ padding: "5px 10px", border: "1px solid #ccc", borderRadius: 5, background: "#fff", cursor: "pointer", fontSize: 11 }}>↺ Reset</button>}
                         <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-                          <SC label="Documente" value={String(a3Filtrate.length)} c="#6a1b9a" bg="#f3e5f5" />
+                          <SC label="Documente" value={String(new Set(a3Filtrate.map((x) => `${x.serie}__${x.numar}`)).size)} c="#6a1b9a" bg="#f3e5f5" />
                           <SC label="Total kg" value={fmt(totKg) + " kg"} c="#e65100" bg="#fff3e0" />
                         </div>
                       </div>
@@ -4740,6 +4783,9 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                             {a3Filtrate.map((a3, idx) => {
                               const oi = anexa3List.indexOf(a3);
                               const isExp = expandedA3 === a3.id;
+                              // liniile aceluiasi formular apar una sub alta; butoanele de print stau pe prima
+                              const primaDinGrup = a3Filtrate.findIndex((x) => x.serie === a3.serie && String(x.numar) === String(a3.numar)) === idx;
+                              const nrLiniiGrup = a3Filtrate.filter((x) => x.serie === a3.serie && String(x.numar) === String(a3.numar)).length;
                               const rowBg = idx % 2 === 0 ? "#fff" : "#faf5ff";
                               return (
                                 <Fragment key={a3.id}>
@@ -4749,11 +4795,11 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                                     </td>
                                     <td style={{ ...td({ textAlign: "center", fontWeight: 700, color: "#6a1b9a" }), padding: 3 }}>
                                       <div style={{ display: "flex", gap: 2, justifyContent: "center" }}>
-                                        <input style={{ ...inp({ textAlign: "center", fontWeight: 700, color: "#6a1b9a", width: 40 }) }} value={a3.serie || ""} onChange={(e) => updA3(oi, "serie", e.target.value)} />
-                                        <input style={{ ...inp({ textAlign: "center", fontWeight: 700, color: "#6a1b9a", width: 55 }) }} value={a3.numar || ""} onChange={(e) => updA3(oi, "numar", e.target.value)} />
+                                        <input style={{ ...inp({ textAlign: "center", fontWeight: 700, color: "#6a1b9a", width: 40 }) }} value={a3.serie || ""} onChange={(e) => updA3Doc(a3, "serie", e.target.value)} />
+                                        <input style={{ ...inp({ textAlign: "center", fontWeight: 700, color: "#6a1b9a", width: 55 }) }} value={a3.numar || ""} onChange={(e) => updA3Doc(a3, "numar", e.target.value)} />
                                       </div>
                                     </td>
-                                    <td style={td({ textAlign: "center", padding: 2 })}><DateInput value={a3.data_incarcare || ""} onChange={(v) => updA3(oi, "data_incarcare", v)} /></td>
+                                    <td style={td({ textAlign: "center", padding: 2 })}><DateInput value={a3.data_incarcare || ""} onChange={(v) => updA3Doc(a3, "data_incarcare", v)} /></td>
                                     <td style={{ ...td({ fontWeight: 600 }), padding: 2 }}><div style={ACB}><ACStrict value={a3.transportator || ""} options={firmeOpts} onChange={(v) => updA3Firma(a3, "transportator", v)} /></div></td>
                                     <td style={{ ...td(), padding: 2 }}><div style={ACB}><ACStrict value={a3.expeditor || ""} options={firmeOpts} onChange={(v) => updA3Firma(a3, "expeditor", v)} /></div></td>
                                     <td style={{ ...td(), padding: 2 }}><div style={ACB}><ACStrict value={a3.destinatar || ""} options={firmeOpts} onChange={(v) => updA3Firma(a3, "destinatar", v)} /></div></td>
@@ -4761,8 +4807,10 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                                     <td style={td({ textAlign: "right", fontWeight: 700, padding: 2 })}><input style={inp({ textAlign: "right", fontWeight: 700, width: 65 })} value={a3.kilograme ?? ""} onChange={(e) => updA3(oi, "kilograme", e.target.value === "" ? null : parseSuma(e.target.value))} /></td>
                                     <td style={td({ textAlign: "center", fontSize: 10 })}>{a3.operator || "—"}</td>
                                     <td style={td({ textAlign: "center", padding: 2, whiteSpace: "nowrap" })}>
-                                      <button onClick={() => printA3(a3)} title="Printează" style={{ background: "#f3e5f5", border: "1px solid #ce93d8", borderRadius: 4, cursor: "pointer", color: "#6a1b9a", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>🖨️</button>{" "}
-                                      <button onClick={() => downloadA3Pdf(a3)} disabled={a3PdfLoading === a3.id} title="Descarcă PDF (1 pagină)" style={{ background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 4, cursor: a3PdfLoading === a3.id ? "wait" : "pointer", color: "#1565c0", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>{a3PdfLoading === a3.id ? "⏳" : "📄"}</button>
+                                      {primaDinGrup && (<>
+                                        <button onClick={() => printA3(a3)} title={`Printează formularul${nrLiniiGrup > 1 ? ` (${nrLiniiGrup} categorii)` : ""}`} style={{ background: "#f3e5f5", border: "1px solid #ce93d8", borderRadius: 4, cursor: "pointer", color: "#6a1b9a", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>🖨️ {nrLiniiGrup > 1 ? `(${nrLiniiGrup})` : ""}</button>{" "}
+                                        <button onClick={() => downloadA3Pdf(a3)} disabled={a3PdfLoading === a3.id} title="Descarcă PDF (1 pagină)" style={{ background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 4, cursor: a3PdfLoading === a3.id ? "wait" : "pointer", color: "#1565c0", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>{a3PdfLoading === a3.id ? "⏳" : "📄"}</button>
+                                      </>)}
                                     </td>
                                     <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => delA3(a3)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
                                   </tr>
@@ -4772,37 +4820,37 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                                         <div style={{ background: "#fff", border: "1px solid #ddd", borderRadius: 8, padding: 12, display: "flex", gap: 20, flexWrap: "wrap" }}>
                                           <div style={{ minWidth: 160 }}>
                                             <label style={FL}>Data Descărcare</label>
-                                            <DateInput value={a3.data_descarcare || ""} onChange={(v) => updA3(oi, "data_descarcare", v)} style={{ border: "1px solid #d5d5d5" }} />
+                                            <DateInput value={a3.data_descarcare || ""} onChange={(v) => updA3Doc(a3, "data_descarcare", v)} style={{ border: "1px solid #d5d5d5" }} />
                                           </div>
                                           <div style={{ minWidth: 180 }}>
                                             <label style={FL}>Delegat (șofer)</label>
-                                            <input style={FI} value={a3.delegat_nume || ""} onChange={(e) => updA3(oi, "delegat_nume", e.target.value)} placeholder="Nume delegat" />
+                                            <input style={FI} value={a3.delegat_nume || ""} onChange={(e) => updA3Doc(a3, "delegat_nume", e.target.value)} placeholder="Nume delegat" />
                                           </div>
                                           <div style={{ minWidth: 120 }}>
                                             <label style={FL}>CI delegat</label>
-                                            <input style={FI} value={a3.delegat_ci || ""} onChange={(e) => updA3(oi, "delegat_ci", e.target.value)} placeholder="Serie+nr CI" />
+                                            <input style={FI} value={a3.delegat_ci || ""} onChange={(e) => updA3Doc(a3, "delegat_ci", e.target.value)} placeholder="Serie+nr CI" />
                                           </div>
                                           <div style={{ minWidth: 120 }}>
                                             <label style={FL}>Nr. auto</label>
-                                            <input style={FI} value={a3.delegat_auto || ""} onChange={(e) => updA3(oi, "delegat_auto", e.target.value)} placeholder="Nr. înmatriculare" />
+                                            <input style={FI} value={a3.delegat_auto || ""} onChange={(e) => updA3Doc(a3, "delegat_auto", e.target.value)} placeholder="Nr. înmatriculare" />
                                           </div>
                                           <div style={{ minWidth: 140 }}>
                                             <label style={FL}>Licență transport</label>
-                                            <input style={FI} value={a3.licenta || ""} onChange={(e) => updA3(oi, "licenta", e.target.value)} placeholder="Nr. licență" />
+                                            <input style={FI} value={a3.licenta || ""} onChange={(e) => updA3Doc(a3, "licenta", e.target.value)} placeholder="Nr. licență" />
                                           </div>
                                           <div style={{ minWidth: 140 }}>
                                             <label style={FL}>Licența expiră</label>
-                                            <DateInput value={a3.licenta_expira || ""} onChange={(v) => updA3(oi, "licenta_expira", v)} style={{ border: "1px solid #d5d5d5" }} />
+                                            <DateInput value={a3.licenta_expira || ""} onChange={(v) => updA3Doc(a3, "licenta_expira", v)} style={{ border: "1px solid #d5d5d5" }} />
                                           </div>
                                           <div style={{ minWidth: 180 }}>
                                             <label style={FL}>Descriere destinație</label>
-                                            <select style={FI} value={a3.descriere_destinatie || ""} onChange={(e) => updA3(oi, "descriere_destinatie", e.target.value)}>
+                                            <select style={FI} value={a3.descriere_destinatie || ""} onChange={(e) => updA3Doc(a3, "descriere_destinatie", e.target.value)}>
                                               {DESTINATII.map((d) => <option key={d} value={d}>{d}</option>)}
                                             </select>
                                           </div>
                                           <div style={{ flex: "1 1 200px", minWidth: 200 }}>
                                             <label style={FL}>Observații</label>
-                                            <input style={FI} value={a3.obs || ""} onChange={(e) => updA3(oi, "obs", e.target.value)} placeholder="opțional" />
+                                            <input style={FI} value={a3.obs || ""} onChange={(e) => updA3Doc(a3, "obs", e.target.value)} placeholder="opțional" />
                                           </div>
                                         </div>
                                       </td>
