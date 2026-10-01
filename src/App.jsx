@@ -1723,10 +1723,14 @@ export default function App() {
     const brutV = parseSuma(ticEdit.brut);
     const taraV = parseSuma(ticEdit.tara);
     if (!ticEdit.partener) { alert("Furnizorul nu poate fi gol!"); return; }
-    if (!brutV || brutV <= 0) { alert("Brut trebuie să fie un număr pozitiv!"); return; }
-    if (!taraV || taraV <= 0) { alert("Tara trebuie să fie un număr pozitiv!"); return; }
-    if (brutV <= taraV) { alert(`Brut (${brutV} kg) trebuie să fie mai mare decât Tara (${taraV} kg)!`); return; }
-    const netV = Math.round((brutV - taraV) * 100) / 100;
+    // Un tichet deschis are o singura cantarire — il putem corecta fara sa-l si inchidem.
+    // Se inchide doar cand sunt completate ambele greutati.
+    const ambele = brutV > 0 && taraV > 0;
+    if (!ambele && !brutV && !taraV) { alert("Completați cel puțin o cântărire (Brut sau Tara)!"); return; }
+    if (!ambele && ticEdit.status === "inchis") { alert("Un tichet închis are nevoie și de Brut, și de Tara!"); return; }
+    if (ambele && brutV <= taraV) { alert(`Brut (${brutV} kg) trebuie să fie mai mare decât Tara (${taraV} kg)!`); return; }
+    const netV = ambele ? Math.round((brutV - taraV) * 100) / 100 : null;
+    const statusNou = ambele ? "inchis" : "deschis";
     const f = pjList.find(x => x.denumire === ticEdit.partener) || pfList.find(x => x.denumire === ticEdit.partener);
     const orig = ticheteList.find((x) => x.id === ticEdit.id);
     const eraNeinchis = orig?.status !== "inchis"; // tichet gol sau deschis, completat acum pentru prima data
@@ -1736,16 +1740,19 @@ export default function App() {
       partener: ticEdit.partener, partener_cui: f?.cod_fiscal || "",
       transportator: ticEdit.transportator || "", transportator_cui: ticEdit.transportator_cui || "",
       nr_masina: (ticEdit.nr_masina || "").toUpperCase(), sofer: ticEdit.sofer || "", material: ticEdit.material || "",
-      brut: brutV, tara: taraV, net: netV,
+      brut: brutV || null, tara: taraV || null, net: netV,
       factura: ticEdit.factura || "", aviz: ticEdit.aviz || "",
       brut_la: ticEdit.brut_la || "", tara_la: ticEdit.tara_la || "",
-      ora_intrare: ticEdit.ora_intrare || "", ora_iesire: ticEdit.ora_iesire || oraAcum(),
-      status: "inchis",
+      ora_intrare: ticEdit.ora_intrare || "",
+      ora_iesire: ambele ? (ticEdit.ora_iesire || oraAcum()) : (ticEdit.ora_iesire || ""),
+      status: statusNou,
     };
     const { error } = await sb.from("tichete_cantar").update(upd).eq("id", ticEdit.id);
     if (error) { alert("Eroare: " + error.message); return; }
     setTicheteList((p) => p.map((x) => (x.id === ticEdit.id ? { ...x, ...upd } : x)));
-    logAction("Editare", "Tichet cântar", "TC " + ticEdit.nr_tichet, `NET recalculat: ${netV} kg`);
+    logAction("Editare", "Tichet cântar", "TC " + ticEdit.nr_tichet, ambele ? `NET recalculat: ${netV} kg` : "tichet deschis, actualizat");
+    // Achizitia/vanzarea se creeaza sau se actualizeaza doar cand tichetul are NET (e inchis)
+    if (!ambele) { setTicEdit(null); return; }
     if (ticEdit.tip === "Intrare") {
       const legata = colRows.find((r) => r.tichet_id === String(ticEdit.id));
       if (legata) {
@@ -5605,6 +5612,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                         })()}
                         <div style={{ display: "flex", gap: 6 }}>
                           <button onClick={() => inchideTichet(t)} style={{ flex: 1, padding: "9px", background: G, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>✔ Închide tichet</button>
+                          <button onClick={() => setTicEdit({ id: t.id, status: t.status, tip: t.tip, nr_tichet: t.nr_tichet, data: t.data || "", partener: t.partener || "", transportator: t.transportator || "", transportator_cui: t.transportator_cui || "", nr_masina: t.nr_masina || "", sofer: t.sofer || "", material: t.material || "", brut: t.brut != null ? String(t.brut) : "", tara: t.tara != null ? String(t.tara) : "", factura: t.factura || "", aviz: t.aviz || "", brut_la: t.brut_la || "", tara_la: t.tara_la || "", ora_intrare: t.ora_intrare || "", ora_iesire: t.ora_iesire || "" })} title="Editează tichetul" style={{ padding: "9px 11px", background: "#fff8e1", color: "#e65100", border: "1px solid #ffd54f", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>✏️</button>
                           <button onClick={() => delTichet(t)} style={{ padding: "9px 11px", background: "#fff", color: "#e53935", border: "1px solid #ef9a9a", borderRadius: 6, cursor: "pointer", fontSize: 12 }}>✕</button>
                         </div>
                       </div>
