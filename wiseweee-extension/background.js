@@ -11,6 +11,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const tab = tabs[0];
         chrome.tabs.update(tab.id, { active: true, url: "https://dash.wiseweee.com/acquisitions" });
         chrome.windows.update(tab.windowId, { focused: true });
+        // Daca tab-ul era deja pe aceasta adresa, nu se reincarca si content script-ul
+        // nu porneste din nou — il anuntam noi. Daca s-a reincarcat, el porneste singur,
+        // iar mesajul asta nu face nimic (transferul se ia o singura data).
+        setTimeout(() => chrome.tabs.sendMessage(tab.id, { type: "GK_TRANSFER_NOU" }, () => chrome.runtime.lastError), 1500);
       } else {
         chrome.tabs.create({ url: "https://dash.wiseweee.com/acquisitions" });
       }

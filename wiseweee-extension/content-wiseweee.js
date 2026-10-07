@@ -62,6 +62,24 @@ function getDialog() {
   return dialogs.find((d) => d.getBoundingClientRect().width > 0) || null;
 }
 
+// WiseWeee e o aplicatie care se construieste in pagina dupa ce aceasta s-a
+// incarcat: documentul e "complet" in jumatate de secunda, dar butoanele apar
+// dupa ce isi ia datele de la server — masurat, pana la ~6 secunde. De aceea
+// asteptam sa apara ce ne trebuie, in loc sa ne uitam o singura data.
+async function asteapta(cauta, maxMs = 25000, pas = 150) {
+  const pana = Date.now() + maxMs;
+  for (;;) {
+    let el = null;
+    try { el = cauta(); } catch { el = null; }
+    if (el) return el;
+    if (Date.now() >= pana) return null;
+    await sleep(pas);
+  }
+}
+
+const butonDupaText = (text) => () =>
+  Array.from(document.querySelectorAll("button")).find((b) => b.textContent.trim() === text);
+
 // Scoate punctuatia (S.A. -> SA, S.R.L. -> SRL) si spatiile duble, pentru
 // comparatii care nu trebuie sa depinda de cum e scrisa forma juridica.
 function normalizeDenumire(s) {
@@ -239,17 +257,23 @@ function showBanner(lines, isError) {
 }
 
 async function runTransfer(payload) {
-  // 1. Deschide "Document Nou"
-  const newDocBtn = Array.from(document.querySelectorAll("button")).find((b) => b.textContent.trim() === "Document Nou");
-  if (!newDocBtn) { showBanner(["Nu am găsit butonul 'Document Nou' pe pagină. Deschide-l manual."], true); return; }
+  // 1. Deschide "Document Nou" — asteptam sa se incarce pagina WiseWeee
+  showBanner(["Aștept să se încarce WiseWeee…"], false);
+  const newDocBtn = await asteapta(butonDupaText("Document Nou"));
+  if (!newDocBtn) {
+    showBanner(["Pagina WiseWeee nu s-a încărcat în 25 de secunde — butonul „Document Nou” nu a apărut.", "Reîncarcă pagina și trimite din nou din Greenkraft."], true);
+    return;
+  }
   realClick(newDocBtn);
-  await sleep(500);
 
   // 2. Alege "Completează manual"
-  const manualBtn = Array.from(document.querySelectorAll("button")).find((b) => b.textContent.trim().startsWith("Completează manual"));
-  if (manualBtn) { realClick(manualBtn); await sleep(500); }
+  const manualBtn = await asteapta(
+    () => Array.from(document.querySelectorAll("button")).find((b) => b.textContent.trim().startsWith("Completează manual")),
+    5000
+  );
+  if (manualBtn) realClick(manualBtn);
 
-  const dialog = getDialog();
+  const dialog = await asteapta(getDialog, 10000);
   if (!dialog) { showBanner(["Nu am găsit formularul. Completează manual."], true); return; }
 
   const rezultate = [];
@@ -292,18 +316,31 @@ async function runTransfer(payload) {
   showBanner(linii, !apasat);
 }
 
+let transferInCurs = false;
+
 async function checkPendingTransfer() {
+  if (transferInCurs) return; // pornit si din incarcarea paginii, si din mesaj
   chrome.storage.local.get("gkPendingTransfer", async (result) => {
     const pending = result.gkPendingTransfer;
-    if (!pending) return;
+    if (!pending || transferInCurs) return;
     if (Date.now() - pending.ts > MAX_VECHIME_MS) {
       chrome.storage.local.remove("gkPendingTransfer");
       return;
     }
+    transferInCurs = true;
     chrome.storage.local.remove("gkPendingTransfer"); // il consumam o singura data
-    await sleep(800); // lasam pagina sa se stabilizeze
-    runTransfer(pending);
+    try {
+      await runTransfer(pending);
+    } finally {
+      transferInCurs = false;
+    }
   });
 }
+
+// Daca tab-ul WiseWeee era deja deschis pe aceeasi adresa, el nu se reincarca, deci
+// scriptul asta nu porneste din nou — extensia ne anunta prin mesaj ca avem ceva de preluat.
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg && msg.type === "GK_TRANSFER_NOU") checkPendingTransfer();
+});
 
 checkPendingTransfer();

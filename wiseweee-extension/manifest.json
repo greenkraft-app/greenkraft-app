@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Greenkraft - WiseWeee & FGO",
-  "version": "1.1",
+  "version": "1.2",
   "description": "Trimite achizitiile din Greenkraft catre WiseWeee si aduce avizele din FGO in Greenkraft, pentru Anexa 3.",
   "permissions": [
     "storage",

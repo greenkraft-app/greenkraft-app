@@ -62,6 +62,13 @@ DE RETINUT
 
 DACA CEVA NU MERGE
 -------------------
+"Nu am gasit butonul 'Document Nou' pe pagina" — aparea cand pagina WiseWeee
+nu apucase sa se incarce. WiseWeee isi construieste butoanele dupa ce ia datele
+de la server, ceea ce poate dura si 6 secunde, iar extensia se uita o singura
+data, dupa 0,8 secunde. Acum asteapta pana la 25 de secunde si arata intre timp
+"Astept sa se incarce WiseWeee...". Daca tot nu apare dupa 25 de secunde,
+inseamna ca pagina chiar nu s-a incarcat — reincarc-o si trimite din nou.
+
 Structura paginii WiseWeee se poate schimba in timp (actualizari ale lor),
 caz in care extensia ar putea sa nu mai gaseasca un camp anume. Bannerul
 va arata clar campul respectiv ca "de completat manual" — nu se blocheaza
