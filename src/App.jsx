@@ -351,7 +351,12 @@ function ACStrict({ value, onChange, options, placeholder = "", style, strict = 
   const idRef = useRef(null);
   if (!idRef.current) idRef.current = "dl-" + (++acStrictSeq);
   const [q, setQ] = useState(value || "");
-  useEffect(() => { setQ(value || ""); }, [value]);
+  const scrie = useRef(false);
+  const timer = useRef(null);
+  // valoarea din afara se preia doar cand nu ai cursorul in camp, altfel o salvare
+  // venita de la server ti-ar inlocui textul din mijlocul scrisului
+  useEffect(() => { if (!scrie.current) setQ(value || ""); }, [value]);
+  useEffect(() => () => clearTimeout(timer.current), []);
   const findExact = (text) => options.find((o) => o.toLowerCase() === (text || "").toLowerCase());
   return (
     <>
@@ -360,15 +365,21 @@ function ACStrict({ value, onChange, options, placeholder = "", style, strict = 
         value={q}
         placeholder={placeholder}
         style={style || inp({ textAlign: "center" })}
+        onFocus={() => { scrie.current = true; }}
         onChange={(e) => {
           const text = e.target.value;
           setQ(text);
-          if (!strict) { onChange(text); return; } // liber: orice text tastat se propaga (poti adauga valori noi)
+          clearTimeout(timer.current);
+          // asteptam o clipa dupa ce te-ai oprit din scris: altfel fiecare tasta
+          // actualiza starea intregii aplicatii si o redesena
+          if (!strict) { timer.current = setTimeout(() => onChange(text), 200); return; } // liber: orice text tastat se propaga (poti adauga valori noi)
           const exact = findExact(text);
-          if (exact) onChange(exact); // strict: propagam DOAR la potrivire exacta (auto-fill CodSAGA etc.)
+          if (exact) timer.current = setTimeout(() => onChange(exact), 200); // strict: propagam DOAR la potrivire exacta (auto-fill CodSAGA etc.)
         }}
         onBlur={() => {
-          if (!strict) return;
+          scrie.current = false;
+          clearTimeout(timer.current);
+          if (!strict) { if (q !== (value || "")) onChange(q); return; }
           const exact = findExact(q);
           if (exact) { if (exact !== q) setQ(exact); }
           else {
@@ -677,25 +688,159 @@ function PVPrint({ pv }) {
 }
 
 // ── Supabase realtime helper ──────────────────────────────────
+// Campurile modificate care inca nu s-au salvat in baza de date. Datele venite de la
+// server nu au voie sa le suprascrie — altfel ce ai scris in ultima secunda dispare
+// sau se amesteca, pentru ca raspunsul serverului e mai vechi decat ce tastezi acum.
+const editariInCurs = new Map(); // "tabela:id:camp" -> valoare
+
+const pastreazaEditariRand = (tabela, rand) => {
+  if (!editariInCurs.size || !rand || rand.id == null) return rand;
+  const prefix = `${tabela}:${rand.id}:`;
+  let out = rand;
+  editariInCurs.forEach((val, cheie) => {
+    if (!cheie.startsWith(prefix)) return;
+    if (out === rand) out = { ...rand };
+    out[cheie.slice(prefix.length)] = val;
+  });
+  return out;
+};
+const pastreazaEditarile = (tabela, randuri) =>
+  editariInCurs.size ? randuri.map((r) => pastreazaEditariRand(tabela, r)) : randuri;
+
+// Doua randuri care arata la fel. Daca schimbarea primita e deja pe ecran (cazul
+// obisnuit: propria ta salvare, care s-a aplicat local inainte sa plece la server),
+// pastram acelasi obiect si React nu mai redeseneaza nimic.
+const acelasiRand = (a, b) => {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const chei = Object.keys(b);
+  if (Object.keys(a).length !== chei.length) return false;
+  return chei.every((k) => {
+    if (a[k] === b[k]) return true;
+    if (a[k] && b[k] && typeof a[k] === "object" && typeof b[k] === "object") {
+      return JSON.stringify(a[k]) === JSON.stringify(b[k]);
+    }
+    return false;
+  });
+};
+
 function useSupaTable(tableName, setFn) {
   useEffect(() => {
+    let activ = true;
     const refetch = () =>
       sb.from(tableName).select("*").order("created_at", { ascending: true })
-        .then(({ data }) => { if (data) setFn(data); });
+        .then(({ data }) => { if (activ && data) setFn(pastreazaEditarile(tableName, data)); });
     refetch();
+    // O schimbare venita prin realtime se aplica DOAR pe randul ei. Inainte reincarcam
+    // toata tabela la fiecare modificare, deci orice salvare (inclusiv a ta, in timp ce
+    // scriai) inlocuia tot ce era pe ecran si redesena intreaga pagina.
     const ch = sb.channel(`${tableName}-rt`)
-      .on("postgres_changes", { event: "*", schema: "public", table: tableName }, refetch)
+      .on("postgres_changes", { event: "*", schema: "public", table: tableName }, (payload) => {
+        if (!activ) return;
+        const { eventType } = payload;
+        const nou = payload.new, vechi = payload.old;
+        if (eventType === "DELETE") {
+          if (vechi?.id == null) { refetch(); return; }
+          setFn((p) => p.filter((r) => String(r.id) !== String(vechi.id)));
+          return;
+        }
+        if (!nou || nou.id == null) { refetch(); return; }
+        setFn((p) => {
+          const i = p.findIndex((r) => String(r.id) === String(nou.id));
+          if (i < 0) {
+            // randul nou se aseaza la locul lui dupa created_at, ca sa fie aceeasi
+            // ordine ca atunci cand se reincarca toata tabela
+            const adaugat = pastreazaEditariRand(tableName, nou);
+            const poz = p.findIndex((r) => String(r.created_at) > String(adaugat.created_at));
+            return poz < 0 ? [...p, adaugat] : [...p.slice(0, poz), adaugat, ...p.slice(poz)];
+          }
+          const actualizat = pastreazaEditariRand(tableName, { ...p[i], ...nou });
+          if (acelasiRand(p[i], actualizat)) return p; // nimic nou pe ecran
+          const n = [...p];
+          n[i] = actualizat;
+          return n;
+        });
+      })
       .subscribe();
+    // la revenirea pe pagina reluam tot, in caz ca s-au pierdut mesaje cat am fost plecati
     const onFocus = () => refetch();
     const onVisibility = () => { if (document.visibilityState === "visible") refetch(); };
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
+      activ = false;
       sb.removeChannel(ch);
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);
+}
+
+// Campurile care au text netrimis inca. Se golesc inainte de orice apasare de pe
+// pagina, ca un buton apasat imediat dupa scris sa lucreze cu ce ai tastat, nu cu
+// valoarea dinainte. pointerdown/keydown se petrec inaintea lui click.
+const campuriDeTrimis = new Set();
+const trimiteCampurile = () => campuriDeTrimis.forEach((f) => f());
+if (typeof document !== "undefined") {
+  document.addEventListener("pointerdown", trimiteCampurile, true);
+  document.addEventListener("mousedown", trimiteCampurile, true);
+  document.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === "Tab") trimiteCampurile(); }, true);
+}
+
+// Input care nu redeseneaza toata aplicatia la fiecare tasta: cat timp scrii in el isi
+// tine singur textul, iar starea aplicatiei (si salvarea) se actualizeaza la scurt timp
+// dupa ce te-ai oprit, sau cand iesi din camp. Primeste si trimite exact ca un <input>.
+function FastInput({ value, onChange, delay = 200, onFocus, onBlur, ...rest }) {
+  const [local, setLocal] = useState(value ?? "");
+  const scrie = useRef(false);
+  const timer = useRef(null);
+  const trimiteRef = useRef(onChange);
+  trimiteRef.current = onChange;
+
+  // valoarea din afara se preia doar cand nu ai cursorul in camp
+  useEffect(() => { if (!scrie.current) setLocal(value ?? ""); }, [value]);
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  const propaga = (v) => trimiteRef.current?.({ target: { value: v } });
+
+  // Daca scrii si apesi imediat pe un buton (Salveaza, Închide tichet...), apasarea
+  // nu are voie sa prinda valoarea veche. Inainte de orice clic sau Enter de pe
+  // pagina, campul isi trimite textul mai departe pe loc.
+  const trimiteAcum = useRef(null);
+  trimiteAcum.current = () => {
+    if (!timer.current) return;
+    clearTimeout(timer.current);
+    timer.current = null;
+    propaga(local);
+  };
+  useEffect(() => {
+    const f = () => trimiteAcum.current?.();
+    campuriDeTrimis.add(f);
+    return () => { campuriDeTrimis.delete(f); };
+  }, []);
+
+  return (
+    <input
+      {...rest}
+      value={local}
+      onChange={(e) => {
+        const v = e.target.value;
+        setLocal(v);
+        clearTimeout(timer.current);
+        timer.current = setTimeout(() => { timer.current = null; propaga(v); }, delay);
+      }}
+      onFocus={(e) => { scrie.current = true; onFocus?.(e); }}
+      onBlur={(e) => {
+        scrie.current = false;
+        clearTimeout(timer.current);
+        timer.current = null;
+        // comparatie slaba: campurile numerice se intorc ca numar (100), nu ca text ("100"),
+        // si n-are rost sa mai salvam o data aceeasi valoare la iesirea din camp
+        if (String(local) !== String(value ?? "")) propaga(local);
+        onBlur?.(e);
+      }}
+    />
+  );
 }
 
 // ── Main App ──────────────────────────────────────────────────
@@ -711,9 +856,17 @@ export default function App() {
   const dbSave = (table, id, changes) => {
     if (!id) return;
     const key = `${table}-${id}`;
+    // Marchez campul ca nesalvat inca, ca datele venite de la server sa nu-l suprascrie
+    // cat timp mai scriu in el. Se sterge dupa ce salvarea a ajuns efectiv in baza.
+    Object.entries(changes).forEach(([camp, val]) => editariInCurs.set(`${table}:${id}:${camp}`, val));
     clearTimeout(debounce.current[key]);
     debounce.current[key] = setTimeout(async () => {
       const { error } = await sb.from(table).update(changes).eq("id", id);
+      Object.entries(changes).forEach(([camp, val]) => {
+        const k = `${table}:${id}:${camp}`;
+        // daca intre timp ai mai scris, valoarea noua e alta — o las marcata ca nesalvata
+        if (editariInCurs.get(k) === val) editariInCurs.delete(k);
+      });
       if (!error) logAction("update", table, id, changes);
     }, 700);
   };
@@ -3543,7 +3696,7 @@ Reguli:
   const subTabSt = (name) => ({ padding: "5px 13px", cursor: "pointer", border: "none", fontWeight: 600, fontSize: 12, borderBottom: bordSubTab === name ? `2px solid ${G}` : "2px solid transparent", background: bordSubTab === name ? "#f0faf4" : "transparent", color: bordSubTab === name ? G : "#666", marginRight: 3 });
   const SC = ({ label, value, c, bg }) => (<div style={{ flex: 1, minWidth: 120, background: bg, border: `1px solid ${c}33`, borderRadius: 8, padding: "7px 12px" }}><div style={{ fontSize: 10, color: "#666", marginBottom: 1 }}>{label}</div><div style={{ fontSize: 14, fontWeight: 700, color: c }}>{value}</div></div>);
   const AddBtn = ({ onClick, label, color = G }) => (<button onClick={onClick} style={{ marginTop: 10, background: color, color: "#fff", border: "none", borderRadius: 6, padding: "7px 15px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>{label}</button>);
-  const IBox = (label, f, ph = "") => (<div style={{ marginBottom: 7 }}><label style={LSt}>{label}</label><input style={IFS} value={b[f] || ""} onChange={(e) => updB(f, e.target.value)} placeholder={ph} /></div>);
+  const IBox = (label, f, ph = "") => (<div style={{ marginBottom: 7 }}><label style={LSt}>{label}</label><FastInput style={IFS} value={b[f] || ""} onChange={(e) => updB(f, e.target.value)} placeholder={ph} /></div>);
   const regCols = [{ k: "serie", l: "Serie", w: 45 }, { k: "nr", l: "Nr", w: 65 }, { k: "data", l: "Data", w: 85 }, { k: "furnizor", l: "Furnizor", w: 150 }, { k: "cnp", l: "CNP", w: 110 }, { k: "denumire", l: "Denumire Deseu", w: 180 }, { k: "cantitate", l: "Cant.(kg)", w: 75 }, { k: "pu", l: "PU", w: 50 }, { k: "valoare", l: "Valoare", w: 65 }];
 
   // Group registru rows by serie+nr for print button display
@@ -3717,7 +3870,7 @@ Reguli:
               {puncteModal.adrese.map((adresa, ai) => (
                 <div key={ai} style={{ display: "flex", gap: 6, alignItems: "center" }}>
                   <span style={{ fontSize: 11, color: "#999", minWidth: 18, textAlign: "right" }}>{ai + 1}.</span>
-                  <input
+                  <FastInput
                     autoFocus={ai === puncteModal.adrese.length - 1}
                     style={{ flex: 1, padding: "6px 8px", border: "1px solid #bbdefb", borderRadius: 5, fontSize: 13, outline: "none" }}
                     value={adresa}
@@ -3807,7 +3960,7 @@ Reguli:
                           />
                         </td>
                         <td style={{ padding: "4px 6px" }}>
-                          <input
+                          <FastInput
                             style={{ width: "100%", padding: "4px 6px", border: "1px solid #ddd", borderRadius: 4, fontSize: 12, textAlign: "center", boxSizing: "border-box" }}
                             value={it.cod_art || ""}
                             onChange={(e) => { const nou = [...matTipiceModal.items]; nou[ai] = { ...nou[ai], cod_art: e.target.value }; setMatTipiceModal(p => ({ ...p, items: nou })); }}
@@ -3815,7 +3968,7 @@ Reguli:
                           />
                         </td>
                         <td style={{ padding: "4px 6px" }}>
-                          <input
+                          <FastInput
                             style={{ width: "100%", padding: "4px 6px", border: "1px solid #a5d6a7", borderRadius: 4, fontSize: 12, textAlign: "center", background: "#f1f8e9", boxSizing: "border-box" }}
                             type="text" inputMode="decimal"
                             value={it.min_kg || ""}
@@ -3824,7 +3977,7 @@ Reguli:
                           />
                         </td>
                         <td style={{ padding: "4px 6px" }}>
-                          <input
+                          <FastInput
                             style={{ width: "100%", padding: "4px 6px", border: "1px solid #ef9a9a", borderRadius: 4, fontSize: 12, textAlign: "center", background: "#fce4ec", boxSizing: "border-box" }}
                             type="text" inputMode="decimal"
                             value={it.max_kg || ""}
@@ -3889,8 +4042,8 @@ Reguli:
                   <tbody>
                     {delegatiModal.items.map((it, ai) => (
                       <tr key={ai} style={{ background: ai % 2 === 0 ? "#fff" : "#faf5ff" }}>
-                        <td style={{ padding: "4px 6px" }}><input style={{ width: "100%", padding: "5px 6px", border: "1px solid #ddd", borderRadius: 4, fontSize: 12, textAlign: "center", boxSizing: "border-box" }} value={it.nume || ""} onChange={(e) => { const nou = [...delegatiModal.items]; nou[ai] = { ...nou[ai], nume: e.target.value }; setDelegatiModal((p) => ({ ...p, items: nou })); }} placeholder="Nume Prenume" /></td>
-                        <td style={{ padding: "4px 6px" }}><input style={{ width: "100%", padding: "5px 6px", border: "1px solid #ddd", borderRadius: 4, fontSize: 12, textAlign: "center", boxSizing: "border-box" }} value={it.ci || ""} onChange={(e) => { const nou = [...delegatiModal.items]; nou[ai] = { ...nou[ai], ci: e.target.value }; setDelegatiModal((p) => ({ ...p, items: nou })); }} placeholder="ex: IF687666" /></td>
+                        <td style={{ padding: "4px 6px" }}><FastInput style={{ width: "100%", padding: "5px 6px", border: "1px solid #ddd", borderRadius: 4, fontSize: 12, textAlign: "center", boxSizing: "border-box" }} value={it.nume || ""} onChange={(e) => { const nou = [...delegatiModal.items]; nou[ai] = { ...nou[ai], nume: e.target.value }; setDelegatiModal((p) => ({ ...p, items: nou })); }} placeholder="Nume Prenume" /></td>
+                        <td style={{ padding: "4px 6px" }}><FastInput style={{ width: "100%", padding: "5px 6px", border: "1px solid #ddd", borderRadius: 4, fontSize: 12, textAlign: "center", boxSizing: "border-box" }} value={it.ci || ""} onChange={(e) => { const nou = [...delegatiModal.items]; nou[ai] = { ...nou[ai], ci: e.target.value }; setDelegatiModal((p) => ({ ...p, items: nou })); }} placeholder="ex: IF687666" /></td>
                         <td style={{ padding: "4px 4px", textAlign: "center" }}><button onClick={() => { const nou = delegatiModal.items.filter((_, j) => j !== ai); setDelegatiModal((p) => ({ ...p, items: nou })); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 16 }} title="Șterge">✕</button></td>
                       </tr>
                     ))}
@@ -3949,9 +4102,9 @@ Reguli:
                   <tbody>
                     {masiniModal.items.map((it, ai) => (
                       <tr key={ai} style={{ background: ai % 2 === 0 ? "#fff" : "#e0f2f1" }}>
-                        <td style={{ padding: "4px 6px" }}><input style={{ width: "100%", padding: "5px 6px", border: "1px solid #ddd", borderRadius: 4, fontSize: 12, textAlign: "center", boxSizing: "border-box", textTransform: "uppercase" }} value={it.auto || ""} onChange={(e) => { const nou = [...masiniModal.items]; nou[ai] = { ...nou[ai], auto: e.target.value }; setMasiniModal((p) => ({ ...p, items: nou })); }} placeholder="ex: IF55KFT" /></td>
-                        <td style={{ padding: "4px 6px" }}><input style={{ width: "100%", padding: "5px 6px", border: "1px solid #ddd", borderRadius: 4, fontSize: 12, textAlign: "center", boxSizing: "border-box" }} value={it.licenta || ""} onChange={(e) => { const nou = [...masiniModal.items]; nou[ai] = { ...nou[ai], licenta: e.target.value }; setMasiniModal((p) => ({ ...p, items: nou })); }} placeholder="nu e cazul" /></td>
-                        <td style={{ padding: "4px 6px" }}><input style={{ width: "100%", padding: "5px 6px", border: "1px solid #ddd", borderRadius: 4, fontSize: 12, textAlign: "center", boxSizing: "border-box" }} value={it.licenta_expira || ""} onChange={(e) => { const nou = [...masiniModal.items]; nou[ai] = { ...nou[ai], licenta_expira: e.target.value }; setMasiniModal((p) => ({ ...p, items: nou })); }} placeholder="DD.MM.YYYY" /></td>
+                        <td style={{ padding: "4px 6px" }}><FastInput style={{ width: "100%", padding: "5px 6px", border: "1px solid #ddd", borderRadius: 4, fontSize: 12, textAlign: "center", boxSizing: "border-box", textTransform: "uppercase" }} value={it.auto || ""} onChange={(e) => { const nou = [...masiniModal.items]; nou[ai] = { ...nou[ai], auto: e.target.value }; setMasiniModal((p) => ({ ...p, items: nou })); }} placeholder="ex: IF55KFT" /></td>
+                        <td style={{ padding: "4px 6px" }}><FastInput style={{ width: "100%", padding: "5px 6px", border: "1px solid #ddd", borderRadius: 4, fontSize: 12, textAlign: "center", boxSizing: "border-box" }} value={it.licenta || ""} onChange={(e) => { const nou = [...masiniModal.items]; nou[ai] = { ...nou[ai], licenta: e.target.value }; setMasiniModal((p) => ({ ...p, items: nou })); }} placeholder="nu e cazul" /></td>
+                        <td style={{ padding: "4px 6px" }}><FastInput style={{ width: "100%", padding: "5px 6px", border: "1px solid #ddd", borderRadius: 4, fontSize: 12, textAlign: "center", boxSizing: "border-box" }} value={it.licenta_expira || ""} onChange={(e) => { const nou = [...masiniModal.items]; nou[ai] = { ...nou[ai], licenta_expira: e.target.value }; setMasiniModal((p) => ({ ...p, items: nou })); }} placeholder="DD.MM.YYYY" /></td>
                         <td style={{ padding: "4px 4px", textAlign: "center" }}><button onClick={() => { const nou = masiniModal.items.filter((_, j) => j !== ai); setMasiniModal((p) => ({ ...p, items: nou })); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 16 }} title="Șterge">✕</button></td>
                       </tr>
                     ))}
@@ -4007,8 +4160,8 @@ Reguli:
               </div>
               <div><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Material / Deșeu</label><div style={{ border: "1px solid #ccc", borderRadius: 5, padding: "2px 4px" }}><ACStrict value={ticEdit.material} options={PRODUSE_DYN} placeholder="Selectează..." style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, boxSizing: "border-box" }} onChange={(v) => setTicEdit((p) => ({ ...p, material: v }))} /></div></div>
               <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-                <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 700, color: G }}>Brut (kg)</label><input style={{ width: "100%", padding: "7px 8px", border: `1.5px solid ${G}`, borderRadius: 5, fontSize: 14, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="text" inputMode="decimal" value={ticEdit.brut} onChange={(e) => setTicEdit((p) => ({ ...p, brut: e.target.value }))} /></div>
-                <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 700, color: "#e65100" }}>Tara (kg)</label><input style={{ width: "100%", padding: "7px 8px", border: "1.5px solid #ffa726", borderRadius: 5, fontSize: 14, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="text" inputMode="decimal" value={ticEdit.tara} onChange={(e) => setTicEdit((p) => ({ ...p, tara: e.target.value }))} /></div>
+                <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 700, color: G }}>Brut (kg)</label><FastInput style={{ width: "100%", padding: "7px 8px", border: `1.5px solid ${G}`, borderRadius: 5, fontSize: 14, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="text" inputMode="decimal" value={ticEdit.brut} onChange={(e) => setTicEdit((p) => ({ ...p, brut: e.target.value }))} /></div>
+                <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 700, color: "#e65100" }}>Tara (kg)</label><FastInput style={{ width: "100%", padding: "7px 8px", border: "1.5px solid #ffa726", borderRadius: 5, fontSize: 14, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="text" inputMode="decimal" value={ticEdit.tara} onChange={(e) => setTicEdit((p) => ({ ...p, tara: e.target.value }))} /></div>
                 <div style={{ flex: 1, textAlign: "center", background: "#eef7f0", border: `1.5px solid ${G}`, borderRadius: 5, padding: "5px 4px" }}>
                   <div style={{ fontSize: 10, color: "#777" }}>NET (auto)</div>
                   {(() => {
@@ -4020,20 +4173,20 @@ Reguli:
                 </div>
               </div>
               <div style={{ display: "flex", gap: 8 }}>
-                <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Factura</label><input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, boxSizing: "border-box" }} value={ticEdit.factura} onChange={(e) => setTicEdit((p) => ({ ...p, factura: e.target.value }))} /></div>
-                <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Aviz</label><input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, boxSizing: "border-box" }} value={ticEdit.aviz} onChange={(e) => setTicEdit((p) => ({ ...p, aviz: e.target.value }))} /></div>
+                <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Factura</label><FastInput style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, boxSizing: "border-box" }} value={ticEdit.factura} onChange={(e) => setTicEdit((p) => ({ ...p, factura: e.target.value }))} /></div>
+                <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Aviz</label><FastInput style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, boxSizing: "border-box" }} value={ticEdit.aviz} onChange={(e) => setTicEdit((p) => ({ ...p, aviz: e.target.value }))} /></div>
               </div>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 700, color: "#6a1b9a" }}>⚖️ Cântărit BRUT la</label>
-                <input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ce93d8", borderRadius: 5, fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }} value={ticEdit.brut_la} onChange={(e) => { const v = e.target.value; const ora = extractOra(v); setTicEdit((p) => { if (!ora) return { ...p, brut_la: v }; const oraField = p.tip === "Iesire" ? "ora_iesire" : "ora_intrare"; return { ...p, brut_la: v, [oraField]: ora }; }); }} placeholder="DD.MM.YYYY HH:MM:SS" />
+                <FastInput style={{ width: "100%", padding: "6px 8px", border: "1px solid #ce93d8", borderRadius: 5, fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }} value={ticEdit.brut_la} onChange={(e) => { const v = e.target.value; const ora = extractOra(v); setTicEdit((p) => { if (!ora) return { ...p, brut_la: v }; const oraField = p.tip === "Iesire" ? "ora_iesire" : "ora_intrare"; return { ...p, brut_la: v, [oraField]: ora }; }); }} placeholder="DD.MM.YYYY HH:MM:SS" />
               </div>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 700, color: "#6a1b9a" }}>⚖️ Cântărit TARA la</label>
-                <input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ce93d8", borderRadius: 5, fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }} value={ticEdit.tara_la} onChange={(e) => { const v = e.target.value; const ora = extractOra(v); setTicEdit((p) => { if (!ora) return { ...p, tara_la: v }; const oraField = p.tip === "Iesire" ? "ora_intrare" : "ora_iesire"; return { ...p, tara_la: v, [oraField]: ora }; }); }} placeholder="DD.MM.YYYY HH:MM:SS" />
+                <FastInput style={{ width: "100%", padding: "6px 8px", border: "1px solid #ce93d8", borderRadius: 5, fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }} value={ticEdit.tara_la} onChange={(e) => { const v = e.target.value; const ora = extractOra(v); setTicEdit((p) => { if (!ora) return { ...p, tara_la: v }; const oraField = p.tip === "Iesire" ? "ora_intrare" : "ora_iesire"; return { ...p, tara_la: v, [oraField]: ora }; }); }} placeholder="DD.MM.YYYY HH:MM:SS" />
               </div>
               <div style={{ display: "flex", gap: 8 }}>
-                <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Ora intrare</label><input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }} value={ticEdit.ora_intrare} onChange={(e) => setTicEdit((p) => ({ ...p, ora_intrare: e.target.value }))} placeholder="HH:MM" /></div>
-                <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Ora ieșire</label><input style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }} value={ticEdit.ora_iesire} onChange={(e) => setTicEdit((p) => ({ ...p, ora_iesire: e.target.value }))} placeholder="HH:MM" /></div>
+                <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Ora intrare</label><FastInput style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }} value={ticEdit.ora_intrare} onChange={(e) => setTicEdit((p) => ({ ...p, ora_intrare: e.target.value }))} placeholder="HH:MM" /></div>
+                <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Ora ieșire</label><FastInput style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }} value={ticEdit.ora_iesire} onChange={(e) => setTicEdit((p) => ({ ...p, ora_iesire: e.target.value }))} placeholder="HH:MM" /></div>
               </div>
               <div style={{ fontSize: 10, color: "#999" }}>💡 Orele de cântărire apar pe tichetul printat la „Cantarit la". Format: 10.12.2025 15:48:03</div>
             </div>
@@ -4242,7 +4395,7 @@ Reguli:
                           <option value="normal">⚪</option>
                           <option value="urgent">🔴</option>
                         </select>
-                        <input
+                        <FastInput
                           value={t.text || ""}
                           onChange={(e) => updTask(t.id, "text", e.target.value)}
                           title={t.text || undefined}
@@ -4403,7 +4556,7 @@ Reguli:
                         <div style={{ fontWeight: 700, color: G, marginBottom: 8, fontSize: 12 }}>📋 Date Borderou</div>
                         <div style={{ display: "flex", gap: 8 }}>
                           <div style={{ flex: "0 0 85px" }}><label style={LSt}>Seria</label><select style={{ ...IFS, fontWeight: 700, color: G }} value={b.serie} onChange={(e) => updB("serie", e.target.value)}>{SERII.map((s) => <option key={s}>{s}</option>)}</select></div>
-                          <div style={{ flex: 1 }}><label style={LSt}>Nr.</label><input style={{ ...IFS, fontWeight: 700, color: "#1565c0" }} value={b.nr} onChange={(e) => updB("nr", e.target.value)} /></div>
+                          <div style={{ flex: 1 }}><label style={LSt}>Nr.</label><FastInput style={{ ...IFS, fontWeight: 700, color: "#1565c0" }} value={b.nr} onChange={(e) => updB("nr", e.target.value)} /></div>
                         </div>
                         <div style={{ marginTop: 8 }}><label style={LSt}>Data</label><DateInput value={b.data || ""} onChange={(v) => updB("data", v)} style={IFS} /></div>
                       </div>
@@ -4411,7 +4564,7 @@ Reguli:
                         <div style={{ fontWeight: 700, color: "#1565c0", marginBottom: 8, fontSize: 12 }}>👤 Date Deținător</div>
                         <div style={{ marginBottom: 8, position: "relative" }}>
                           <label style={LSt}>Caută în Furnizori Pers. Fizice</label>
-                          <input style={{ ...IFS, borderColor: "#1565c0" }} value={detSearch} onChange={(e) => { setDetSearch(e.target.value); setDetOpen(true); }} onFocus={() => setDetOpen(true)} onBlur={() => setTimeout(() => setDetOpen(false), 200)} placeholder="Tastează nume, CNP sau cod..." />
+                          <FastInput style={{ ...IFS, borderColor: "#1565c0" }} value={detSearch} onChange={(e) => { setDetSearch(e.target.value); setDetOpen(true); }} onFocus={() => setDetOpen(true)} onBlur={() => setTimeout(() => setDetOpen(false), 200)} placeholder="Tastează nume, CNP sau cod..." />
                           {detOpen && detFiltered.length > 0 && (
                             <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 999, background: "#fff", border: "1px solid #1565c0", borderRadius: 6, boxShadow: "0 4px 16px rgba(0,0,0,.15)", maxHeight: 180, overflowY: "auto" }}>
                               {detFiltered.map((f, fi) => (<div key={fi} onMouseDown={() => fillDet(f)} style={{ padding: "6px 10px", fontSize: 12, cursor: "pointer", borderBottom: "1px solid #e3f2fd", display: "flex", gap: 8, alignItems: "center" }} onMouseEnter={(e) => (e.currentTarget.style.background = "#e3f2fd")} onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}><span style={{ background: "#1565c0", color: "#fff", borderRadius: 4, padding: "1px 5px", fontSize: 10, fontWeight: 700 }}>{f.cod}</span><span style={{ fontWeight: 600, flex: 1 }}>{f.denumire}</span><span style={{ color: "#888", fontSize: 10 }}>{f.cod_fiscal}</span></div>))}
@@ -4436,7 +4589,7 @@ Reguli:
                         <div style={{ fontWeight: 700, color: "#e65100", marginBottom: 8, fontSize: 12 }}>📦 Produse / Deșeuri</div>
                         <table style={{ borderCollapse: "collapse", width: "100%" }}>
                           <thead><tr><th style={th({ background: "#e65100", minWidth: 170 })}>Denumire</th><th style={th({ width: 85, background: "#e65100" })}>CodSAGA</th><th style={th({ width: 96, background: "#e65100" })}>Cant.(kg)</th><th style={th({ width: 68, background: "#e65100" })}>Preț</th><th style={th({ width: 72, background: "#e65100" })}>Valoare</th><th style={th({ width: 26, background: "#e65100" })}></th></tr></thead>
-                          <tbody>{b.produse.map((p, i) => { const v = parseSuma(p.cant) * parseSuma(p.pret); return (<tr key={i} style={{ background: i % 2 === 0 ? "#fff" : "#fffde7" }}><td style={td()}><ACStrict value={p.den} options={PRODUSE_DYN} placeholder="Selectează..." onChange={(v) => updP(i, "den", v)} /></td><td style={td()}><input style={inp({ textAlign: "center" })} value={p.cod_art || ""} onChange={(e) => updP(i, "cod_art", e.target.value)} /></td><td style={td()}><div style={{ display: "flex", gap: 2, alignItems: "center" }}><input style={inpNum({ textAlign: "right", minWidth: 34 })} type="text" inputMode="decimal" value={p.cant} onChange={(e) => updP(i, "cant", e.target.value)} />{scalePort && <button onClick={() => useScaleWeight(v => updP(i, "cant", v))} title="Citește din cantar" style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 3, padding: "1px 3px", cursor: "pointer", fontSize: 10, flexShrink: 0 }}>⚖️</button>}</div></td><td style={td()}><input style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={p.pret} onChange={(e) => updP(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", fontWeight: 600, background: "#fff8e1" })}>{v > 0 ? fmt(v) : "—"}</td><td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => setB((b) => ({ ...b, produse: b.produse.filter((_, j) => j !== i) }))} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                          <tbody>{b.produse.map((p, i) => { const v = parseSuma(p.cant) * parseSuma(p.pret); return (<tr key={i} style={{ background: i % 2 === 0 ? "#fff" : "#fffde7" }}><td style={td()}><ACStrict value={p.den} options={PRODUSE_DYN} placeholder="Selectează..." onChange={(v) => updP(i, "den", v)} /></td><td style={td()}><FastInput style={inp({ textAlign: "center" })} value={p.cod_art || ""} onChange={(e) => updP(i, "cod_art", e.target.value)} /></td><td style={td()}><div style={{ display: "flex", gap: 2, alignItems: "center" }}><FastInput style={inpNum({ textAlign: "right", minWidth: 34 })} type="text" inputMode="decimal" value={p.cant} onChange={(e) => updP(i, "cant", e.target.value)} />{scalePort && <button onClick={() => useScaleWeight(v => updP(i, "cant", v))} title="Citește din cantar" style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 3, padding: "1px 3px", cursor: "pointer", fontSize: 10, flexShrink: 0 }}>⚖️</button>}</div></td><td style={td()}><FastInput style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={p.pret} onChange={(e) => updP(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", fontWeight: 600, background: "#fff8e1" })}>{v > 0 ? fmt(v) : "—"}</td><td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => setB((b) => ({ ...b, produse: b.produse.filter((_, j) => j !== i) }))} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
                         </table>
                         <button onClick={() => setB((b) => ({ ...b, produse: [...b.produse, { den: "", cod: "", cod_art: "", cant: "", pret: "" }] }))} style={{ marginTop: 6, background: "#e65100", color: "#fff", border: "none", borderRadius: 4, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Adaugă produs</button>
                       </div>
@@ -4476,7 +4629,7 @@ Reguli:
                     <option value="">📅 Toate lunile</option>
                     {regPfMonths.map(m => <option key={m} value={m}>{m}</option>)}
                   </select>
-                  <input type="text" placeholder="🔍 Caută furnizor, CNP, nr, denumire..." value={regPfSearch} onChange={(e) => setRegPfSearch(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 6, padding: "6px 10px", fontSize: 12, minWidth: 280, flex: 1 }} />
+                  <FastInput type="text" placeholder="🔍 Caută furnizor, CNP, nr, denumire..." value={regPfSearch} onChange={(e) => setRegPfSearch(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 6, padding: "6px 10px", fontSize: 12, minWidth: 280, flex: 1 }} />
                   {(regPfMonth || regPfSearch) && <button onClick={() => { setRegPfMonth(""); setRegPfSearch(""); }} style={{ background: "#fff", border: "1px solid #c62828", color: "#c62828", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontSize: 12 }}>✕ Resetează</button>}
                   {(() => {
                     const nrBorderouri = new Set(filteredReg.map(r => `${r.serie}__${r.nr}`)).size;
@@ -4543,12 +4696,12 @@ Reguli:
                     <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
                       <div style={{ flex: "0 0 80px" }}><label style={LSt}>Seria</label><select style={{ ...fld, fontWeight: 700, color: G }} value={autoCfg.serie} onChange={(e) => setAutoCfg(p => ({ ...p, serie: e.target.value }))}>{SERII.map(s => <option key={s}>{s}</option>)}</select></div>
                       <div style={{ flex: "0 0 150px" }}><label style={LSt}>Data emiterii</label><DateInput value={autoCfg.data} onChange={(v) => setAutoCfg(p => ({ ...p, data: v }))} style={fld} /></div>
-                      <div style={{ flex: "0 0 110px" }}><label style={LSt}>Câte borderouri</label><input type="number" min="1" style={fld} value={autoCfg.cate} onChange={(e) => setAutoCfg(p => ({ ...p, cate: e.target.value }))} /></div>
+                      <div style={{ flex: "0 0 110px" }}><label style={LSt}>Câte borderouri</label><FastInput type="number" min="1" style={fld} value={autoCfg.cate} onChange={(e) => setAutoCfg(p => ({ ...p, cate: e.target.value }))} /></div>
                       <div style={{ flex: "1 1 240px", minWidth: 200 }}><label style={LSt}>Deșeu</label><div style={{ border: "1px solid #ccc", borderRadius: 4, padding: "2px 4px", background: "#fff" }}><ACStrict value={autoCfg.deseu} options={PRODUSE_DYN} placeholder="Selectează deșeul..." onChange={(v) => setAutoCfg(p => ({ ...p, deseu: v }))} /></div></div>
-                      <div style={{ flex: "0 0 110px" }}><label style={LSt}>Preț (lei/kg)</label><input style={fld} inputMode="decimal" value={autoCfg.pret} onChange={(e) => setAutoCfg(p => ({ ...p, pret: e.target.value }))} placeholder="0,80" /></div>
-                      <div style={{ flex: "0 0 100px" }}><label style={LSt}>Cant. min</label><input style={fld} inputMode="decimal" value={autoCfg.cantMin} onChange={(e) => setAutoCfg(p => ({ ...p, cantMin: e.target.value }))} /></div>
-                      <div style={{ flex: "0 0 100px" }}><label style={LSt}>Cant. max</label><input style={fld} inputMode="decimal" value={autoCfg.cantMax} onChange={(e) => setAutoCfg(p => ({ ...p, cantMax: e.target.value }))} /></div>
-                      <div style={{ flex: "0 0 100px" }}><label style={LSt}>Multiplu de</label><input style={fld} inputMode="numeric" value={autoCfg.pas} onChange={(e) => setAutoCfg(p => ({ ...p, pas: e.target.value }))} /></div>
+                      <div style={{ flex: "0 0 110px" }}><label style={LSt}>Preț (lei/kg)</label><FastInput style={fld} inputMode="decimal" value={autoCfg.pret} onChange={(e) => setAutoCfg(p => ({ ...p, pret: e.target.value }))} placeholder="0,80" /></div>
+                      <div style={{ flex: "0 0 100px" }}><label style={LSt}>Cant. min</label><FastInput style={fld} inputMode="decimal" value={autoCfg.cantMin} onChange={(e) => setAutoCfg(p => ({ ...p, cantMin: e.target.value }))} /></div>
+                      <div style={{ flex: "0 0 100px" }}><label style={LSt}>Cant. max</label><FastInput style={fld} inputMode="decimal" value={autoCfg.cantMax} onChange={(e) => setAutoCfg(p => ({ ...p, cantMax: e.target.value }))} /></div>
+                      <div style={{ flex: "0 0 100px" }}><label style={LSt}>Multiplu de</label><FastInput style={fld} inputMode="numeric" value={autoCfg.pas} onChange={(e) => setAutoCfg(p => ({ ...p, pas: e.target.value }))} /></div>
                       <div style={{ flex: "0 0 170px" }}><label style={LSt}>Sursa deșeurilor</label>
                         <div style={{ display: "flex", gap: 10, fontSize: 12, marginTop: 6 }}>
                           <label style={{ cursor: "pointer" }}><input type="radio" name="autoSursa" value="gospodarie" checked={autoCfg.sursa === "gospodarie"} onChange={(e) => setAutoCfg(p => ({ ...p, sursa: e.target.value }))} /> Gospodărie</label>
@@ -4605,7 +4758,7 @@ Reguli:
                 <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
                   <SC label="Total" value={pfList.length + " pers."} c="#1565c0" bg="#e3f2fd" />
                   <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-                    <input value={pfFilter} onChange={(e) => setPfFilter(e.target.value)} placeholder="🔍 Caută..." style={{ border: "1px solid #ccc", borderRadius: 6, padding: "5px 10px", fontSize: 12, width: 180 }} />
+                    <FastInput value={pfFilter} onChange={(e) => setPfFilter(e.target.value)} placeholder="🔍 Caută..." style={{ border: "1px solid #ccc", borderRadius: 6, padding: "5px 10px", fontSize: 12, width: 180 }} />
                     <button onClick={() => addPF()} style={{ padding: "6px 12px", background: G, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Adaugă</button>
                     <button onClick={() => scanInputRef.current.click()} disabled={scanLoading} style={{ padding: "6px 12px", background: scanLoading ? "#ccc" : "#1565c0", color: "#fff", border: "none", borderRadius: 6, cursor: scanLoading ? "wait" : "pointer", fontSize: 12, fontWeight: 600 }}>{scanLoading ? "⏳ Scanez..." : "📷 Scanează Buletin"}</button>
                     <input ref={scanInputRef} type="file" accept="image/*,.pdf" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) scanBuletin(e.target.files[0]); e.target.value = ""; }} />
@@ -4614,7 +4767,7 @@ Reguli:
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 860 }}>
                     <thead><tr><th style={th({ width: 28, background: "#1565c0" })}></th>{[{ l: "Cod", w: 60 }, { l: "Denumire", w: 175 }, { l: "CNP", w: 125 }, { l: "Analitic", w: 85 }, { l: "Jud.", w: 48 }, { l: "Adresa", w: 185 }, { l: "CI", w: 85 }, { l: "Inf.Supl.", w: 175 }].map((c) => <th key={c.l} style={{ ...th({ background: "#1565c0" }), width: c.w }}>{c.l}</th>)}<th style={th({ background: "#1565c0", width: 30 })}></th></tr></thead>
-                    <tbody>{pfList.filter((r) => !pfFilter || r.denumire?.toLowerCase().includes(pfFilter.toLowerCase()) || r.cod?.includes(pfFilter) || r.cod_fiscal?.includes(pfFilter)).map((r, i) => { const rowBg = i % 2 === 0 ? "#fff" : "#f0f4ff"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td><td style={td({ background: "#e3f2fd", fontWeight: 700, color: "#1565c0", textAlign: "center" })}><input style={inp({ textAlign: "center", fontWeight: 700, color: "#1565c0" })} value={r.cod || ""} onChange={(e) => updPF(i, "cod", e.target.value)} /></td><td style={td({ fontWeight: 600 })}><input style={inp({ fontWeight: 600 })} value={r.denumire || ""} onChange={(e) => updPF(i, "denumire", e.target.value)} /></td><td style={td({ background: "#fff8e1" })}><input style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.cod_fiscal || ""} onChange={(e) => updPF(i, "cod_fiscal", e.target.value)} /></td><td style={td()}><input style={inp({ fontSize: 11 })} value={r.analitic || ""} onChange={(e) => updPF(i, "analitic", e.target.value)} /></td><td style={td({ background: "#e8f5e9", textAlign: "center", fontWeight: 600, color: G })}><input style={inp({ textAlign: "center", fontWeight: 600, color: G })} value={r.judet || ""} onChange={(e) => updPF(i, "judet", e.target.value)} /></td><td style={td({ fontSize: 11 })}><input style={inp({ fontSize: 11 })} value={r.adresa || ""} onChange={(e) => updPF(i, "adresa", e.target.value)} /></td><td style={td({ fontFamily: "monospace", fontSize: 11 })}><input style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.reg_com || ""} onChange={(e) => updPF(i, "reg_com", e.target.value)} /></td><td style={td({ fontSize: 11 })}><input style={inp({ fontSize: 11 })} value={r.inf_supl || ""} onChange={(e) => updPF(i, "inf_supl", e.target.value)} /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delPF(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                    <tbody>{pfList.filter((r) => !pfFilter || r.denumire?.toLowerCase().includes(pfFilter.toLowerCase()) || r.cod?.includes(pfFilter) || r.cod_fiscal?.includes(pfFilter)).map((r, i) => { const rowBg = i % 2 === 0 ? "#fff" : "#f0f4ff"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td><td style={td({ background: "#e3f2fd", fontWeight: 700, color: "#1565c0", textAlign: "center" })}><FastInput style={inp({ textAlign: "center", fontWeight: 700, color: "#1565c0" })} value={r.cod || ""} onChange={(e) => updPF(i, "cod", e.target.value)} /></td><td style={td({ fontWeight: 600 })}><FastInput style={inp({ fontWeight: 600 })} value={r.denumire || ""} onChange={(e) => updPF(i, "denumire", e.target.value)} /></td><td style={td({ background: "#fff8e1" })}><FastInput style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.cod_fiscal || ""} onChange={(e) => updPF(i, "cod_fiscal", e.target.value)} /></td><td style={td()}><FastInput style={inp({ fontSize: 11 })} value={r.analitic || ""} onChange={(e) => updPF(i, "analitic", e.target.value)} /></td><td style={td({ background: "#e8f5e9", textAlign: "center", fontWeight: 600, color: G })}><FastInput style={inp({ textAlign: "center", fontWeight: 600, color: G })} value={r.judet || ""} onChange={(e) => updPF(i, "judet", e.target.value)} /></td><td style={td({ fontSize: 11 })}><FastInput style={inp({ fontSize: 11 })} value={r.adresa || ""} onChange={(e) => updPF(i, "adresa", e.target.value)} /></td><td style={td({ fontFamily: "monospace", fontSize: 11 })}><FastInput style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.reg_com || ""} onChange={(e) => updPF(i, "reg_com", e.target.value)} /></td><td style={td({ fontSize: 11 })}><FastInput style={inp({ fontSize: 11 })} value={r.inf_supl || ""} onChange={(e) => updPF(i, "inf_supl", e.target.value)} /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delPF(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
                   </table>
                 </div>
               </div>
@@ -4652,8 +4805,8 @@ Reguli:
                         <div style={{ fontWeight: 700, color: "#e65100", marginBottom: 8, fontSize: 12 }}>📋 Date PV</div>
                         <div style={{ display: "flex", gap: 8, marginBottom: 7 }}>
                           <div style={{ flex: "0 0 80px" }}><label style={LSt}>Serie</label><select style={{ ...IFS, fontWeight: 700, color: "#e65100", textAlign: "center" }} value={pv.serie} onChange={(e) => updPV("serie", e.target.value)}><option value="A">A</option><option value="GK">GK</option><option value="PV">PV</option></select></div>
-                          <div style={{ flex: 1 }}><label style={LSt}>Nr. PV</label><input style={{ ...IFS, fontWeight: 700, color: "#1565c0" }} value={pv.nr_pv} onChange={(e) => updPV("nr_pv", e.target.value)} /></div>
-                          <div style={{ flex: 1 }}><label style={LSt}>Nr. Anexa 3</label><input style={{ ...IFS, fontWeight: 700, color: "#1565c0" }} value={pv.nr_anexa} onChange={(e) => updPV("nr_anexa", e.target.value)} /></div>
+                          <div style={{ flex: 1 }}><label style={LSt}>Nr. PV</label><FastInput style={{ ...IFS, fontWeight: 700, color: "#1565c0" }} value={pv.nr_pv} onChange={(e) => updPV("nr_pv", e.target.value)} /></div>
+                          <div style={{ flex: 1 }}><label style={LSt}>Nr. Anexa 3</label><FastInput style={{ ...IFS, fontWeight: 700, color: "#1565c0" }} value={pv.nr_anexa} onChange={(e) => updPV("nr_anexa", e.target.value)} /></div>
                         </div>
                         <div style={{ marginBottom: 7 }}><label style={LSt}>Data</label><DateInput style={IFS} value={pv.data} onChange={(v) => updPV("data", v)} /></div>
                       </div>
@@ -4662,7 +4815,7 @@ Reguli:
                         <div style={{ fontWeight: 700, color: "#1565c0", marginBottom: 8, fontSize: 12 }}>🏢 Beneficiar (din Pers. Juridice)</div>
                         <div style={{ marginBottom: 8, position: "relative" }}>
                           <label style={LSt}>Caută firmă</label>
-                          <input style={{ ...IFS, borderColor: "#1565c0" }} value={pjSearchPV} onChange={(e) => { setPjSearchPV(e.target.value); setPjOpenPV(true); }} onFocus={() => setPjOpenPV(true)} onBlur={() => setTimeout(() => setPjOpenPV(false), 200)} placeholder="Tastează nume, CUI sau cod..." />
+                          <FastInput style={{ ...IFS, borderColor: "#1565c0" }} value={pjSearchPV} onChange={(e) => { setPjSearchPV(e.target.value); setPjOpenPV(true); }} onFocus={() => setPjOpenPV(true)} onBlur={() => setTimeout(() => setPjOpenPV(false), 200)} placeholder="Tastează nume, CUI sau cod..." />
                           {pjOpenPV && pjFiltPV.length > 0 && (
                             <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 999, background: "#fff", border: "1px solid #1565c0", borderRadius: 6, boxShadow: "0 4px 16px rgba(0,0,0,.15)", maxHeight: 180, overflowY: "auto" }}>
                               {pjFiltPV.map((f, fi) => (<div key={fi} onMouseDown={() => fillPjPV(f)} style={{ padding: "6px 10px", fontSize: 12, cursor: "pointer", borderBottom: "1px solid #e3f2fd", display: "flex", gap: 8, alignItems: "center" }} onMouseEnter={(e) => (e.currentTarget.style.background = "#e3f2fd")} onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}><span style={{ background: "#1565c0", color: "#fff", borderRadius: 4, padding: "1px 5px", fontSize: 10, fontWeight: 700 }}>{f.cod}</span><span style={{ fontWeight: 600, flex: 1 }}>{f.denumire}</span><span style={{ color: "#888", fontSize: 10 }}>{f.cod_fiscal}</span></div>))}
@@ -4670,9 +4823,9 @@ Reguli:
                           )}
                           {pv.client_denumire && <div style={{ marginTop: 4, background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 4, padding: "4px 10px", fontSize: 11, color: "#1565c0", display: "flex", gap: 6, alignItems: "center", justifyContent: "space-between" }}><span>✅ <strong>{pv.client_denumire}</strong> — {pv.client_cui}</span><button onMouseDown={() => { setPjSearchPV(""); setPV((p) => ({ ...p, client_id: "", client_denumire: "", client_adresa: "", client_cui: "", client_reg_com: "", client_judet: "" })); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 12, padding: 0 }}>✕</button></div>}
                         </div>
-                        <div style={{ marginBottom: 7 }}><label style={LSt}>Reprezentant</label><input style={IFS} value={pv.client_reprezentant || ""} onChange={(e) => updPV("client_reprezentant", e.target.value)} placeholder="Nume reprezentant..." /></div>
-                        <div style={{ marginBottom: 7 }}><label style={LSt}>Autorizație Mediu nr.</label><input style={IFS} value={pv.client_autorizatie || ""} onChange={(e) => updPV("client_autorizatie", e.target.value)} /></div>
-                        <div><label style={LSt}>Autorizație Mediu — valabilă până</label><input style={IFS} value={pv.client_autorizatie_exp || ""} onChange={(e) => updPV("client_autorizatie_exp", e.target.value)} placeholder="DD.MM.YYYY" /></div>
+                        <div style={{ marginBottom: 7 }}><label style={LSt}>Reprezentant</label><FastInput style={IFS} value={pv.client_reprezentant || ""} onChange={(e) => updPV("client_reprezentant", e.target.value)} placeholder="Nume reprezentant..." /></div>
+                        <div style={{ marginBottom: 7 }}><label style={LSt}>Autorizație Mediu nr.</label><FastInput style={IFS} value={pv.client_autorizatie || ""} onChange={(e) => updPV("client_autorizatie", e.target.value)} /></div>
+                        <div><label style={LSt}>Autorizație Mediu — valabilă până</label><FastInput style={IFS} value={pv.client_autorizatie_exp || ""} onChange={(e) => updPV("client_autorizatie_exp", e.target.value)} placeholder="DD.MM.YYYY" /></div>
                         {(() => {
                           // Find selected client and check for puncte_lucru
                           const selClient = pjList.find(f => f.denumire === pv.client_denumire);
@@ -4701,9 +4854,9 @@ Reguli:
                           </select>
                           {delegatiList.length === 0 && <div style={{ fontSize: 10, color: "#888", marginTop: 2 }}>💡 Adaugă delegați în Variabile → Delegați</div>}
                         </div>
-                        <div style={{ marginBottom: 7 }}><label style={LSt}>Nr. înmatriculare mijloc transport</label><input style={IFS} value={pv.nr_masina || ""} onChange={(e) => updPV("nr_masina", e.target.value)} placeholder="ex: IF55KFT" /></div>
-                        <div style={{ marginBottom: 7 }}><label style={LSt}>Licență transport</label><input style={IFS} value={pv.licenta || ""} onChange={(e) => updPV("licenta", e.target.value)} /></div>
-                        <div style={{ marginBottom: 7 }}><label style={LSt}>Expirare licență</label><input style={IFS} value={pv.licenta_exp || ""} onChange={(e) => updPV("licenta_exp", e.target.value)} placeholder="DD.MM.YYYY" /></div>
+                        <div style={{ marginBottom: 7 }}><label style={LSt}>Nr. înmatriculare mijloc transport</label><FastInput style={IFS} value={pv.nr_masina || ""} onChange={(e) => updPV("nr_masina", e.target.value)} placeholder="ex: IF55KFT" /></div>
+                        <div style={{ marginBottom: 7 }}><label style={LSt}>Licență transport</label><FastInput style={IFS} value={pv.licenta || ""} onChange={(e) => updPV("licenta", e.target.value)} /></div>
+                        <div style={{ marginBottom: 7 }}><label style={LSt}>Expirare licență</label><FastInput style={IFS} value={pv.licenta_exp || ""} onChange={(e) => updPV("licenta_exp", e.target.value)} placeholder="DD.MM.YYYY" /></div>
                         <div><label style={LSt}>Descriere destinație</label>
                           <select style={{ ...IFS, fontWeight: 700, color: "#6a1b9a" }} value={pv.destinatie || ""} onChange={(e) => updPV("destinatie", e.target.value)}>
                             <option value="">— alege —</option>
@@ -4739,8 +4892,8 @@ Reguli:
                           <tbody>{pv.materiale.map((m, i) => (
                             <tr key={i} style={{ background: i % 2 === 0 ? "#fff" : "#fffde7" }}>
                               <td style={td()}><ACStrict value={m.den} options={PRODUSE_DYN} placeholder="Selectează..." onChange={(v) => updPVMat(i, "den", v)} /></td>
-                              <td style={td()}><input style={inp({ textAlign: "center" })} value={m.cod_art || ""} onChange={(e) => updPVMat(i, "cod_art", e.target.value)} /></td>
-                              <td style={td()}><div style={{ display: "flex", gap: 2, alignItems: "center" }}><input style={inpNum({ textAlign: "right", minWidth: 34 })} type="text" inputMode="decimal" value={m.cant} onChange={(e) => updPVMat(i, "cant", e.target.value)} />{scalePort && <button onClick={() => useScaleWeight(v => updPVMat(i, "cant", v))} title="Citește din cantar" style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 3, padding: "1px 3px", cursor: "pointer", fontSize: 10, flexShrink: 0 }}>⚖️</button>}</div></td>
+                              <td style={td()}><FastInput style={inp({ textAlign: "center" })} value={m.cod_art || ""} onChange={(e) => updPVMat(i, "cod_art", e.target.value)} /></td>
+                              <td style={td()}><div style={{ display: "flex", gap: 2, alignItems: "center" }}><FastInput style={inpNum({ textAlign: "right", minWidth: 34 })} type="text" inputMode="decimal" value={m.cant} onChange={(e) => updPVMat(i, "cant", e.target.value)} />{scalePort && <button onClick={() => useScaleWeight(v => updPVMat(i, "cant", v))} title="Citește din cantar" style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 3, padding: "1px 3px", cursor: "pointer", fontSize: 10, flexShrink: 0 }}>⚖️</button>}</div></td>
                               <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => setPV((p) => ({ ...p, materiale: p.materiale.filter((_, j) => j !== i) }))} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
                             </tr>
                           ))}</tbody>
@@ -4783,7 +4936,7 @@ Reguli:
                     <option value="">📅 Toate lunile</option>
                     {regPjMonths.map(m => <option key={m} value={m}>{m}</option>)}
                   </select>
-                  <input type="text" placeholder="🔍 Caută client, CUI, nr PV, denumire material..." value={regPjSearch} onChange={(e) => setRegPjSearch(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 6, padding: "6px 10px", fontSize: 12, minWidth: 280, flex: 1 }} />
+                  <FastInput type="text" placeholder="🔍 Caută client, CUI, nr PV, denumire material..." value={regPjSearch} onChange={(e) => setRegPjSearch(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 6, padding: "6px 10px", fontSize: 12, minWidth: 280, flex: 1 }} />
                   {(regPjMonth || regPjSearch) && <button onClick={() => { setRegPjMonth(""); setRegPjSearch(""); }} style={{ background: "#fff", border: "1px solid #c62828", color: "#c62828", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontSize: 12 }}>✕ Resetează</button>}
                 </div>
                 <div style={{ overflowX: "auto" }}>
@@ -4846,7 +4999,7 @@ Reguli:
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
                     <div style={{ flex: "0 0 210px" }}>
                       <div style={{ display: "flex", gap: 6 }}>
-                        <input value={cuiSearch} onChange={(e) => { setCuiSearch(e.target.value); setCuiResult(null); setCuiErr(""); }} onKeyDown={(e) => e.key === "Enter" && searchCUI()} placeholder="ex: 36191378" style={{ ...IFS, borderColor: "#ffcc80", fontFamily: "monospace" }} />
+                        <FastInput value={cuiSearch} onChange={(e) => { setCuiSearch(e.target.value); setCuiResult(null); setCuiErr(""); }} onKeyDown={(e) => e.key === "Enter" && searchCUI()} placeholder="ex: 36191378" style={{ ...IFS, borderColor: "#ffcc80", fontFamily: "monospace" }} />
                         <button onClick={searchCUI} disabled={cuiLoading} style={{ padding: "5px 12px", background: cuiLoading ? "#ccc" : "#e65100", color: "#fff", border: "none", borderRadius: 6, cursor: cuiLoading ? "wait" : "pointer", fontSize: 12, fontWeight: 700 }}>{cuiLoading ? "⏳" : "🔎"}</button>
                       </div>
                       {cuiErr && <div style={{ marginTop: 5, background: "#ffebee", border: "1px solid #ef9a9a", borderRadius: 5, padding: "5px 8px", fontSize: 11, color: "#c62828" }}>{cuiErr}</div>}
@@ -4857,14 +5010,14 @@ Reguli:
                 <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
                   <SC label="Total Firme" value={pjList.length + " firme"} c="#e65100" bg="#fff3e0" />
                   <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-                    <input value={pjFilter} onChange={(e) => setPjFilter(e.target.value)} placeholder="🔍 Caută..." style={{ border: "1px solid #ccc", borderRadius: 6, padding: "5px 10px", fontSize: 12, width: 180 }} />
+                    <FastInput value={pjFilter} onChange={(e) => setPjFilter(e.target.value)} placeholder="🔍 Caută..." style={{ border: "1px solid #ccc", borderRadius: 6, padding: "5px 10px", fontSize: 12, width: 180 }} />
                     <button onClick={() => addPJ()} style={{ padding: "6px 12px", background: "#e65100", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Adaugă</button>
                   </div>
                 </div>
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 900 }}>
                     <thead><tr><th style={th({ background: "#b71c1c", width: 28 })}></th>{[{ l: "Cod", w: 55 }, { l: "Denumire", w: 185 }, { l: "CUI", w: 105 }, { l: "Analitic", w: 82 }, { l: "Jud.", w: 45 }, { l: "Adresa", w: 180 }, { l: "Cont Bancă", w: 165 }, { l: "Bancă", w: 130 }, { l: "Reg.Com.", w: 100 }, { l: "Tel.", w: 90 }].map((c) => <th key={c.l} style={{ ...th({ background: "#e65100" }), width: c.w }}>{c.l}</th>)}<th style={th({ background: "#e65100", width: 30 })}></th></tr></thead>
-                    <tbody>{pjList.filter((r) => !pjFilter || r.denumire?.toLowerCase().includes(pjFilter.toLowerCase()) || r.cod?.includes(pjFilter) || r.cod_fiscal?.toLowerCase().includes(pjFilter.toLowerCase())).map((r, i) => { const rowBg = i % 2 === 0 ? "#fff" : "#fff8f5"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td><td style={td({ background: "#fff3e0", fontWeight: 700, color: "#e65100", textAlign: "center" })}><input style={inp({ textAlign: "center", fontWeight: 700, color: "#e65100" })} value={r.cod || ""} onChange={(e) => updPJ(i, "cod", e.target.value)} /></td><td style={td({ fontWeight: 600 })}><input style={inp({ fontWeight: 600, fontSize: 11 })} value={r.denumire || ""} onChange={(e) => updPJ(i, "denumire", e.target.value)} /></td><td style={td({ background: "#fff8e1" })}><input style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.cod_fiscal || ""} onChange={(e) => updPJ(i, "cod_fiscal", e.target.value)} /></td><td style={td()}><input style={inp({ fontSize: 11 })} value={r.analitic || ""} onChange={(e) => updPJ(i, "analitic", e.target.value)} /></td><td style={td({ background: "#e8f5e9", textAlign: "center", fontWeight: 600, color: G })}><input style={inp({ textAlign: "center", fontWeight: 600, color: G })} value={r.judet || ""} onChange={(e) => updPJ(i, "judet", e.target.value)} /></td><td style={td({ fontSize: 11 })}><div style={{ display: "flex", gap: 4 }}><input style={inp({ fontSize: 11 })} value={r.adresa || ""} onChange={(e) => updPJ(i, "adresa", e.target.value)} /><button onClick={() => { setPuncteModal({ idx: i, adrese: [...(r.puncte_lucru || [])] }); }} style={{ background: (r.puncte_lucru?.length || 0) > 0 ? "#e3f2fd" : "#fff", border: "1px solid #1565c0", borderRadius: 3, padding: "2px 6px", cursor: "pointer", fontSize: 10, color: "#1565c0", whiteSpace: "nowrap" }} title="Puncte de lucru (adrese suplimentare ridicare)">📍 {r.puncte_lucru?.length || 0}</button><button onClick={() => { setMatTipiceModal({ idx: i, den: r.denumire || "", items: JSON.parse(JSON.stringify(r.mat_tipice || [])) }); }} style={{ background: (r.mat_tipice?.length || 0) > 0 ? "#fff8e1" : "#fff", border: "1px solid #e65100", borderRadius: 3, padding: "2px 6px", cursor: "pointer", fontSize: 10, color: "#e65100", whiteSpace: "nowrap" }} title="Materiale tipice (auto-completare PV)">🗂️ {r.mat_tipice?.length || 0}</button></div></td><td style={td({ background: r.cont_banca ? "#e8f5e9" : "#fff", fontFamily: "monospace", fontSize: 10 })}><input style={inp({ fontFamily: "monospace", fontSize: 10 })} value={r.cont_banca || ""} onChange={(e) => updPJ(i, "cont_banca", e.target.value)} /></td><td style={td({ fontSize: 11 })}><input style={inp({ fontSize: 11 })} value={r.banca || ""} onChange={(e) => updPJ(i, "banca", e.target.value)} /></td><td style={td({ fontFamily: "monospace", fontSize: 11 })}><input style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.reg_com || ""} onChange={(e) => updPJ(i, "reg_com", e.target.value)} /></td><td style={td({ fontSize: 11 })}><input style={inp({ fontSize: 11 })} value={r.tel || ""} onChange={(e) => updPJ(i, "tel", e.target.value)} /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delPJ(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                    <tbody>{pjList.filter((r) => !pjFilter || r.denumire?.toLowerCase().includes(pjFilter.toLowerCase()) || r.cod?.includes(pjFilter) || r.cod_fiscal?.toLowerCase().includes(pjFilter.toLowerCase())).map((r, i) => { const rowBg = i % 2 === 0 ? "#fff" : "#fff8f5"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td><td style={td({ background: "#fff3e0", fontWeight: 700, color: "#e65100", textAlign: "center" })}><FastInput style={inp({ textAlign: "center", fontWeight: 700, color: "#e65100" })} value={r.cod || ""} onChange={(e) => updPJ(i, "cod", e.target.value)} /></td><td style={td({ fontWeight: 600 })}><FastInput style={inp({ fontWeight: 600, fontSize: 11 })} value={r.denumire || ""} onChange={(e) => updPJ(i, "denumire", e.target.value)} /></td><td style={td({ background: "#fff8e1" })}><FastInput style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.cod_fiscal || ""} onChange={(e) => updPJ(i, "cod_fiscal", e.target.value)} /></td><td style={td()}><FastInput style={inp({ fontSize: 11 })} value={r.analitic || ""} onChange={(e) => updPJ(i, "analitic", e.target.value)} /></td><td style={td({ background: "#e8f5e9", textAlign: "center", fontWeight: 600, color: G })}><FastInput style={inp({ textAlign: "center", fontWeight: 600, color: G })} value={r.judet || ""} onChange={(e) => updPJ(i, "judet", e.target.value)} /></td><td style={td({ fontSize: 11 })}><div style={{ display: "flex", gap: 4 }}><FastInput style={inp({ fontSize: 11 })} value={r.adresa || ""} onChange={(e) => updPJ(i, "adresa", e.target.value)} /><button onClick={() => { setPuncteModal({ idx: i, adrese: [...(r.puncte_lucru || [])] }); }} style={{ background: (r.puncte_lucru?.length || 0) > 0 ? "#e3f2fd" : "#fff", border: "1px solid #1565c0", borderRadius: 3, padding: "2px 6px", cursor: "pointer", fontSize: 10, color: "#1565c0", whiteSpace: "nowrap" }} title="Puncte de lucru (adrese suplimentare ridicare)">📍 {r.puncte_lucru?.length || 0}</button><button onClick={() => { setMatTipiceModal({ idx: i, den: r.denumire || "", items: JSON.parse(JSON.stringify(r.mat_tipice || [])) }); }} style={{ background: (r.mat_tipice?.length || 0) > 0 ? "#fff8e1" : "#fff", border: "1px solid #e65100", borderRadius: 3, padding: "2px 6px", cursor: "pointer", fontSize: 10, color: "#e65100", whiteSpace: "nowrap" }} title="Materiale tipice (auto-completare PV)">🗂️ {r.mat_tipice?.length || 0}</button></div></td><td style={td({ background: r.cont_banca ? "#e8f5e9" : "#fff", fontFamily: "monospace", fontSize: 10 })}><FastInput style={inp({ fontFamily: "monospace", fontSize: 10 })} value={r.cont_banca || ""} onChange={(e) => updPJ(i, "cont_banca", e.target.value)} /></td><td style={td({ fontSize: 11 })}><FastInput style={inp({ fontSize: 11 })} value={r.banca || ""} onChange={(e) => updPJ(i, "banca", e.target.value)} /></td><td style={td({ fontFamily: "monospace", fontSize: 11 })}><FastInput style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.reg_com || ""} onChange={(e) => updPJ(i, "reg_com", e.target.value)} /></td><td style={td({ fontSize: 11 })}><FastInput style={inp({ fontSize: 11 })} value={r.tel || ""} onChange={(e) => updPJ(i, "tel", e.target.value)} /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delPJ(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
                   </table>
                 </div>
               </div>
@@ -4965,7 +5118,7 @@ Reguli:
                             </div>
                             <div style={{ flex: 1 }}>
                               <label style={FL}>Număr (de pe carnet) <span style={{ color: "#c62828" }}>*</span></label>
-                              <input style={{ ...FI, fontFamily: "monospace", fontWeight: 700 }} value={a3Nou.numar} onChange={(e) => setA3Nou((p) => ({ ...p, numar: e.target.value }))} placeholder="ex: 246" />
+                              <FastInput style={{ ...FI, fontFamily: "monospace", fontWeight: 700 }} value={a3Nou.numar} onChange={(e) => setA3Nou((p) => ({ ...p, numar: e.target.value }))} placeholder="ex: 246" />
                             </div>
                           </div>
                           <div style={{ marginBottom: 10 }}>
@@ -5009,7 +5162,7 @@ Reguli:
                               <div key={li} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
                                 <div style={{ ...ACB, flex: 1 }}><ACStrict value={l.categorie} options={PRODUSE_DYN} placeholder="Selectează sau scrie..." onChange={(v) => setA3Nou((p) => ({ ...p, linii: p.linii.map((x, j) => j === li ? { ...x, categorie: v } : x) }))} /></div>
                                 {a3Nou.kg_cunoscut && (
-                                  <input style={{ width: 90, padding: "7px 8px", border: "1.5px solid #6a1b9a", borderRadius: 6, fontSize: 13, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="text" inputMode="decimal" value={l.kilograme} onChange={(e) => setA3Nou((p) => ({ ...p, linii: p.linii.map((x, j) => j === li ? { ...x, kilograme: e.target.value } : x) }))} placeholder="kg" />
+                                  <FastInput style={{ width: 90, padding: "7px 8px", border: "1.5px solid #6a1b9a", borderRadius: 6, fontSize: 13, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="text" inputMode="decimal" value={l.kilograme} onChange={(e) => setA3Nou((p) => ({ ...p, linii: p.linii.map((x, j) => j === li ? { ...x, kilograme: e.target.value } : x) }))} placeholder="kg" />
                                 )}
                                 {a3Nou.linii.length > 1 && (
                                   <button onClick={() => setA3Nou((p) => ({ ...p, linii: p.linii.filter((_, j) => j !== li) }))} title="Șterge categoria" style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 14 }}>✕</button>
@@ -5035,7 +5188,7 @@ Reguli:
                                 {DESTINATII.map((d) => <option key={d} value={d}>{d}</option>)}
                               </select>
                             </div>
-                            <div style={{ flex: 1 }}><label style={FL}>Observații</label><input style={FI} value={a3Nou.obs} onChange={(e) => setA3Nou((p) => ({ ...p, obs: e.target.value }))} placeholder="opțional" /></div>
+                            <div style={{ flex: 1 }}><label style={FL}>Observații</label><FastInput style={FI} value={a3Nou.obs} onChange={(e) => setA3Nou((p) => ({ ...p, obs: e.target.value }))} placeholder="opțional" /></div>
                           </div>
                         </div>
                         <div style={{ flex: "1 1 260px", background: "#fff", border: "1px solid #6a1b9a", borderRadius: 10, padding: 16, display: "flex", flexDirection: "column" }}>
@@ -5083,7 +5236,7 @@ Reguli:
                             <div style={{ fontSize: 11, color: "#777", marginBottom: 2 }}>📤 {a3.expeditor} → 📥 {a3.destinatar}</div>
                             <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{a3.categorie}</div>
                             <div style={{ display: "flex", gap: 6 }}>
-                              <input style={{ flex: 1, padding: "7px", border: "1.5px solid #ffa726", borderRadius: 6, fontSize: 14, fontWeight: 700, textAlign: "right", fontFamily: "monospace", boxSizing: "border-box" }} type="text" inputMode="decimal" value={a3KgInput[a3.id] || ""} onChange={(e) => setA3KgInput((p) => ({ ...p, [a3.id]: e.target.value }))} placeholder="kg" />
+                              <FastInput style={{ flex: 1, padding: "7px", border: "1.5px solid #ffa726", borderRadius: 6, fontSize: 14, fontWeight: 700, textAlign: "right", fontFamily: "monospace", boxSizing: "border-box" }} type="text" inputMode="decimal" value={a3KgInput[a3.id] || ""} onChange={(e) => setA3KgInput((p) => ({ ...p, [a3.id]: e.target.value }))} placeholder="kg" />
                               <button onClick={() => completeazaA3Kg(a3)} style={{ padding: "7px 12px", background: "#6a1b9a", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>✔</button>
                               <button onClick={() => delA3(a3)} style={{ padding: "7px 10px", background: "#fff", color: "#e53935", border: "1px solid #ef9a9a", borderRadius: 6, cursor: "pointer", fontSize: 12 }}>✕</button>
                             </div>
@@ -5100,7 +5253,7 @@ Reguli:
                           <option value="">Toate lunile</option>
                           {a3LunaOpts.map((l) => <option key={l} value={l}>{l}</option>)}
                         </select>
-                        <input style={{ padding: "6px 10px", border: "1px solid #ccc", borderRadius: 5, fontSize: 12, width: 240 }} value={a3Filter} onChange={(e) => setA3Filter(e.target.value)} placeholder="🔍 Caută transportator / firmă / categorie..." />
+                        <FastInput style={{ padding: "6px 10px", border: "1px solid #ccc", borderRadius: 5, fontSize: 12, width: 240 }} value={a3Filter} onChange={(e) => setA3Filter(e.target.value)} placeholder="🔍 Caută transportator / firmă / categorie..." />
                         {(a3Luna || a3Filter) && <button onClick={() => { setA3Luna(""); setA3Filter(""); }} style={{ padding: "5px 10px", border: "1px solid #ccc", borderRadius: 5, background: "#fff", cursor: "pointer", fontSize: 11 }}>↺ Reset</button>}
                         <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
                           <SC label="Documente" value={String(new Set(a3Filtrate.map((x) => `${x.serie}__${x.numar}`)).size)} c="#6a1b9a" bg="#f3e5f5" />
@@ -5127,8 +5280,8 @@ Reguli:
                                     </td>
                                     <td style={{ ...td({ textAlign: "center", fontWeight: 700, color: "#6a1b9a" }), padding: 3 }}>
                                       <div style={{ display: "flex", gap: 2, justifyContent: "center" }}>
-                                        <input style={{ ...inp({ textAlign: "center", fontWeight: 700, color: "#6a1b9a", width: 40 }) }} value={a3.serie || ""} onChange={(e) => updA3Doc(a3, "serie", e.target.value)} />
-                                        <input style={{ ...inp({ textAlign: "center", fontWeight: 700, color: "#6a1b9a", width: 55 }) }} value={a3.numar || ""} onChange={(e) => updA3Doc(a3, "numar", e.target.value)} />
+                                        <FastInput style={{ ...inp({ textAlign: "center", fontWeight: 700, color: "#6a1b9a", width: 40 }) }} value={a3.serie || ""} onChange={(e) => updA3Doc(a3, "serie", e.target.value)} />
+                                        <FastInput style={{ ...inp({ textAlign: "center", fontWeight: 700, color: "#6a1b9a", width: 55 }) }} value={a3.numar || ""} onChange={(e) => updA3Doc(a3, "numar", e.target.value)} />
                                       </div>
                                     </td>
                                     <td style={td({ textAlign: "center", padding: 2 })}><DateInput value={a3.data_incarcare || ""} onChange={(v) => updA3Doc(a3, "data_incarcare", v)} /></td>
@@ -5136,7 +5289,7 @@ Reguli:
                                     <td style={{ ...td(), padding: 2 }}><div style={ACB}><ACStrict value={a3.expeditor || ""} options={firmeOpts} onChange={(v) => updA3Firma(a3, "expeditor", v)} /></div></td>
                                     <td style={{ ...td(), padding: 2 }}><div style={ACB}><ACStrict value={a3.destinatar || ""} options={firmeOpts} onChange={(v) => updA3Firma(a3, "destinatar", v)} /></div></td>
                                     <td style={{ ...td({ fontSize: 11 }), padding: 2 }}><div style={ACB}><ACStrict value={a3.categorie || ""} options={PRODUSE_DYN} onChange={(v) => updA3(oi, "categorie", v)} /></div></td>
-                                    <td style={td({ textAlign: "right", fontWeight: 700, padding: 2 })}><input style={inp({ textAlign: "right", fontWeight: 700, width: 65 })} value={a3.kilograme ?? ""} onChange={(e) => updA3(oi, "kilograme", e.target.value === "" ? null : parseSuma(e.target.value))} /></td>
+                                    <td style={td({ textAlign: "right", fontWeight: 700, padding: 2 })}><FastInput style={inp({ textAlign: "right", fontWeight: 700, width: 65 })} value={a3.kilograme ?? ""} onChange={(e) => updA3(oi, "kilograme", e.target.value === "" ? null : parseSuma(e.target.value))} /></td>
                                     <td style={td({ textAlign: "center", fontSize: 10 })}>{a3.operator || "—"}</td>
                                     <td style={td({ textAlign: "center", padding: 2, whiteSpace: "nowrap" })}>
                                       {primaDinGrup && (<>
@@ -5156,19 +5309,19 @@ Reguli:
                                           </div>
                                           <div style={{ minWidth: 180 }}>
                                             <label style={FL}>Delegat (șofer)</label>
-                                            <input style={FI} value={a3.delegat_nume || ""} onChange={(e) => updA3Doc(a3, "delegat_nume", e.target.value)} placeholder="Nume delegat" />
+                                            <FastInput style={FI} value={a3.delegat_nume || ""} onChange={(e) => updA3Doc(a3, "delegat_nume", e.target.value)} placeholder="Nume delegat" />
                                           </div>
                                           <div style={{ minWidth: 120 }}>
                                             <label style={FL}>CI delegat</label>
-                                            <input style={FI} value={a3.delegat_ci || ""} onChange={(e) => updA3Doc(a3, "delegat_ci", e.target.value)} placeholder="Serie+nr CI" />
+                                            <FastInput style={FI} value={a3.delegat_ci || ""} onChange={(e) => updA3Doc(a3, "delegat_ci", e.target.value)} placeholder="Serie+nr CI" />
                                           </div>
                                           <div style={{ minWidth: 120 }}>
                                             <label style={FL}>Nr. auto</label>
-                                            <input style={FI} value={a3.delegat_auto || ""} onChange={(e) => updA3Doc(a3, "delegat_auto", e.target.value)} placeholder="Nr. înmatriculare" />
+                                            <FastInput style={FI} value={a3.delegat_auto || ""} onChange={(e) => updA3Doc(a3, "delegat_auto", e.target.value)} placeholder="Nr. înmatriculare" />
                                           </div>
                                           <div style={{ minWidth: 140 }}>
                                             <label style={FL}>Licență transport</label>
-                                            <input style={FI} value={a3.licenta || ""} onChange={(e) => updA3Doc(a3, "licenta", e.target.value)} placeholder="Nr. licență" />
+                                            <FastInput style={FI} value={a3.licenta || ""} onChange={(e) => updA3Doc(a3, "licenta", e.target.value)} placeholder="Nr. licență" />
                                           </div>
                                           <div style={{ minWidth: 140 }}>
                                             <label style={FL}>Licența expiră</label>
@@ -5182,7 +5335,7 @@ Reguli:
                                           </div>
                                           <div style={{ flex: "1 1 200px", minWidth: 200 }}>
                                             <label style={FL}>Observații</label>
-                                            <input style={FI} value={a3.obs || ""} onChange={(e) => updA3Doc(a3, "obs", e.target.value)} placeholder="opțional" />
+                                            <FastInput style={FI} value={a3.obs || ""} onChange={(e) => updA3Doc(a3, "obs", e.target.value)} placeholder="opțional" />
                                           </div>
                                         </div>
                                       </td>
@@ -5225,7 +5378,7 @@ Reguli:
               <SC label="Înregistrări" value={chFiltered.length + " / " + chRows.length} c="#6a1b9a" bg="#f3e5f5" />
             </div>
             <div style={{ background: "#f5f5f5", border: "1px solid #ddd", borderRadius: 8, padding: 10, marginBottom: 10, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-              <input value={chSearch} onChange={(e) => setChSearch(e.target.value)} placeholder="🔍 Caută detalii, sumă, note..." style={{ flex: 1, minWidth: 180, border: "1px solid #ccc", borderRadius: 5, padding: "5px 10px", fontSize: 12 }} />
+              <FastInput value={chSearch} onChange={(e) => setChSearch(e.target.value)} placeholder="🔍 Caută detalii, sumă, note..." style={{ flex: 1, minWidth: 180, border: "1px solid #ccc", borderRadius: 5, padding: "5px 10px", fontSize: 12 }} />
               <select value={chMonth} onChange={(e) => setChMonth(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}>
                 <option value="">📅 Toate lunile</option>
                 {chMonthOpts.map(m => <option key={m}>{m}</option>)}
@@ -5274,7 +5427,7 @@ Reguli:
                   <th style={th({})}>Note</th>
                   <th style={th({})}></th>
                 </tr></thead>
-                <tbody>{chFiltered.map((r, idx) => { const i = chRows.indexOf(r); const rowBg = idx % 2 === 0 ? "#fff" : "#f7faf8"; const achBg = r.ach === "Da" ? "#e8f5e9" : r.ach === "Parțial" ? "#fff8e1" : r.ach === "Nu" ? "#ffebee" : "#fff"; const achC = r.ach === "Da" ? G : r.ach === "Parțial" ? "#e65100" : r.ach === "Nu" ? "#c62828" : "#555"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 1}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updCH(i, "data", v)} /></td><td style={td({ background: "#fffde7" })}><select style={sel({ textAlign: "center" })} value={r.gk || ""} onChange={(e) => updCH(i, "gk", e.target.value)}>{GREENKRAFT_OPT.map((o) => <option key={o}>{o}</option>)}</select></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "right" })} value={r.suma || ""} onChange={(e) => updCH(i, "suma", e.target.value)} /></td><td style={td({ background: "#fffde7" })}><select style={sel({ textAlign: "center" })} value={r.cat || ""} onChange={(e) => updCH(i, "cat", e.target.value)}>{CATEGORIE_CH.map((o) => <option key={o}>{o}</option>)}</select></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><input title={r.det || undefined} style={inp({ textAlign: "center" })} value={r.det || ""} onChange={(e) => updCH(i, "det", e.target.value)} /></td><td style={td({ background: achBg })}><select style={sel({ color: achC, fontWeight: 700, textAlign: "center" })} value={r.ach || ""} onChange={(e) => updCH(i, "ach", e.target.value)}><option value=""></option><option>Da</option><option>Parțial</option><option>Nu</option></select></td><td style={td({ background: "#fffde7" })}><ACStrict value={r.ach_de || ""} options={achitatOptions} onChange={(v) => updCH(i, "ach_de", v)} placeholder="—" /></td><td style={td({ textAlign: "center", background: r.luna_precedenta ? "#fff3e0" : rowBg })}><input type="checkbox" checked={!!r.luna_precedenta} onChange={(e) => updCH(i, "luna_precedenta", e.target.checked)} style={{ cursor: "pointer", width: 16, height: 16 }} /></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><input title={r.note || undefined} style={inp({ textAlign: "center" })} value={r.note || ""} onChange={(e) => updCH(i, "note", e.target.value)} /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delCH(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                <tbody>{chFiltered.map((r, idx) => { const i = chRows.indexOf(r); const rowBg = idx % 2 === 0 ? "#fff" : "#f7faf8"; const achBg = r.ach === "Da" ? "#e8f5e9" : r.ach === "Parțial" ? "#fff8e1" : r.ach === "Nu" ? "#ffebee" : "#fff"; const achC = r.ach === "Da" ? G : r.ach === "Parțial" ? "#e65100" : r.ach === "Nu" ? "#c62828" : "#555"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 1}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updCH(i, "data", v)} /></td><td style={td({ background: "#fffde7" })}><select style={sel({ textAlign: "center" })} value={r.gk || ""} onChange={(e) => updCH(i, "gk", e.target.value)}>{GREENKRAFT_OPT.map((o) => <option key={o}>{o}</option>)}</select></td><td style={td({ background: rowBg })}><FastInput style={inp({ textAlign: "right" })} value={r.suma || ""} onChange={(e) => updCH(i, "suma", e.target.value)} /></td><td style={td({ background: "#fffde7" })}><select style={sel({ textAlign: "center" })} value={r.cat || ""} onChange={(e) => updCH(i, "cat", e.target.value)}>{CATEGORIE_CH.map((o) => <option key={o}>{o}</option>)}</select></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><FastInput title={r.det || undefined} style={inp({ textAlign: "center" })} value={r.det || ""} onChange={(e) => updCH(i, "det", e.target.value)} /></td><td style={td({ background: achBg })}><select style={sel({ color: achC, fontWeight: 700, textAlign: "center" })} value={r.ach || ""} onChange={(e) => updCH(i, "ach", e.target.value)}><option value=""></option><option>Da</option><option>Parțial</option><option>Nu</option></select></td><td style={td({ background: "#fffde7" })}><ACStrict value={r.ach_de || ""} options={achitatOptions} onChange={(v) => updCH(i, "ach_de", v)} placeholder="—" /></td><td style={td({ textAlign: "center", background: r.luna_precedenta ? "#fff3e0" : rowBg })}><input type="checkbox" checked={!!r.luna_precedenta} onChange={(e) => updCH(i, "luna_precedenta", e.target.checked)} style={{ cursor: "pointer", width: 16, height: 16 }} /></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><FastInput title={r.note || undefined} style={inp({ textAlign: "center" })} value={r.note || ""} onChange={(e) => updCH(i, "note", e.target.value)} /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delCH(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
                 <tfoot><tr style={{ background: G, color: "#fff" }}><td></td><td colSpan={2} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(chFiltered.reduce((s, r) => s + parseSuma(r.suma), 0))}</td><td colSpan={6}></td><td></td></tr></tfoot>
               </table>
             </div>
@@ -5307,7 +5460,7 @@ Reguli:
               <SC label="✓ Eligibile Raport (Nr. doc.)" value={String(colRows.filter(r => r.nr_doc).length)} c={G} bg="#e8f5e9" />
             </div>
             <div style={{ background: "#f5f5f5", border: "1px solid #ddd", borderRadius: 8, padding: 10, marginBottom: 10, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-              <input value={colSearch} onChange={(e) => setColSearch(e.target.value)} placeholder="🔍 Caută furnizor, produs, achitat de..." style={{ flex: 1, minWidth: 180, border: "1px solid #ccc", borderRadius: 5, padding: "5px 10px", fontSize: 12 }} />
+              <FastInput value={colSearch} onChange={(e) => setColSearch(e.target.value)} placeholder="🔍 Caută furnizor, produs, achitat de..." style={{ flex: 1, minWidth: 180, border: "1px solid #ccc", borderRadius: 5, padding: "5px 10px", fontSize: 12 }} />
               <select value={colMonth} onChange={(e) => setColMonth(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}>
                 <option value="">📅 Toate lunile</option>
                 {colMonthOpts.map(m => <option key={m}>{m}</option>)}
@@ -5371,7 +5524,7 @@ Reguli:
                   <th style={th({})} title="Trimite catre WiseWeee">📤</th>
                   <th style={th({})}></th>
                 </tr></thead>
-                <tbody>{colFiltered.map((r, idx) => { const i = colRows.indexOf(r); const tot = parseSuma(r.cant) * parseSuma(r.pret); const faraImp = tot ? +(tot * 0.88).toFixed(2) : 0; const rowBg = idx % 2 === 0 ? "#fff" : "#f8fbf9"; const achBg = r.ach === "Da" ? "#e8f5e9" : r.ach === "Parțial" ? "#fff8e1" : r.ach === "Nu" ? "#ffebee" : "#fff"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 1}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updCOL(i, "data", v)} /></td><td style={td({ background: rowBg })}><ACStrict value={r.furn || ""} options={furnOptions} onChange={(v) => updCOL(i, "furn", v)} placeholder="—" strict /></td><td style={td({ background: r.nr_doc ? "#e8f5e9" : "#fff3e0" })}><input style={inp({ textAlign: "center", fontWeight: 600 })} value={r.nr_doc || ""} onChange={(e) => updCOL(i, "nr_doc", e.target.value)} placeholder="—" /></td><td style={td({ background: COL_COLORS[r.cat] || "#eee", textAlign: "center" })}><select style={sel({ fontWeight: 600, textAlign: "center" })} value={r.cat || ""} onChange={(e) => updCOL(i, "cat", e.target.value)}>{CATEGORIE_COL.map((o) => <option key={o}>{o}</option>)}</select></td><td style={td({ background: rowBg })}><ACStrict value={r.produs || ""} options={PRODUSE_DYN} onChange={(v) => updCOL(i, "produs", v)} /></td><td style={td({ background: rowBg })}><div style={{ display: "flex", gap: 2, alignItems: "center" }}><input style={inpNum({ textAlign: "right", minWidth: 34 })} type="text" inputMode="decimal" value={r.cant || ""} onChange={(e) => updCOL(i, "cant", e.target.value)} />{scalePort && <button onClick={() => useScaleWeight(v => updCOL(i, "cant", v))} title="Citește din cantar" style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 3, padding: "1px 3px", cursor: "pointer", fontSize: 10, flexShrink: 0 }}>⚖️</button>}</div></td><td style={td({ background: rowBg })}><input style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.pret || ""} onChange={(e) => updCOL(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 600 })}>{tot > 0 ? fmt(tot) : "0,00"}</td><td style={td({ textAlign: "right", background: "#fce4d6", fontWeight: 600, color: "#bf360c" })}>{faraImp > 0 ? fmt(faraImp) : "0,00"}</td><td style={td({ background: achBg })}><select style={sel({ color: r.ach === "Da" ? G : r.ach === "Parțial" ? "#e65100" : r.ach === "Nu" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.ach || ""} onChange={(e) => updCOL(i, "ach", e.target.value)}><option value=""></option><option>Da</option><option>Parțial</option><option>Nu</option></select></td><td style={td({ background: r.ach_de ? "#ffe0b2" : "#fff" })}><ACStrict value={r.ach_de || ""} options={achitatOptions} onChange={(v) => updCOL(i, "ach_de", v)} placeholder="—" /></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><input title={r.det || undefined} style={inp()} value={r.det || ""} onChange={(e) => updCOL(i, "det", e.target.value)} placeholder="..." /></td><td style={td({ textAlign: "center", padding: 2 })}>{wwSent[r.id] ? <span style={{ color: G, fontSize: 15 }} title="Trimis">✓</span> : <button onClick={() => trimiteWiseWeee(r)} title="Trimite spre WiseWeee" style={{ background: "#fff3e0", border: "1px solid #ffb74d", borderRadius: 4, cursor: "pointer", fontSize: 13, padding: "2px 5px" }}>📤</button>}</td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delCOL(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                <tbody>{colFiltered.map((r, idx) => { const i = colRows.indexOf(r); const tot = parseSuma(r.cant) * parseSuma(r.pret); const faraImp = tot ? +(tot * 0.88).toFixed(2) : 0; const rowBg = idx % 2 === 0 ? "#fff" : "#f8fbf9"; const achBg = r.ach === "Da" ? "#e8f5e9" : r.ach === "Parțial" ? "#fff8e1" : r.ach === "Nu" ? "#ffebee" : "#fff"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 1}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updCOL(i, "data", v)} /></td><td style={td({ background: rowBg })}><ACStrict value={r.furn || ""} options={furnOptions} onChange={(v) => updCOL(i, "furn", v)} placeholder="—" strict /></td><td style={td({ background: r.nr_doc ? "#e8f5e9" : "#fff3e0" })}><FastInput style={inp({ textAlign: "center", fontWeight: 600 })} value={r.nr_doc || ""} onChange={(e) => updCOL(i, "nr_doc", e.target.value)} placeholder="—" /></td><td style={td({ background: COL_COLORS[r.cat] || "#eee", textAlign: "center" })}><select style={sel({ fontWeight: 600, textAlign: "center" })} value={r.cat || ""} onChange={(e) => updCOL(i, "cat", e.target.value)}>{CATEGORIE_COL.map((o) => <option key={o}>{o}</option>)}</select></td><td style={td({ background: rowBg })}><ACStrict value={r.produs || ""} options={PRODUSE_DYN} onChange={(v) => updCOL(i, "produs", v)} /></td><td style={td({ background: rowBg })}><div style={{ display: "flex", gap: 2, alignItems: "center" }}><FastInput style={inpNum({ textAlign: "right", minWidth: 34 })} type="text" inputMode="decimal" value={r.cant || ""} onChange={(e) => updCOL(i, "cant", e.target.value)} />{scalePort && <button onClick={() => useScaleWeight(v => updCOL(i, "cant", v))} title="Citește din cantar" style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 3, padding: "1px 3px", cursor: "pointer", fontSize: 10, flexShrink: 0 }}>⚖️</button>}</div></td><td style={td({ background: rowBg })}><FastInput style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.pret || ""} onChange={(e) => updCOL(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 600 })}>{tot > 0 ? fmt(tot) : "0,00"}</td><td style={td({ textAlign: "right", background: "#fce4d6", fontWeight: 600, color: "#bf360c" })}>{faraImp > 0 ? fmt(faraImp) : "0,00"}</td><td style={td({ background: achBg })}><select style={sel({ color: r.ach === "Da" ? G : r.ach === "Parțial" ? "#e65100" : r.ach === "Nu" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.ach || ""} onChange={(e) => updCOL(i, "ach", e.target.value)}><option value=""></option><option>Da</option><option>Parțial</option><option>Nu</option></select></td><td style={td({ background: r.ach_de ? "#ffe0b2" : "#fff" })}><ACStrict value={r.ach_de || ""} options={achitatOptions} onChange={(v) => updCOL(i, "ach_de", v)} placeholder="—" /></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><FastInput title={r.det || undefined} style={inp()} value={r.det || ""} onChange={(e) => updCOL(i, "det", e.target.value)} placeholder="..." /></td><td style={td({ textAlign: "center", padding: 2 })}>{wwSent[r.id] ? <span style={{ color: G, fontSize: 15 }} title="Trimis">✓</span> : <button onClick={() => trimiteWiseWeee(r)} title="Trimite spre WiseWeee" style={{ background: "#fff3e0", border: "1px solid #ffb74d", borderRadius: 4, cursor: "pointer", fontSize: 13, padding: "2px 5px" }}>📤</button>}</td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delCOL(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
                 <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={6} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(colFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0), 0))} kg</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(colFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0))}</td><td colSpan={6}></td></tr></tfoot>
               </table>
             </div>
@@ -5402,7 +5555,7 @@ Reguli:
               <SC label="Înregistrări" value={livFiltered.length + " / " + livRows.length} c="#6a1b9a" bg="#f3e5f5" />
             </div>
             <div style={{ background: "#f5f5f5", border: "1px solid #ddd", borderRadius: 8, padding: 10, marginBottom: 10, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-              <input value={livSearch} onChange={(e) => setLivSearch(e.target.value)} placeholder="🔍 Caută client, produs, nr factură, detalii..." style={{ flex: 1, minWidth: 180, border: "1px solid #ccc", borderRadius: 5, padding: "5px 10px", fontSize: 12 }} />
+              <FastInput value={livSearch} onChange={(e) => setLivSearch(e.target.value)} placeholder="🔍 Caută client, produs, nr factură, detalii..." style={{ flex: 1, minWidth: 180, border: "1px solid #ccc", borderRadius: 5, padding: "5px 10px", fontSize: 12 }} />
               <select value={livMonth} onChange={(e) => setLivMonth(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}>
                 <option value="">📅 Toate lunile</option>
                 {livMonthOpts.map(m => <option key={m}>{m}</option>)}
@@ -5448,7 +5601,7 @@ Reguli:
                   <th style={th({})}>Detalii</th>
                   <th style={th({})}></th>
                 </tr></thead>
-                <tbody>{livFiltered.map((r, idx) => { const i = livRows.indexOf(r); const tot = parseSuma(r.cant) * parseSuma(r.pret); const rowBg = idx % 2 === 0 ? "#fff" : "#f8fbf9"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 1}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updLIV(i, "data", v)} /></td><td style={td({ background: rowBg })}><input style={inp({ textAlign: "center" })} value={r.nr || ""} onChange={(e) => updLIV(i, "nr", e.target.value)} /></td><td style={td({ background: "#fffde7" })}><ACStrict value={r.client || ""} options={clientOptions} onChange={(v) => updLIV(i, "client", v)} placeholder="—" strict /></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.produs}><ACStrict value={r.produs || ""} options={PRODUSE_DYN} onChange={(v) => updLIV(i, "produs", v)} /></td><td style={td({ background: rowBg })}><input style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.cant || ""} onChange={(e) => updLIV(i, "cant", e.target.value)} /></td><td style={td({ background: rowBg })}><input style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.pret || ""} onChange={(e) => updLIV(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 600 })}>{tot > 0 ? fmt(tot) : "0,00"}</td><td style={td({ background: r.fact === "DA" ? "#e8f5e9" : r.fact === "NU" ? "#ffebee" : "#fff", textAlign: "center" })}><select style={sel({ color: r.fact === "DA" ? G : r.fact === "NU" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.fact || ""} onChange={(e) => updLIV(i, "fact", e.target.value)}><option value=""></option><option>DA</option><option>NU</option></select></td><td style={td({ background: r.inc === "DA" ? "#c8e6c9" : r.inc === "PARTIAL" ? "#fff8e1" : r.inc === "NU" ? "#ffebee" : "#fff", textAlign: "center" })}><select style={sel({ color: r.inc === "DA" ? G : r.inc === "PARTIAL" ? "#e65100" : r.inc === "NU" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.inc || ""} onChange={(e) => updLIV(i, "inc", e.target.value)}><option value=""></option><option>DA</option><option>PARTIAL</option><option>NU</option></select></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><input title={r.det || undefined} style={inp()} value={r.det || ""} onChange={(e) => updLIV(i, "det", e.target.value)} placeholder="..." /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delLIV(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                <tbody>{livFiltered.map((r, idx) => { const i = livRows.indexOf(r); const tot = parseSuma(r.cant) * parseSuma(r.pret); const rowBg = idx % 2 === 0 ? "#fff" : "#f8fbf9"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 1}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updLIV(i, "data", v)} /></td><td style={td({ background: rowBg })}><FastInput style={inp({ textAlign: "center" })} value={r.nr || ""} onChange={(e) => updLIV(i, "nr", e.target.value)} /></td><td style={td({ background: "#fffde7" })}><ACStrict value={r.client || ""} options={clientOptions} onChange={(v) => updLIV(i, "client", v)} placeholder="—" strict /></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.produs}><ACStrict value={r.produs || ""} options={PRODUSE_DYN} onChange={(v) => updLIV(i, "produs", v)} /></td><td style={td({ background: rowBg })}><FastInput style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.cant || ""} onChange={(e) => updLIV(i, "cant", e.target.value)} /></td><td style={td({ background: rowBg })}><FastInput style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.pret || ""} onChange={(e) => updLIV(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 600 })}>{tot > 0 ? fmt(tot) : "0,00"}</td><td style={td({ background: r.fact === "DA" ? "#e8f5e9" : r.fact === "NU" ? "#ffebee" : "#fff", textAlign: "center" })}><select style={sel({ color: r.fact === "DA" ? G : r.fact === "NU" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.fact || ""} onChange={(e) => updLIV(i, "fact", e.target.value)}><option value=""></option><option>DA</option><option>NU</option></select></td><td style={td({ background: r.inc === "DA" ? "#c8e6c9" : r.inc === "PARTIAL" ? "#fff8e1" : r.inc === "NU" ? "#ffebee" : "#fff", textAlign: "center" })}><select style={sel({ color: r.inc === "DA" ? G : r.inc === "PARTIAL" ? "#e65100" : r.inc === "NU" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.inc || ""} onChange={(e) => updLIV(i, "inc", e.target.value)}><option value=""></option><option>DA</option><option>PARTIAL</option><option>NU</option></select></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><FastInput title={r.det || undefined} style={inp()} value={r.det || ""} onChange={(e) => updLIV(i, "det", e.target.value)} placeholder="..." /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delLIV(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
                 <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={5} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(livFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0), 0))} kg</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(livFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0))}</td><td colSpan={4}></td></tr></tfoot>
               </table>
             </div>
@@ -5681,7 +5834,7 @@ Reguli:
                       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
                         <div style={{ flex: "0 0 210px" }}>
                           <div style={{ display: "flex", gap: 6 }}>
-                            <input value={cuiSearch} onChange={(e) => { setCuiSearch(e.target.value); setCuiResult(null); setCuiErr(""); }} onKeyDown={(e) => e.key === "Enter" && searchCUI()} placeholder="ex: 36191378" style={{ ...IFS, borderColor: "#ffcc80", fontFamily: "monospace" }} />
+                            <FastInput value={cuiSearch} onChange={(e) => { setCuiSearch(e.target.value); setCuiResult(null); setCuiErr(""); }} onKeyDown={(e) => e.key === "Enter" && searchCUI()} placeholder="ex: 36191378" style={{ ...IFS, borderColor: "#ffcc80", fontFamily: "monospace" }} />
                             <button onClick={searchCUI} disabled={cuiLoading} style={{ padding: "5px 12px", background: cuiLoading ? "#ccc" : "#e65100", color: "#fff", border: "none", borderRadius: 6, cursor: cuiLoading ? "wait" : "pointer", fontSize: 12, fontWeight: 700 }}>{cuiLoading ? "⏳" : "🔎"}</button>
                           </div>
                           {cuiErr && <div style={{ marginTop: 5, background: "#ffebee", border: "1px solid #ef9a9a", borderRadius: 5, padding: "5px 8px", fontSize: 11, color: "#c62828" }}>{cuiErr}</div>}
@@ -5690,7 +5843,7 @@ Reguli:
                       </div>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, gap: 10, flexWrap: "wrap" }}>
-                      <input value={parteneriSearch} onChange={(e) => setParteneriSearch(e.target.value)} placeholder="🔍 Caută după denumire sau CUI/CNP..." style={{ ...inp({}), maxWidth: 300 }} />
+                      <FastInput value={parteneriSearch} onChange={(e) => setParteneriSearch(e.target.value)} placeholder="🔍 Caută după denumire sau CUI/CNP..." style={{ ...inp({}), maxWidth: 300 }} />
                       <div style={{ display: "flex", gap: 8 }}>
                         <button onClick={() => addPF()} style={{ background: "#00897b", color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Persoană Fizică</button>
                         <button onClick={() => addPJ()} style={{ background: "#6a1b9a", color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Persoană Juridică</button>
@@ -5725,13 +5878,13 @@ Reguli:
                             return (
                               <tr key={`${r._tip}-${r.id}`} style={{ background: r._tip === "PF" ? "#e0f2f1" : "#f3e5f5" }}>
                                 <td style={td({ textAlign: "center", fontSize: 10, fontWeight: 700, color: r._tip === "PF" ? "#00695c" : "#4a148c" })}>{r._tip}</td>
-                                <td style={td()}><input style={inp({ textAlign: "center", fontWeight: 600 })} value={r.denumire || ""} onChange={(e) => upd(r._idx, "denumire", e.target.value)} /></td>
-                                <td style={td({ background: "#fff8e1" })}><input style={inp({ textAlign: "center", fontFamily: "monospace" })} value={r.cod_fiscal || ""} onChange={(e) => upd(r._idx, "cod_fiscal", e.target.value)} /></td>
-                                <td style={td()}><input style={inp({ textAlign: "center" })} value={r.adresa || ""} onChange={(e) => upd(r._idx, "adresa", e.target.value)} /></td>
-                                <td style={td()}><input style={inp({ textAlign: "center" })} value={r.judet || ""} onChange={(e) => upd(r._idx, "judet", e.target.value)} /></td>
-                                <td style={td()}><input style={inp({ textAlign: "center", fontFamily: "monospace", fontSize: 11 })} value={r.reg_com || ""} onChange={(e) => upd(r._idx, "reg_com", e.target.value)} /></td>
-                                <td style={td({ background: "#f3e5f5" })}><input style={inp({ textAlign: "center", fontSize: 11 })} value={a3.aut_mediu || ""} onChange={(e) => updA3("aut_mediu", e.target.value)} placeholder="ex: 233/22.12.2021" /></td>
-                                <td style={td({ background: "#f3e5f5" })}><input style={inp({ textAlign: "center", fontSize: 11 })} value={a3.aut_mediu_revizuita || ""} onChange={(e) => updA3("aut_mediu_revizuita", e.target.value)} placeholder="DD.MM.YYYY" /></td>
+                                <td style={td()}><FastInput style={inp({ textAlign: "center", fontWeight: 600 })} value={r.denumire || ""} onChange={(e) => upd(r._idx, "denumire", e.target.value)} /></td>
+                                <td style={td({ background: "#fff8e1" })}><FastInput style={inp({ textAlign: "center", fontFamily: "monospace" })} value={r.cod_fiscal || ""} onChange={(e) => upd(r._idx, "cod_fiscal", e.target.value)} /></td>
+                                <td style={td()}><FastInput style={inp({ textAlign: "center" })} value={r.adresa || ""} onChange={(e) => upd(r._idx, "adresa", e.target.value)} /></td>
+                                <td style={td()}><FastInput style={inp({ textAlign: "center" })} value={r.judet || ""} onChange={(e) => upd(r._idx, "judet", e.target.value)} /></td>
+                                <td style={td()}><FastInput style={inp({ textAlign: "center", fontFamily: "monospace", fontSize: 11 })} value={r.reg_com || ""} onChange={(e) => upd(r._idx, "reg_com", e.target.value)} /></td>
+                                <td style={td({ background: "#f3e5f5" })}><FastInput style={inp({ textAlign: "center", fontSize: 11 })} value={a3.aut_mediu || ""} onChange={(e) => updA3("aut_mediu", e.target.value)} placeholder="ex: 233/22.12.2021" /></td>
+                                <td style={td({ background: "#f3e5f5" })}><FastInput style={inp({ textAlign: "center", fontSize: 11 })} value={a3.aut_mediu_revizuita || ""} onChange={(e) => updA3("aut_mediu_revizuita", e.target.value)} placeholder="DD.MM.YYYY" /></td>
                                 <td style={td({ textAlign: "center" })}><button onClick={() => setDelegatiModal({ tip: r._tip, idx: r._idx, den: r.denumire || "", items: JSON.parse(JSON.stringify(a3.delegati || [])) })} style={{ background: (a3.delegati?.length || 0) > 0 ? "#f3e5f5" : "#fff", border: "1px solid #6a1b9a", borderRadius: 3, padding: "2px 8px", cursor: "pointer", fontSize: 11, color: "#6a1b9a", fontWeight: 600 }} title="Delegați (șoferi)">🧑 {a3.delegati?.length || 0}</button></td>
                                 <td style={td({ textAlign: "center" })}><button onClick={() => setMasiniModal({ tip: r._tip, idx: r._idx, den: r.denumire || "", items: JSON.parse(JSON.stringify(a3.masini || [])) })} style={{ background: (a3.masini?.length || 0) > 0 ? "#e0f2f1" : "#fff", border: "1px solid #00695c", borderRadius: 3, padding: "2px 8px", cursor: "pointer", fontSize: 11, color: "#00695c", fontWeight: 600 }} title="Mașini (nr. auto + licență)">🚛 {a3.masini?.length || 0}</button></td>
                                 <td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => del(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
@@ -5877,20 +6030,20 @@ Reguli:
                       </div>
                       <div style={{ marginBottom: 10 }}><label style={FL}>Material / Deșeu</label><div style={ACB}><ACStrict value={ticNou.material} options={PRODUSE_DYN} placeholder="Selectează..." style={{ width: "100%", padding: "7px 9px", border: "1px solid #d5d5d5", borderRadius: 6, fontSize: 13, boxSizing: "border-box" }} onChange={(v) => setTicNou((p) => ({ ...p, material: v }))} /></div></div>
                       <div style={{ display: "flex", gap: 8 }}>
-                        <div style={{ flex: 1 }}><label style={FL}>Factura</label><input style={FI} value={ticNou.factura} onChange={(e) => setTicNou((p) => ({ ...p, factura: e.target.value }))} placeholder="opțional" /></div>
+                        <div style={{ flex: 1 }}><label style={FL}>Factura</label><FastInput style={FI} value={ticNou.factura} onChange={(e) => setTicNou((p) => ({ ...p, factura: e.target.value }))} placeholder="opțional" /></div>
                         <div style={{ flex: 1 }}>
                           <label style={FL}>Aviz</label>
-                          <input style={FI} value={ticNou.aviz} onChange={(e) => setTicNou((p) => ({ ...p, aviz: e.target.value }))} placeholder="opțional" />
+                          <FastInput style={FI} value={ticNou.aviz} onChange={(e) => setTicNou((p) => ({ ...p, aviz: e.target.value }))} placeholder="opțional" />
                           {ultimulTicAviz && <div style={{ fontSize: 10, color: "#888", marginTop: 3 }}>Ultimul aviz {ticNou.partener}: <strong>{ultimulTicAviz.aviz}</strong> {ultimulTicAviz.nr_tichet ? `(TC #${ultimulTicAviz.nr_tichet}, ${ultimulTicAviz.data})` : `(${ultimulTicAviz.data})`}</div>}
                         </div>
-                        <div style={{ flex: 1 }}><label style={FL}>Observații</label><input style={FI} value={ticNou.obs} onChange={(e) => setTicNou((p) => ({ ...p, obs: e.target.value }))} placeholder="opțional" /></div>
+                        <div style={{ flex: 1 }}><label style={FL}>Observații</label><FastInput style={FI} value={ticNou.obs} onChange={(e) => setTicNou((p) => ({ ...p, obs: e.target.value }))} placeholder="opțional" /></div>
                       </div>
                     </div>
                     {/* Coloana dreapta: cantarirea */}
                     <div style={{ flex: "1 1 280px", background: "#fff", border: `1px solid ${G}`, borderRadius: 10, padding: 16, display: "flex", flexDirection: "column" }}>
                       <div style={{ fontWeight: 700, color: G, fontSize: 12, marginBottom: 12, textTransform: "uppercase", letterSpacing: 0.5 }}>⚖️ Cântărirea 1 — {ticNou.prima === "plin" ? "Brut (plin)" : "Tara (gol)"} <span style={{ color: "#c62828" }}>*</span></div>
                       <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-                        <input style={{ flex: 1, padding: "14px", border: `2px solid ${G}`, borderRadius: 8, fontSize: 26, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="text" inputMode="decimal" value={ticNou.greutate} onChange={(e) => setTicNou((p) => ({ ...p, greutate: e.target.value }))} placeholder="0" />
+                        <FastInput style={{ flex: 1, padding: "14px", border: `2px solid ${G}`, borderRadius: 8, fontSize: 26, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="text" inputMode="decimal" value={ticNou.greutate} onChange={(e) => setTicNou((p) => ({ ...p, greutate: e.target.value }))} placeholder="0" />
                         <span style={{ alignSelf: "center", fontSize: 15, color: "#888", fontWeight: 600 }}>kg</span>
                       </div>
                       {scalePort && <button onClick={() => useScaleWeight((v) => setTicNou((p) => ({ ...p, greutate: v })))} style={{ padding: "10px", background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: `1px solid ${G}`, borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700, color: G, marginBottom: 8 }}>⚖️ Preia din cântar {scaleReading ? `(${fmt(scaleReading.value)} kg)` : ""}</button>}
@@ -5921,7 +6074,7 @@ Reguli:
                           </div>
                           <div style={{ flex: 1.3 }}>
                             <div style={{ fontSize: 10, color: "#e65100", fontWeight: 600 }}>{t.brut != null ? "Tara (gol)" : "Brut (plin)"}</div>
-                            <input style={{ width: "100%", padding: "6px", border: "1.5px solid #ffa726", borderRadius: 6, fontSize: 15, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="text" inputMode="decimal" value={ticTaraInput[t.id] || ""} onChange={(e) => setTicTaraInput((p) => ({ ...p, [t.id]: e.target.value }))} placeholder="kg" />
+                            <FastInput style={{ width: "100%", padding: "6px", border: "1.5px solid #ffa726", borderRadius: 6, fontSize: 15, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="text" inputMode="decimal" value={ticTaraInput[t.id] || ""} onChange={(e) => setTicTaraInput((p) => ({ ...p, [t.id]: e.target.value }))} placeholder="kg" />
                           </div>
                         </div>
                         <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
@@ -5976,7 +6129,7 @@ Reguli:
                       {lunaOpts.map((l) => <option key={l} value={l}>{l}</option>)}
                     </select>
                     <button onClick={() => { setTicAzi((v) => !v); setTicLuna(""); }} style={{ padding: "6px 12px", border: `1px solid ${ticAzi ? G : "#ccc"}`, borderRadius: 5, background: ticAzi ? G : "#fff", color: ticAzi ? "#fff" : "#555", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>📅 Azi</button>
-                    <input style={{ padding: "6px 10px", border: "1px solid #ccc", borderRadius: 5, fontSize: 12, width: 220 }} value={ticFilter} onChange={(e) => setTicFilter(e.target.value)} placeholder="🔍 Caută furnizor / mașină / material..." />
+                    <FastInput style={{ padding: "6px 10px", border: "1px solid #ccc", borderRadius: 5, fontSize: 12, width: 220 }} value={ticFilter} onChange={(e) => setTicFilter(e.target.value)} placeholder="🔍 Caută furnizor / mașină / material..." />
                     {(ticLuna || ticAzi || ticFilter) && <button onClick={() => { setTicLuna(""); setTicAzi(false); setTicFilter(""); }} style={{ padding: "5px 10px", border: "1px solid #ccc", borderRadius: 5, background: "#fff", cursor: "pointer", fontSize: 11 }}>↺ Reset</button>}
                     <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
                       <SC label="Tichete" value={String(filtrate.length)} c={G} bg="#e8f5e9" />
@@ -6026,7 +6179,7 @@ Reguli:
               <SC label="Total Cantitate" value={fmt(totStocKg) + " kg"} c="#1565c0" bg="#e3f2fd" />
               <SC label="Valoare estimată" value={fmt(totStocVal) + " lei"} c="#6a1b9a" bg="#f3e5f5" />
               <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-                <input value={stocFilter} onChange={(e) => setStocFilter(e.target.value)} placeholder="🔍 Caută..." style={{ border: "1px solid #ccc", borderRadius: 6, padding: "5px 10px", fontSize: 12, width: 160 }} />
+                <FastInput value={stocFilter} onChange={(e) => setStocFilter(e.target.value)} placeholder="🔍 Caută..." style={{ border: "1px solid #ccc", borderRadius: 6, padding: "5px 10px", fontSize: 12, width: 160 }} />
                 <button onClick={() => setShowMisc((p) => !p)} style={{ padding: "6px 12px", background: showMisc ? "#1565c0" : "#e3f2fd", color: showMisc ? "#fff" : "#1565c0", border: "1px solid #90caf9", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>{showMisc ? "📊 Stoc" : "📋 Mișcări"}</button>
               </div>
             </div>
@@ -6048,12 +6201,12 @@ Reguli:
                 <div style={{ background: "#f9f9f9", border: "1px solid #ddd", borderRadius: 8, padding: 12, marginBottom: 12 }}>
                   <div style={{ fontWeight: 700, color: G, fontSize: 12, marginBottom: 8 }}>+ Adaugă mișcare manuală</div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
-                    <div><label style={LSt}>Data</label><input value={newM.data} onChange={(e) => setNewM((p) => ({ ...p, data: e.target.value }))} style={{ ...IFS, width: 90 }} /></div>
+                    <div><label style={LSt}>Data</label><FastInput value={newM.data} onChange={(e) => setNewM((p) => ({ ...p, data: e.target.value }))} style={{ ...IFS, width: 90 }} /></div>
                     <div><label style={LSt}>Tip</label><select value={newM.tip} onChange={(e) => setNewM((p) => ({ ...p, tip: e.target.value }))} style={{ ...IFS, width: 90, color: newM.tip === "intrare" ? G : "#c62828", fontWeight: 700 }}><option value="intrare">⬆ Intrare</option><option value="iesire">⬇ Ieșire</option></select></div>
                     <div style={{ flex: "0 0 180px" }}><label style={LSt}>Produs</label><ACStrict value={newM.produs} options={PRODUSE_DYN} style={IFS} onChange={(v) => { const fd = produseList.find((p) => p.den === v); setNewM((p) => ({ ...p, produs: v, cod: fd?.cod || "" })); }} /></div>
-                    <div><label style={LSt}>Cant.(kg)</label><input type="text" inputMode="decimal" value={newM.cant} onChange={(e) => setNewM((p) => ({ ...p, cant: e.target.value }))} style={{ ...IFS, width: 80, textAlign: "right" }} /></div>
-                    <div><label style={LSt}>Preț/kg</label><input type="text" inputMode="decimal" value={newM.pu} onChange={(e) => setNewM((p) => ({ ...p, pu: e.target.value }))} style={{ ...IFS, width: 72, textAlign: "right" }} /></div>
-                    <div style={{ flex: 1, minWidth: 120 }}><label style={LSt}>Sursă</label><input value={newM.sursa} onChange={(e) => setNewM((p) => ({ ...p, sursa: e.target.value }))} style={IFS} placeholder="Ajustare stoc..." /></div>
+                    <div><label style={LSt}>Cant.(kg)</label><FastInput type="text" inputMode="decimal" value={newM.cant} onChange={(e) => setNewM((p) => ({ ...p, cant: e.target.value }))} style={{ ...IFS, width: 80, textAlign: "right" }} /></div>
+                    <div><label style={LSt}>Preț/kg</label><FastInput type="text" inputMode="decimal" value={newM.pu} onChange={(e) => setNewM((p) => ({ ...p, pu: e.target.value }))} style={{ ...IFS, width: 72, textAlign: "right" }} /></div>
+                    <div style={{ flex: 1, minWidth: 120 }}><label style={LSt}>Sursă</label><FastInput value={newM.sursa} onChange={(e) => setNewM((p) => ({ ...p, sursa: e.target.value }))} style={IFS} placeholder="Ajustare stoc..." /></div>
                     <button onClick={addManMisc} style={{ padding: "5px 14px", background: G, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600, marginBottom: 1 }}>+ Adaugă</button>
                   </div>
                 </div>
@@ -6079,7 +6232,7 @@ Reguli:
             <div style={{ overflowX: "auto", marginBottom: 12 }}>
               <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 680 }}>
                 <thead><tr><th style={th({ width: 28 })}>#</th><th style={th({ textAlign: "center", width: 115 })}>Nume</th><th style={th({ textAlign: "center", width: 105 })}>Funcție</th><th style={th({ textAlign: "center", width: 100 })}>Salariu Net</th><th style={th({ textAlign: "center", width: 92 })}>Taxe Stat</th><th style={th({ textAlign: "center", width: 92 })}>Cost Brut</th><th style={th({ textAlign: "center", width: 72 })}>Zile CO</th><th style={th({ textAlign: "center", width: 72 })}>Efectuate</th><th style={th({ textAlign: "center", width: 72 })}>Rămase</th><th style={th({ textAlign: "center", width: 82 })}>Concedii</th><th style={th({ width: 28 })}></th></tr></thead>
-                <tbody>{salRows.map((r, i) => { const brut = (parseSuma(r.net) || 0) + (parseSuma(r.taxe) || 0); const ramase = (parseInt(r.co) || 0) - (parseInt(r.ef) || 0); const rowBg = i % 2 === 0 ? "#fff" : "#f8fbf9"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#888", fontSize: 11, background: "#f5f5f5" })}>{i + 1}</td><td style={td({ background: rowBg, fontWeight: 600 })}><input style={inp({ textAlign: "center", fontWeight: 600 })} value={r.nume || ""} onChange={(e) => updSAL(i, "nume", e.target.value)} /></td><td style={td({ background: "#fffde7" })}><input style={inp({ textAlign: "center" })} value={r.functie || ""} onChange={(e) => updSAL(i, "functie", e.target.value)} /></td><td style={td({ background: rowBg })}><input style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.net || ""} onChange={(e) => updSAL(i, "net", e.target.value)} /></td><td style={td({ background: "#ffebee" })}><input style={inpNum({ textAlign: "right", color: "#c62828" })} type="text" inputMode="decimal" value={r.taxe || ""} onChange={(e) => updSAL(i, "taxe", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#e3f2fd", fontWeight: 600, color: "#1565c0" })}>{fmt(brut)}</td><td style={td({ background: rowBg })}><input style={inpNum({ textAlign: "center" })} type="number" value={r.co || ""} onChange={(e) => updSAL(i, "co", e.target.value)} /></td><td style={td({ textAlign: "center", background: "#fff8e1", color: "#e65100", fontWeight: 600 })}>{r.ef}</td><td style={td({ textAlign: "center", background: ramase < 5 ? "#ffebee" : "#e8f5e9", color: ramase < 5 ? "#c62828" : G, fontWeight: 700 })}>{ramase}</td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => setSelSal(selSal === i ? null : i)} style={{ background: selSal === i ? G : "#e8f5e9", color: selSal === i ? "#fff" : G, border: `1px solid ${G}`, borderRadius: 4, padding: "2px 7px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>{(r.conc || []).length > 0 ? `${r.conc.length} per.` : "+ Add"}</button></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delSAL(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                <tbody>{salRows.map((r, i) => { const brut = (parseSuma(r.net) || 0) + (parseSuma(r.taxe) || 0); const ramase = (parseInt(r.co) || 0) - (parseInt(r.ef) || 0); const rowBg = i % 2 === 0 ? "#fff" : "#f8fbf9"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#888", fontSize: 11, background: "#f5f5f5" })}>{i + 1}</td><td style={td({ background: rowBg, fontWeight: 600 })}><FastInput style={inp({ textAlign: "center", fontWeight: 600 })} value={r.nume || ""} onChange={(e) => updSAL(i, "nume", e.target.value)} /></td><td style={td({ background: "#fffde7" })}><FastInput style={inp({ textAlign: "center" })} value={r.functie || ""} onChange={(e) => updSAL(i, "functie", e.target.value)} /></td><td style={td({ background: rowBg })}><FastInput style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.net || ""} onChange={(e) => updSAL(i, "net", e.target.value)} /></td><td style={td({ background: "#ffebee" })}><FastInput style={inpNum({ textAlign: "right", color: "#c62828" })} type="text" inputMode="decimal" value={r.taxe || ""} onChange={(e) => updSAL(i, "taxe", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#e3f2fd", fontWeight: 600, color: "#1565c0" })}>{fmt(brut)}</td><td style={td({ background: rowBg })}><FastInput style={inpNum({ textAlign: "center" })} type="number" value={r.co || ""} onChange={(e) => updSAL(i, "co", e.target.value)} /></td><td style={td({ textAlign: "center", background: "#fff8e1", color: "#e65100", fontWeight: 600 })}>{r.ef}</td><td style={td({ textAlign: "center", background: ramase < 5 ? "#ffebee" : "#e8f5e9", color: ramase < 5 ? "#c62828" : G, fontWeight: 700 })}>{ramase}</td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => setSelSal(selSal === i ? null : i)} style={{ background: selSal === i ? G : "#e8f5e9", color: selSal === i ? "#fff" : G, border: `1px solid ${G}`, borderRadius: 4, padding: "2px 7px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>{(r.conc || []).length > 0 ? `${r.conc.length} per.` : "+ Add"}</button></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delSAL(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
                 <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={3} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(salRows.reduce((s, r) => s + (parseSuma(r.net) || 0), 0))}</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(salRows.reduce((s, r) => s + (parseSuma(r.taxe) || 0), 0))}</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(salRows.reduce((s, r) => s + (parseSuma(r.net) || 0) + (parseSuma(r.taxe) || 0), 0))}</td><td colSpan={5}></td></tr></tfoot>
               </table>
             </div>
@@ -6090,7 +6243,7 @@ Reguli:
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 12, fontWeight: 600 }}>Adaugă:</span>
                   <select style={{ border: "1px solid #ccc", borderRadius: 4, padding: "4px 8px", fontSize: 12 }} value={concF.luna} onChange={(e) => setConcF((f) => ({ ...f, luna: parseInt(e.target.value) }))}>{LUNI.map((l, li) => <option key={li} value={li}>{l}</option>)}</select>
-                  <input type="number" min={1} max={30} value={concF.zile} onChange={(e) => setConcF((f) => ({ ...f, zile: e.target.value }))} style={{ width: 50, border: "1px solid #ccc", borderRadius: 4, padding: "4px 8px", fontSize: 12, textAlign: "center" }} />
+                  <FastInput type="number" min={1} max={30} value={concF.zile} onChange={(e) => setConcF((f) => ({ ...f, zile: e.target.value }))} style={{ width: 50, border: "1px solid #ccc", borderRadius: 4, padding: "4px 8px", fontSize: 12, textAlign: "center" }} />
                   <span style={{ fontSize: 12 }}>zile</span>
                   <button onClick={() => addConc(selSal)} style={{ background: G, color: "#fff", border: "none", borderRadius: 4, padding: "5px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>✓ Adaugă</button>
                 </div>
@@ -6106,13 +6259,13 @@ Reguli:
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
               <div style={{ background: "#e8f5e9", border: "1px solid #a5d6a7", borderRadius: 6, padding: "8px 14px", display: "flex", alignItems: "center", gap: 10 }}>
                 <label style={{ fontSize: 13, fontWeight: 600, color: G }}>💰 Cost alocat (lei):</label>
-                <input type="text" inputMode="decimal" value={costAl} onChange={(e) => updCost(e.target.value)} style={{ width: 110, padding: "4px 8px", borderRadius: 4, border: "1px solid #a5d6a7", fontSize: 14, fontWeight: 700, textAlign: "right", color: G }} />
+                <FastInput type="text" inputMode="decimal" value={costAl} onChange={(e) => updCost(e.target.value)} style={{ width: 110, padding: "4px 8px", borderRadius: 4, border: "1px solid #a5d6a7", fontSize: 14, fontWeight: 700, textAlign: "right", color: G }} />
               </div>
             </div>
             <div style={{ overflowX: "auto" }}>
               <table style={{ borderCollapse: "collapse", width: "100%" }}>
                 <thead><tr><th style={th({ width: 28 })}>#</th><th style={th({})}>Material</th><th style={th()}>Cost Alocat</th><th style={th()}>Preț Ach.(lei/kg)</th><th style={th()}>Preț Vânz.(lei/kg)</th><th style={{ ...th(), background: "#155a35" }}>Marjă</th><th style={{ ...th(), background: "#0d4a2a" }}>Cantitate(kg)</th><th style={th({ width: 28 })}></th></tr></thead>
-                <tbody>{calRows.map((r, i) => (<tr key={i} style={{ background: i % 2 === 0 ? "#fff" : "#f9fbf9" }}><td style={td({ textAlign: "center", color: "#999" })}>{i + 1}</td><td style={td()}><input style={inp()} value={r.material} onChange={(e) => updCal(i, "material", e.target.value)} /></td><td style={td()}><input style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.cost} onChange={(e) => updCal(i, "cost", e.target.value)} /></td><td style={td()}><input style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.pa} onChange={(e) => updCal(i, "pa", e.target.value)} /></td><td style={td()}><input style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.pv} onChange={(e) => updCal(i, "pv", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#e8f5e9", color: r.marja > 0 ? G : "#c62828", fontWeight: 600 })}>{r.marja !== 0 ? fmt(r.marja) : "—"}</td><td style={td({ textAlign: "right", background: "#d4edda", fontWeight: 700, color: "#0d4a2a" })}>{r.cant > 0 ? fmt(r.cant) : "—"}</td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => setCalRows((p) => p.filter((_, j) => j !== i))} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>))}</tbody>
+                <tbody>{calRows.map((r, i) => (<tr key={i} style={{ background: i % 2 === 0 ? "#fff" : "#f9fbf9" }}><td style={td({ textAlign: "center", color: "#999" })}>{i + 1}</td><td style={td()}><FastInput style={inp()} value={r.material} onChange={(e) => updCal(i, "material", e.target.value)} /></td><td style={td()}><FastInput style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.cost} onChange={(e) => updCal(i, "cost", e.target.value)} /></td><td style={td()}><FastInput style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.pa} onChange={(e) => updCal(i, "pa", e.target.value)} /></td><td style={td()}><FastInput style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.pv} onChange={(e) => updCal(i, "pv", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#e8f5e9", color: r.marja > 0 ? G : "#c62828", fontWeight: 600 })}>{r.marja !== 0 ? fmt(r.marja) : "—"}</td><td style={td({ textAlign: "right", background: "#d4edda", fontWeight: 700, color: "#0d4a2a" })}>{r.cant > 0 ? fmt(r.cant) : "—"}</td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => setCalRows((p) => p.filter((_, j) => j !== i))} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>))}</tbody>
                 <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={8} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(calRows.reduce((s, r) => s + (parseSuma(r.cant) || 0), 0))} kg</td><td></td></tr></tfoot>
               </table>
             </div>
@@ -6144,7 +6297,7 @@ Reguli:
               <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 680 }}>
                 <colgroup><col style={{ width: 28 }} /><col style={{ width: 110 }} /><col style={{ width: 120 }} /><col style={{ width: 95 }} /><col /><col style={{ width: 75 }} /><col style={{ width: 100 }} /><col style={{ width: 105 }} /><col style={{ width: 30 }} /></colgroup>
                 <thead><tr style={{ background: "#c62828" }}><th style={th({ background: "#b71c1c" })}></th><th style={th({ background: "#c62828", textAlign: "center" })}>Data</th><th style={th({ background: "#c62828", textAlign: "center" })}>Nume</th><th style={th({ background: "#c62828", textAlign: "center" })}>Total (lei)</th><th style={th({ background: "#c62828", textAlign: "center" })}>Detalii</th><th style={th({ background: "#c62828", textAlign: "center" })}>Achitat</th><th style={th({ background: "#c62828", textAlign: "center" })}>Achitat De</th><th style={th({ background: "#c62828", textAlign: "center" })}>Data Achitării</th><th style={th({ background: "#c62828" })}></th></tr></thead>
-                <tbody>{filtDat.map((r, i) => { const oi = datRows.indexOf(r); const isPaid = r.ach === "Da"; const rowBg = isPaid ? (i % 2 === 0 ? "#f4faf5" : "#eaf6ec") : (i % 2 === 0 ? "#fff" : "#fff5f5"); const achBg = r.ach === "Da" ? "#e8f5e9" : r.ach === "Parțial" ? "#fff8e1" : r.ach === "Nu" ? "#ffebee" : "#fff"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updDAT(oi, "data", v)} /></td><td style={td({ background: isPaid ? rowBg : "#fff8e1", fontWeight: 600, textDecoration: isPaid ? "line-through" : "none", color: isPaid ? "#888" : "#222" })}><input title={r.nume || undefined} style={inp({ textAlign: "center", fontWeight: 600 })} value={r.nume || ""} onChange={(e) => updDAT(oi, "nume", e.target.value)} placeholder="Nume..." /></td><td style={td({ background: isPaid ? rowBg : "#ffebee", textAlign: "right", fontWeight: 700, color: isPaid ? "#888" : "#c62828", textDecoration: isPaid ? "line-through" : "none" })}><input style={inpNum({ textAlign: "right", fontWeight: 700, color: isPaid ? "#888" : "#c62828" })} value={r.suma || ""} onChange={(e) => updDAT(oi, "suma", e.target.value)} placeholder="0" /></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.det}><input title={r.det || undefined} style={inp({ textAlign: "center" })} value={r.det || ""} onChange={(e) => updDAT(oi, "det", e.target.value)} placeholder="Descriere..." /></td><td style={td({ background: achBg })}><select style={sel({ color: r.ach === "Da" ? G : r.ach === "Parțial" ? "#e65100" : r.ach === "Nu" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.ach || ""} onChange={(e) => { updDAT(oi, "ach", e.target.value); if (e.target.value === "Da" && !r.data_achitare) updDAT(oi, "data_achitare", today()); }}><option value=""></option><option>Da</option><option>Parțial</option><option>Nu</option></select></td><td style={td({ background: r.ach_de ? "#e8f5e9" : "#fff" })}><ACStrict value={r.ach_de || ""} options={achitatOptions} onChange={(v) => updDAT(oi, "ach_de", v)} placeholder="—" /></td><td style={td({ background: rowBg, textAlign: "center" })}><DateInput value={r.data_achitare || ""} onChange={(v) => updDAT(oi, "data_achitare", v)} /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delDAT(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 14 }}>✕</button></td></tr>); })}</tbody>
+                <tbody>{filtDat.map((r, i) => { const oi = datRows.indexOf(r); const isPaid = r.ach === "Da"; const rowBg = isPaid ? (i % 2 === 0 ? "#f4faf5" : "#eaf6ec") : (i % 2 === 0 ? "#fff" : "#fff5f5"); const achBg = r.ach === "Da" ? "#e8f5e9" : r.ach === "Parțial" ? "#fff8e1" : r.ach === "Nu" ? "#ffebee" : "#fff"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updDAT(oi, "data", v)} /></td><td style={td({ background: isPaid ? rowBg : "#fff8e1", fontWeight: 600, textDecoration: isPaid ? "line-through" : "none", color: isPaid ? "#888" : "#222" })}><FastInput title={r.nume || undefined} style={inp({ textAlign: "center", fontWeight: 600 })} value={r.nume || ""} onChange={(e) => updDAT(oi, "nume", e.target.value)} placeholder="Nume..." /></td><td style={td({ background: isPaid ? rowBg : "#ffebee", textAlign: "right", fontWeight: 700, color: isPaid ? "#888" : "#c62828", textDecoration: isPaid ? "line-through" : "none" })}><FastInput style={inpNum({ textAlign: "right", fontWeight: 700, color: isPaid ? "#888" : "#c62828" })} value={r.suma || ""} onChange={(e) => updDAT(oi, "suma", e.target.value)} placeholder="0" /></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.det}><FastInput title={r.det || undefined} style={inp({ textAlign: "center" })} value={r.det || ""} onChange={(e) => updDAT(oi, "det", e.target.value)} placeholder="Descriere..." /></td><td style={td({ background: achBg })}><select style={sel({ color: r.ach === "Da" ? G : r.ach === "Parțial" ? "#e65100" : r.ach === "Nu" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.ach || ""} onChange={(e) => { updDAT(oi, "ach", e.target.value); if (e.target.value === "Da" && !r.data_achitare) updDAT(oi, "data_achitare", today()); }}><option value=""></option><option>Da</option><option>Parțial</option><option>Nu</option></select></td><td style={td({ background: r.ach_de ? "#e8f5e9" : "#fff" })}><ACStrict value={r.ach_de || ""} options={achitatOptions} onChange={(v) => updDAT(oi, "ach_de", v)} placeholder="—" /></td><td style={td({ background: rowBg, textAlign: "center" })}><DateInput value={r.data_achitare || ""} onChange={(v) => updDAT(oi, "data_achitare", v)} /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delDAT(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 14 }}>✕</button></td></tr>); })}</tbody>
                 <tfoot><tr style={{ background: "#c62828", color: "#fff" }}><td colSpan={3} style={{ padding: "7px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL {datFilter ? "— " + datFilter : ""}{datAchitat ? " — " + (datAchitat === "Da" ? "Achitate" : "Neachitate") : ""}</td><td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700, fontSize: 13 }}>{fmt(totDat)} lei</td><td colSpan={5}></td></tr></tfoot>
               </table>
             </div>
@@ -6213,13 +6366,13 @@ Reguli:
                             <button onClick={() => setExpandedAv(isExpanded ? null : r.id)} title={isExpanded ? "Ascunde deconturi" : "Vezi/Adaugă deconturi"} style={{ background: isExpanded ? G : "#e8f5e9", color: isExpanded ? "#fff" : G, border: `1px solid ${G}`, borderRadius: 4, padding: "2px 7px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>{isExpanded ? "▼" : "▶"} {decont.length}</button>
                           </td>
                           <td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updAV(oi, "data", v)} /></td>
-                          <td style={{ ...td({ background: rowBg, fontWeight: 600 }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><input title={r.catre || undefined} style={inp({ textAlign: "center", fontWeight: 600 })} value={r.catre || ""} onChange={(e) => updAV(oi, "catre", e.target.value)} placeholder="—" /></td>
-                          <td style={td({ background: rowBg, textAlign: "right", fontWeight: 700, color: isDiv ? "#1565c0" : "#e65100" })}><input style={inp({ textAlign: "right", fontWeight: 700, color: isDiv ? "#1565c0" : "#e65100" })} value={r.suma || ""} onChange={(e) => updAV(oi, "suma", e.target.value)} placeholder="0" /></td>
+                          <td style={{ ...td({ background: rowBg, fontWeight: 600 }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><FastInput title={r.catre || undefined} style={inp({ textAlign: "center", fontWeight: 600 })} value={r.catre || ""} onChange={(e) => updAV(oi, "catre", e.target.value)} placeholder="—" /></td>
+                          <td style={td({ background: rowBg, textAlign: "right", fontWeight: 700, color: isDiv ? "#1565c0" : "#e65100" })}><FastInput style={inp({ textAlign: "right", fontWeight: 700, color: isDiv ? "#1565c0" : "#e65100" })} value={r.suma || ""} onChange={(e) => updAV(oi, "suma", e.target.value)} placeholder="0" /></td>
                           <td style={td({ background: decontatTot > 0 ? "#e8f5e9" : rowBg, textAlign: "right", fontWeight: 700, color: decontatTot > 0 ? G : "#888" })}>{fmt(decontatTot)}</td>
                           <td style={td({ background: rest === 0 && sumaTot > 0 ? "#e8f5e9" : rest < 0 ? "#ffebee" : rest > 0 && sumaTot > 0 ? "#fff8e1" : rowBg, textAlign: "right", fontWeight: 700, color: rest === 0 && sumaTot > 0 ? G : rest < 0 ? "#c62828" : "#e65100" })}>{fmt(rest)}</td>
                           <td style={td({ background: statusBg, textAlign: "center", fontWeight: 700, color: statusColor, fontSize: 11 })}>{statusLbl}</td>
                           <td style={td({ background: isDiv ? "#dbeafe" : "#fff3e0", textAlign: "center" })}><select style={sel({ color: isDiv ? "#1565c0" : "#e65100", fontWeight: 700, textAlign: "center" })} value={r.tip || ""} onChange={(e) => updAV(oi, "tip", e.target.value)}><option value="avans">avans</option><option value="dividend">dividende</option></select></td>
-                          <td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><input title={r.det || undefined} style={inp({ textAlign: "center" })} value={r.det || ""} onChange={(e) => updAV(oi, "det", e.target.value)} placeholder="..." /></td>
+                          <td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><FastInput title={r.det || undefined} style={inp({ textAlign: "center" })} value={r.det || ""} onChange={(e) => updAV(oi, "det", e.target.value)} placeholder="..." /></td>
                           <td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delAV(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 14 }}>✕</button></td>
                         </tr>
                         {isExpanded && (
@@ -6254,9 +6407,9 @@ Reguli:
                                             </select>
                                           </td>
                                           <td style={td({ textAlign: "right", background: "#fff8e1", fontWeight: 700, color: "#e65100" })}>
-                                            <input style={inp({ textAlign: "right", fontWeight: 700, color: "#e65100" })} value={d.suma || ""} onChange={(e) => updDecontItem(r.id, di, "suma", e.target.value)} placeholder="0" />
+                                            <FastInput style={inp({ textAlign: "right", fontWeight: 700, color: "#e65100" })} value={d.suma || ""} onChange={(e) => updDecontItem(r.id, di, "suma", e.target.value)} placeholder="0" />
                                           </td>
-                                          <td style={td()}><input style={inp({ textAlign: "center" })} value={d.det || ""} onChange={(e) => updDecontItem(r.id, di, "det", e.target.value)} placeholder="Descriere..." /></td>
+                                          <td style={td()}><FastInput style={inp({ textAlign: "center" })} value={d.det || ""} onChange={(e) => updDecontItem(r.id, di, "det", e.target.value)} placeholder="Descriere..." /></td>
                                           <td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delDecontItem(r.id, di)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
                                         </tr>
                                       ))}
@@ -6325,9 +6478,9 @@ Reguli:
                               <button onClick={() => setExpandedAv(isExpanded ? null : r.id)} title={isExpanded ? "Ascunde plăți" : "Vezi/Adaugă plăți"} style={{ background: isExpanded ? "#00838f" : "#e0f7fa", color: isExpanded ? "#fff" : "#00838f", border: "1px solid #00838f", borderRadius: 4, padding: "2px 7px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>{isExpanded ? "▼" : "▶"} {plati.length}</button>
                             </td>
                             <td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updAV(oi, "data", v)} /></td>
-                            <td style={td({ background: rowBg, fontWeight: 600 })}><input style={inp({ textAlign: "center", fontWeight: 600 })} value={r.catre || ""} onChange={(e) => updAV(oi, "catre", e.target.value)} placeholder="Cine a adus" /></td>
-                            <td style={td({ background: "#e0f2f1", textAlign: "right", fontWeight: 700, color: "#00695c" })}><input style={inp({ textAlign: "right", fontWeight: 700, color: "#00695c" })} value={r.suma || ""} onChange={(e) => updAV(oi, "suma", e.target.value)} placeholder="0" /></td>
-                            <td style={td({ background: "#fff8e1", textAlign: "right" })}><input style={inp({ textAlign: "right" })} value={r.sold_anterior ?? ""} onChange={(e) => updAV(oi, "sold_anterior", e.target.value === "" ? null : e.target.value)} placeholder="0" /></td>
+                            <td style={td({ background: rowBg, fontWeight: 600 })}><FastInput style={inp({ textAlign: "center", fontWeight: 600 })} value={r.catre || ""} onChange={(e) => updAV(oi, "catre", e.target.value)} placeholder="Cine a adus" /></td>
+                            <td style={td({ background: "#e0f2f1", textAlign: "right", fontWeight: 700, color: "#00695c" })}><FastInput style={inp({ textAlign: "right", fontWeight: 700, color: "#00695c" })} value={r.suma || ""} onChange={(e) => updAV(oi, "suma", e.target.value)} placeholder="0" /></td>
+                            <td style={td({ background: "#fff8e1", textAlign: "right" })}><FastInput style={inp({ textAlign: "right" })} value={r.sold_anterior ?? ""} onChange={(e) => updAV(oi, "sold_anterior", e.target.value === "" ? null : e.target.value)} placeholder="0" /></td>
                             <td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 700 })}>{fmt(totalDisp)}</td>
                             <td style={td({ textAlign: "right", background: "#fce4d6", fontWeight: 600, color: "#bf360c" })}>{fmt(cheltuit)}</td>
                             <td style={td({ textAlign: "right", background: ramas < 0 ? "#ffebee" : "#e8f5e9", fontWeight: 700, color: ramas < 0 ? "#c62828" : G })}>{fmt(ramas)}</td>
@@ -6359,9 +6512,9 @@ Reguli:
                                             <td style={td({ textAlign: "center", color: "#888", fontSize: 10, background: "#f5f5f5" })}>{di + 1}</td>
                                             <td style={td()}><DateInput value={d.data || ""} onChange={(v) => updDecontItem(r.id, di, "data", v)} /></td>
                                             <td style={td({ textAlign: "right", background: "#fff8e1", fontWeight: 700, color: "#bf360c" })}>
-                                              <input style={inp({ textAlign: "right", fontWeight: 700, color: "#bf360c" })} value={d.suma || ""} onChange={(e) => updDecontItem(r.id, di, "suma", e.target.value)} placeholder="0" />
+                                              <FastInput style={inp({ textAlign: "right", fontWeight: 700, color: "#bf360c" })} value={d.suma || ""} onChange={(e) => updDecontItem(r.id, di, "suma", e.target.value)} placeholder="0" />
                                             </td>
-                                            <td style={td()}><input style={inp({ textAlign: "center" })} value={d.det || ""} onChange={(e) => updDecontItem(r.id, di, "det", e.target.value)} placeholder="Descriere..." /></td>
+                                            <td style={td()}><FastInput style={inp({ textAlign: "center" })} value={d.det || ""} onChange={(e) => updDecontItem(r.id, di, "det", e.target.value)} placeholder="Descriere..." /></td>
                                             <td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delDecontItem(r.id, di)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
                                           </tr>
                                         ))}
@@ -6411,7 +6564,7 @@ Reguli:
               <SC label="Total Contracte" value={contracte.filter((r) => r.companie).length + " buc."} c="#1565c0" bg="#e3f2fd" />
               <SC label="Cu detalii" value={contracte.filter((r) => r.detalii).length + " buc."} c={G} bg="#e8f5e9" />
               <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
-                <input value={ctSearch} onChange={(e) => setCtSearch(e.target.value)} placeholder="🔍 Caută companie, nr, detalii..." style={{ border: "1px solid #ccc", borderRadius: 6, padding: "5px 10px", fontSize: 12, width: 220 }} />
+                <FastInput value={ctSearch} onChange={(e) => setCtSearch(e.target.value)} placeholder="🔍 Caută companie, nr, detalii..." style={{ border: "1px solid #ccc", borderRadius: 6, padding: "5px 10px", fontSize: 12, width: 220 }} />
                 {ctSearch && <button onClick={() => setCtSearch("")} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 16, lineHeight: 1 }}>✕</button>}
                 <button onClick={addCT} style={{ padding: "6px 14px", background: G, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Adaugă contract</button>
               </div>
@@ -6422,7 +6575,7 @@ Reguli:
                 <thead><tr style={{ background: G }}><th style={th({ background: "#155a35" })}></th><th style={th({ textAlign: "center" })}>Nr.</th><th style={th({ textAlign: "center" })}>Companie</th><th style={th({ textAlign: "center" })}>Data</th><th style={th({ textAlign: "center" })}>Detalii</th><th style={th({})}></th></tr></thead>
                 <tbody>
                   {filtCT.length === 0 && <tr><td colSpan={6} style={{ textAlign: "center", padding: 20, color: "#aaa" }}>Niciun contract găsit.</td></tr>}
-                  {filtCT.map((r, i) => { const oi = contracte.indexOf(r); const isEmpty = !r.companie; const rowBg = isEmpty ? "#fafafa" : i % 2 === 0 ? "#fff" : "#f3f8ff"; const hasD = !!r.detalii; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td><td style={td({ background: "#e3f2fd", textAlign: "center", fontWeight: 700, color: "#1565c0", fontFamily: "monospace" })}><input style={inp({ textAlign: "center", fontWeight: 700, color: "#1565c0", fontFamily: "monospace" })} value={r.nr || ""} onChange={(e) => updCT(oi, "nr", e.target.value)} /></td><td style={td({ background: rowBg, fontWeight: isEmpty ? 400 : 600, color: isEmpty ? "#bbb" : "#222", textAlign: "center" })}><div style={{ display: "flex", alignItems: "center", gap: 2 }}><input title={r.companie || undefined} style={inp({ textAlign: "center", fontWeight: isEmpty ? 400 : 600, color: isEmpty ? "#bbb" : "#222" })} value={r.companie || ""} onChange={(e) => updCT(oi, "companie", e.target.value)} placeholder="—" /><button onClick={() => searchAnafInto((v) => updCT(oi, "companie", v))} title="Caută firma după CUI la ANAF" style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, flexShrink: 0, padding: 0 }}>🔍</button></div></td><td style={td({ background: rowBg, textAlign: "center", fontSize: 12 })}><DateInput value={r.data || ""} onChange={(v) => updCT(oi, "data", v)} /></td><td style={td({ background: hasD ? "#fff8e1" : rowBg, fontStyle: hasD ? "italic" : "normal", color: hasD ? "#e65100" : "#555", textAlign: "center" })}><input title={r.detalii || undefined} style={inp({ textAlign: "center", fontStyle: hasD ? "italic" : "normal", color: hasD ? "#e65100" : "#555" })} value={r.detalii || ""} onChange={(e) => updCT(oi, "detalii", e.target.value)} placeholder="—" /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delCT(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 14 }}>✕</button></td></tr>); })}
+                  {filtCT.map((r, i) => { const oi = contracte.indexOf(r); const isEmpty = !r.companie; const rowBg = isEmpty ? "#fafafa" : i % 2 === 0 ? "#fff" : "#f3f8ff"; const hasD = !!r.detalii; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td><td style={td({ background: "#e3f2fd", textAlign: "center", fontWeight: 700, color: "#1565c0", fontFamily: "monospace" })}><FastInput style={inp({ textAlign: "center", fontWeight: 700, color: "#1565c0", fontFamily: "monospace" })} value={r.nr || ""} onChange={(e) => updCT(oi, "nr", e.target.value)} /></td><td style={td({ background: rowBg, fontWeight: isEmpty ? 400 : 600, color: isEmpty ? "#bbb" : "#222", textAlign: "center" })}><div style={{ display: "flex", alignItems: "center", gap: 2 }}><FastInput title={r.companie || undefined} style={inp({ textAlign: "center", fontWeight: isEmpty ? 400 : 600, color: isEmpty ? "#bbb" : "#222" })} value={r.companie || ""} onChange={(e) => updCT(oi, "companie", e.target.value)} placeholder="—" /><button onClick={() => searchAnafInto((v) => updCT(oi, "companie", v))} title="Caută firma după CUI la ANAF" style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, flexShrink: 0, padding: 0 }}>🔍</button></div></td><td style={td({ background: rowBg, textAlign: "center", fontSize: 12 })}><DateInput value={r.data || ""} onChange={(v) => updCT(oi, "data", v)} /></td><td style={td({ background: hasD ? "#fff8e1" : rowBg, fontStyle: hasD ? "italic" : "normal", color: hasD ? "#e65100" : "#555", textAlign: "center" })}><FastInput title={r.detalii || undefined} style={inp({ textAlign: "center", fontStyle: hasD ? "italic" : "normal", color: hasD ? "#e65100" : "#555" })} value={r.detalii || ""} onChange={(e) => updCT(oi, "detalii", e.target.value)} placeholder="—" /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delCT(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 14 }}>✕</button></td></tr>); })}
                 </tbody>
                 <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={2} style={{ padding: "7px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td colSpan={4} style={{ padding: "7px 10px", fontSize: 12 }}>{filtCT.length} contracte din {contracte.length}</td></tr></tfoot>
               </table>
@@ -6470,7 +6623,7 @@ Reguli:
                 <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
                   {CAT_PAROLE.map((c) => { const cnt = parole.filter((r) => r.cat === c).length; const colors = { Email: ["#1565c0", "#e3f2fd"], Bancă: ["#2e7d32", "#e8f5e9"], Card: ["#6a1b9a", "#f3e5f5"], Platformă: ["#e65100", "#fff3e0"], WiFi: ["#0277bd", "#e1f5fe"], Altele: ["#555", "#f5f5f5"] }; const [c1, bg1] = colors[c] || ["#555", "#f5f5f5"]; return (<div key={c} onClick={() => setParolaCat(parolaCat === c ? "toate" : c)} style={{ flex: "0 0 auto", background: parolaCat === c ? c1 : bg1, border: `2px solid ${c1}`, borderRadius: 8, padding: "6px 14px", cursor: "pointer" }}><div style={{ fontSize: 10, color: parolaCat === c ? "rgba(255,255,255,0.8)" : "#666" }}>{c}</div><div style={{ fontSize: 16, fontWeight: 700, color: parolaCat === c ? "#fff" : c1 }}>{cnt}</div></div>); })}
                   <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                    <input value={parolaSearch} onChange={(e) => setParolaSearch(e.target.value)} placeholder="🔍 Caută platformă, user, note..." style={{ border: "1px solid #ccc", borderRadius: 6, padding: "5px 10px", fontSize: 12, width: 220 }} />
+                    <FastInput value={parolaSearch} onChange={(e) => setParolaSearch(e.target.value)} placeholder="🔍 Caută platformă, user, note..." style={{ border: "1px solid #ccc", borderRadius: 6, padding: "5px 10px", fontSize: 12, width: 220 }} />
                     {parolaSearch && <button onClick={() => setParolaSearch("")} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 16 }}>✕</button>}
                     {parolaCat !== "toate" && <button onClick={() => setParolaCat("toate")} style={{ padding: "5px 10px", background: "#f5f5f5", border: "1px solid #ccc", borderRadius: 6, cursor: "pointer", fontSize: 12 }}>✕ {parolaCat}</button>}
                     <button onClick={addPAR} style={{ padding: "6px 14px", background: G, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Adaugă</button>
@@ -6485,11 +6638,11 @@ Reguli:
                         const oi = parole.indexOf(r); const isEdit = parolaEdit === oi; const catColors = { Email: ["#1565c0", "#e3f2fd"], Bancă: ["#2e7d32", "#e8f5e9"], Card: ["#6a1b9a", "#f3e5f5"], Platformă: ["#e65100", "#fff3e0"], WiFi: ["#0277bd", "#e1f5fe"], Altele: ["#555", "#f5f5f5"] }; const [cc, cbg] = catColors[r.cat] || ["#555", "#f5f5f5"]; const rowBg = i % 2 === 0 ? "#fff" : "#f8f9fa"; const visible = showParole[oi];
                         return (<tr key={r.id || i} style={{ background: isEdit ? "#fffde7" : rowBg }}>
                           <td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td>
-                          <td style={td({ background: isEdit ? "#fffde7" : rowBg, fontWeight: 600 })}>{isEdit ? <input style={inp({ fontWeight: 600 })} value={r.platforma || ""} onChange={(e) => updPAR(oi, "platforma", e.target.value)} /> : <span>{r.platforma}</span>}</td>
+                          <td style={td({ background: isEdit ? "#fffde7" : rowBg, fontWeight: 600 })}>{isEdit ? <FastInput style={inp({ fontWeight: 600 })} value={r.platforma || ""} onChange={(e) => updPAR(oi, "platforma", e.target.value)} /> : <span>{r.platforma}</span>}</td>
                           <td style={td({ background: cbg, textAlign: "center" })}><select style={sel({ color: cc, fontWeight: 700, fontSize: 10 })} value={r.cat || ""} onChange={(e) => updPAR(oi, "cat", e.target.value)}>{CAT_PAROLE.map((c) => <option key={c}>{c}</option>)}</select></td>
-                          <td style={td({ background: isEdit ? "#fffde7" : rowBg, fontSize: 11 })}><div style={{ display: "flex", alignItems: "center", gap: 4 }}>{isEdit ? <input style={inp({ fontSize: 11 })} value={r.user || ""} onChange={(e) => updPAR(oi, "user", e.target.value)} placeholder="user / email" /> : <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.user}>{r.user || "—"}</span>}{r.user && !isEdit && <button onClick={() => navigator.clipboard?.writeText(r.user)} title="Copiază" style={{ background: "none", border: "none", cursor: "pointer", color: "#90a4ae", fontSize: 12, padding: "0 2px", flexShrink: 0 }}>📋</button>}</div></td>
-                          <td style={td({ background: isEdit ? "#fffde7" : "#f9fbe7" })}><div style={{ display: "flex", alignItems: "center", gap: 4 }}>{isEdit ? <input style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.parola || ""} onChange={(e) => updPAR(oi, "parola", e.target.value)} placeholder="parolă" /> : <span style={{ flex: 1, fontFamily: "monospace", fontSize: 12, letterSpacing: visible ? "0" : "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={visible ? r.parola : ""}>{visible ? r.parola : (r.parola ? "••••••••" : "—")}</span>}{r.parola && !isEdit && (<><button onClick={() => setShowParole((p) => ({ ...p, [oi]: !p[oi] }))} title={visible ? "Ascunde" : "Arată"} style={{ background: "none", border: "none", cursor: "pointer", color: "#90a4ae", fontSize: 13, padding: "0 2px", flexShrink: 0 }}>{visible ? "🙈" : "👁️"}</button><button onClick={() => navigator.clipboard?.writeText(r.parola)} title="Copiază parola" style={{ background: "none", border: "none", cursor: "pointer", color: "#90a4ae", fontSize: 12, padding: "0 2px", flexShrink: 0 }}>📋</button></>)}</div></td>
-                          <td style={td({ background: isEdit ? "#fffde7" : rowBg, fontSize: 11, color: "#666" })}>{isEdit ? <input style={inp({ fontSize: 11 })} value={r.note || ""} onChange={(e) => updPAR(oi, "note", e.target.value)} placeholder="note, url, detalii..." /> : <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }} title={r.note}>{r.note || ""}</span>}</td>
+                          <td style={td({ background: isEdit ? "#fffde7" : rowBg, fontSize: 11 })}><div style={{ display: "flex", alignItems: "center", gap: 4 }}>{isEdit ? <FastInput style={inp({ fontSize: 11 })} value={r.user || ""} onChange={(e) => updPAR(oi, "user", e.target.value)} placeholder="user / email" /> : <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.user}>{r.user || "—"}</span>}{r.user && !isEdit && <button onClick={() => navigator.clipboard?.writeText(r.user)} title="Copiază" style={{ background: "none", border: "none", cursor: "pointer", color: "#90a4ae", fontSize: 12, padding: "0 2px", flexShrink: 0 }}>📋</button>}</div></td>
+                          <td style={td({ background: isEdit ? "#fffde7" : "#f9fbe7" })}><div style={{ display: "flex", alignItems: "center", gap: 4 }}>{isEdit ? <FastInput style={inp({ fontFamily: "monospace", fontSize: 11 })} value={r.parola || ""} onChange={(e) => updPAR(oi, "parola", e.target.value)} placeholder="parolă" /> : <span style={{ flex: 1, fontFamily: "monospace", fontSize: 12, letterSpacing: visible ? "0" : "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={visible ? r.parola : ""}>{visible ? r.parola : (r.parola ? "••••••••" : "—")}</span>}{r.parola && !isEdit && (<><button onClick={() => setShowParole((p) => ({ ...p, [oi]: !p[oi] }))} title={visible ? "Ascunde" : "Arată"} style={{ background: "none", border: "none", cursor: "pointer", color: "#90a4ae", fontSize: 13, padding: "0 2px", flexShrink: 0 }}>{visible ? "🙈" : "👁️"}</button><button onClick={() => navigator.clipboard?.writeText(r.parola)} title="Copiază parola" style={{ background: "none", border: "none", cursor: "pointer", color: "#90a4ae", fontSize: 12, padding: "0 2px", flexShrink: 0 }}>📋</button></>)}</div></td>
+                          <td style={td({ background: isEdit ? "#fffde7" : rowBg, fontSize: 11, color: "#666" })}>{isEdit ? <FastInput style={inp({ fontSize: 11 })} value={r.note || ""} onChange={(e) => updPAR(oi, "note", e.target.value)} placeholder="note, url, detalii..." /> : <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }} title={r.note}>{r.note || ""}</span>}</td>
                           <td style={td({ textAlign: "center", padding: 3 })}><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><button onClick={() => setParolaEdit(isEdit ? null : oi)} title={isEdit ? "Salvează" : "Editează"} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, lineHeight: 1 }}>{isEdit ? "✅" : "✏️"}</button><button onClick={() => delPAR(r.id)} title="Șterge" style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13, lineHeight: 1 }}>✕</button></div></td>
                         </tr>);
                       })}
@@ -6533,15 +6686,15 @@ Reguli:
                 </div>
                 <div style={{ flex: "0 0 130px" }}>
                   <label style={LSt}>Nr. Înregistrare</label>
-                  <input style={IFS} value={trasNrInreg} onChange={(e) => setTrasNrInreg(e.target.value)} placeholder="ex: 27/31.12.2025" />
+                  <FastInput style={IFS} value={trasNrInreg} onChange={(e) => setTrasNrInreg(e.target.value)} placeholder="ex: 27/31.12.2025" />
                 </div>
                 <div style={{ flex: "0 0 160px" }}>
                   <label style={LSt}>Contract</label>
-                  <input style={IFS} value={trasContract} onChange={(e) => setTrasContract(e.target.value)} placeholder="ex: ECO 17/01.07.2024" />
+                  <FastInput style={IFS} value={trasContract} onChange={(e) => setTrasContract(e.target.value)} placeholder="ex: ECO 17/01.07.2024" />
                 </div>
                 <div style={{ flex: "0 0 130px" }}>
                   <label style={LSt}>Factură</label>
-                  <input style={IFS} value={trasFactura} onChange={(e) => setTrasFactura(e.target.value)} placeholder="ex: GKF 2324" />
+                  <FastInput style={IFS} value={trasFactura} onChange={(e) => setTrasFactura(e.target.value)} placeholder="ex: GKF 2324" />
                 </div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 10 }}>
@@ -6562,7 +6715,7 @@ Reguli:
                 <option value="">Toate lunile</option>
                 {trasMonthsList.map(m => <option key={m}>{m}</option>)}
               </select>
-              <input value={trasFilter} onChange={(e) => setTrasFilter(e.target.value)} placeholder="🔍 Caută firmă, trasabilitate, denumire..." style={{ flex: 1, minWidth: 200, border: "1px solid #ccc", borderRadius: 6, padding: "5px 10px", fontSize: 12 }} />
+              <FastInput value={trasFilter} onChange={(e) => setTrasFilter(e.target.value)} placeholder="🔍 Caută firmă, trasabilitate, denumire..." style={{ flex: 1, minWidth: 200, border: "1px solid #ccc", borderRadius: 6, padding: "5px 10px", fontSize: 12 }} />
               {trasFilter && <button onClick={() => setTrasFilter("")} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 16 }}>✕</button>}
             </div>
 
@@ -6595,7 +6748,7 @@ Reguli:
                         <td style={td({ fontSize: 11 })}>{e.denumire}</td>
                         <td style={td({ textAlign: "right", background: "#e8f5e9", fontWeight: 700, color: G })}>{fmt(e.cant)}</td>
                         <td style={td({ background: e.trasabilitate ? "#fff3e0" : "#fff" })}>
-                          <input style={inp({ fontWeight: e.trasabilitate ? 700 : 400, color: e.trasabilitate ? "#e65100" : "#aaa" })} value={e.trasabilitate || ""} onChange={(ev) => updTrasabilitate(e, ev.target.value)} placeholder="— alocă firmă —" />
+                          <FastInput style={inp({ fontWeight: e.trasabilitate ? 700 : 400, color: e.trasabilitate ? "#e65100" : "#aaa" })} value={e.trasabilitate || ""} onChange={(ev) => updTrasabilitate(e, ev.target.value)} placeholder="— alocă firmă —" />
                         </td>
                       </tr>
                     );
