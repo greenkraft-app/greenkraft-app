@@ -3102,17 +3102,56 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
     const tc = await page.getTextContent();
     const randuri = new Map();
     tc.items.forEach((it) => {
+      if (!String(it.str).trim()) return;
       const y = Math.round(it.transform[5]);
       const cheie = [...randuri.keys()].find((k) => Math.abs(k - y) <= 3);
       const k = cheie !== undefined ? cheie : y;
       if (!randuri.has(k)) randuri.set(k, []);
-      randuri.get(k).push({ x: it.transform[4], s: it.str });
+      randuri.get(k).push({ x: it.transform[4], w: it.width || 0, s: it.str });
     });
+    // Intre fragmente departate pe orizontala punem " | ", ca sa se vada unde se
+    // termina o coloana si incepe alta: altfel cantitatea "4 640" si preturile "0"
+    // ajung lipite intr-un "4 640 0 0 0 0", din care nu se mai poate citi cantitatea.
+    const PRAG_COLOANA = 6; // px intre sfarsitul unui fragment si inceputul urmatorului
     return [...randuri.entries()]
       .sort((a, b) => b[0] - a[0])
-      .map(([, buc]) => buc.sort((a, b) => a.x - b.x).map((b) => b.s).join(" ").replace(/\s+/g, " ").trim())
+      .map(([, buc]) => {
+        const sortate = buc.sort((a, b) => a.x - b.x);
+        return sortate
+          .map((b, i) => {
+            if (i === 0) return b.s.trim();
+            const prec = sortate[i - 1];
+            return ((b.x - (prec.x + prec.w) > PRAG_COLOANA) ? " | " : " ") + b.s.trim();
+          })
+          .join("")
+          .replace(/[ \t]+/g, " ")
+          .trim();
+      })
       .filter(Boolean)
       .join("\n");
+  };
+
+  // Delegatul (nume / serie+nr CI / nr auto) e scris pe randuri separate, intre
+  // totalul avizului si "Intocmit de". Il citim din text, nu il lasam pe seama
+  // modelului: pozitia e mereu aceeasi, iar un numar de masina ratat inseamna
+  // o Anexa 3 incompleta.
+  const RE_AUTO = /\b[A-Z]{1,2}\s?\d{2,3}\s?[A-Z]{3}\b/g;
+  const RE_CI = /^[A-Z]{2}\s?\d{5,6}$/;
+  const delegatDinText = (text) => {
+    const linii = String(text || "").split("\n").map((l) => l.trim()).filter(Boolean);
+    let iStart = -1;
+    linii.forEach((l, i) => { if (/^TOTAL\b/i.test(l)) iStart = i; });
+    let iEnd = linii.findIndex((l) => /Intocmit de/i.test(l));
+    if (iEnd < 0) iEnd = linii.length;
+    const fereastra = linii
+      .slice(iStart + 1, iEnd)
+      .filter((l) => !/^(Instructiuni|Banca|Total)\b/i.test(l) && !/IBAN/i.test(l) && !/^[\d\s|.,-]+$/.test(l));
+    if (!fereastra.length) return null;
+    const randAuto = fereastra.find((l) => (l.toUpperCase().match(RE_AUTO) || []).length > 0) || "";
+    const auto = (randAuto.toUpperCase().match(RE_AUTO) || []).map((x) => x.replace(/\s+/g, "")).join(" ");
+    const ci = fereastra.find((l) => l !== randAuto && RE_CI.test(l.toUpperCase().replace(/\s+/g, " ").trim())) || "";
+    const nume = fereastra.find((l) => l !== randAuto && l !== ci && /[A-Za-z]{3}/.test(l) && !/^Actualizare/i.test(l)) || "";
+    return { nume, ci, auto };
   };
 
   // "GREEN PACK S.R.L." si "GREEN PACK SRL" sunt aceeasi firma
@@ -3190,7 +3229,11 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
 "delegat":{"nume":"","ci":"seria+nr CI","auto":"nr inmatriculare"},
 "linii":[{"denumire":"denumirea exacta a produsului","um":"","cantitate":0}]}
 Reguli:
-- cantitățile pot fi scrise cu spațiu ca separator de mii (1 400 = 1400); ia valoarea de pe coloana Cant., nu preț/valoare/TVA
+- coloanele dintr-un rând sunt despărțite cu " | ". Rândul de produs are forma:
+  nr | denumire | U.M. | Cant. | Preț unitar | Valoare | TVA | Total
+  Exemplu: "1 | FIER DESEURI - COD 17 04 05 | BUC | 4 640 | 0 | 0 | 0 | 0" înseamnă cantitate 4640.
+- cantitatea e TOT ce se află între separatoarele din coloana Cant., chiar dacă are spații
+  (spațiul e separator de mii: "4 640" = 4640, "1 400" = 1400). Nu lua prețul sau TVA-ul drept cantitate.
 - denumirea produsului se poate rupe pe două rânduri (ex. "...COD: 20 01" pe un rând și "39" pe următorul) — reconstituie-o întreagă
 - delegatul, seria+nr CI și numărul de înmatriculare apar de obicei unul sub altul, spre finalul avizului
 - dacă un câmp lipsește, pune ""`;
@@ -3209,6 +3252,15 @@ Reguli:
       const curat = raw.replace(/```json|```/g, "").trim();
       const av = JSON.parse(curat.slice(curat.indexOf("{")));
 
+      // completam din text ce a ratat modelul (ex. numarul de inmatriculare)
+      const dinText = text ? delegatDinText(text) : null;
+      if (dinText) {
+        av.delegat = {
+          nume: av.delegat?.nume || dinText.nume,
+          ci: av.delegat?.ci || dinText.ci,
+          auto: dinText.auto || av.delegat?.auto || "",
+        };
+      }
       aplicaAviz(av);
     } catch (e) {
       alert("Nu am putut citi avizul: " + e.message);
@@ -3244,7 +3296,18 @@ Reguli:
         ? (partenerCuMasina.anexa3.masini || []).find(potrivesteMasina)
         : null;
       const transportator = partenerCuMasina?.denumire || "";
-      const delegatGK = delegatiList.find((d) => normFirma(d.nume) === normFirma(av.delegat?.nume));
+
+      // Delegatul si masina sunt <select>-uri a caror valoare e chiar obiectul din lista
+      // transportatorului, serializat. Trebuie sa luam obiectul DE ACOLO, nu unul construit
+      // de noi: altfel difera ordinea cheilor si selectul ramane pe "— alege —".
+      const infoTransp = transportator ? (a3FirmaInfo(transportator) || {}) : {};
+      const delegatiTransp = infoTransp.delegati || [];
+      const masiniTransp = infoTransp.masini || [];
+      const delegatDinLista =
+        delegatiTransp.find((d) => normFirma(d.nume) === normFirma(av.delegat?.nume)) ||
+        (doarCifre(av.delegat?.ci) ? delegatiTransp.find((d) => doarCifre(d.ci) === doarCifre(av.delegat?.ci)) : null) ||
+        null;
+      const masinaDinLista = numereAviz.length ? masiniTransp.find(potrivesteMasina) : null;
 
       const linii = (av.linii || []).map((l) => ({
         categorie: gasesteProdus(l.denumire),
@@ -3263,9 +3326,12 @@ Reguli:
         transportator: transportator || (auto ? "" : p.transportator),
         expeditor: av.furnizor?.denumire ? expeditor : p.expeditor,
         destinatar: av.client?.denumire ? destinatar : p.destinatar,
+        // Anexa 3 se emite cu aceeasi serie si acelasi numar ca avizul
+        serie: ANEXA3_SERII.includes(String(av.aviz_serie || "").toUpperCase()) ? String(av.aviz_serie).toUpperCase() : p.serie,
+        numar: av.aviz_numar ? String(av.aviz_numar) : p.numar,
         data_incarcare: dataAviz, data_descarcare: dataAviz,
-        delegat: av.delegat?.nume ? { nume: av.delegat.nume, ci: delegatGK ? [delegatGK.ci_serie, delegatGK.ci_numar].filter(Boolean).join(" ") : (av.delegat.ci || "") } : p.delegat,
-        masina: auto ? { auto, licenta: masinaGasita?.licenta || "", licenta_expira: masinaGasita?.licenta_expira || "" } : p.masina,
+        delegat: delegatDinLista || (av.delegat?.nume ? { nume: av.delegat.nume, ci: av.delegat.ci || "" } : p.delegat),
+        masina: masinaDinLista || (auto ? { auto, licenta: masinaGasita?.licenta || "", licenta_expira: masinaGasita?.licenta_expira || "" } : p.masina),
         linii: linii.length ? linii.map(({ categorie, kilograme }) => ({ categorie, kilograme: String(kilograme) })) : p.linii,
         kg_cunoscut: true,
         // inlocuim marcajul unui aviz incarcat anterior, ca sa nu se adune in Observatii
@@ -3280,6 +3346,7 @@ Reguli:
         transportator,
         delegat: av.delegat?.nume || "", auto,
         autoNecunoscut: !!auto && !partenerCuMasina,
+        delegatNecunoscut: !!av.delegat?.nume && !delegatDinLista,
         linii,
       });
       setA3SubTab("nou");
@@ -4867,15 +4934,21 @@ Reguli:
                             <div style={{ marginBottom: 2 }}>
                               {avizRaport.autoNecunoscut ? "⚠️" : "🚛"} <strong>Transportator:</strong>{" "}
                               {avizRaport.transportator || <span style={{ color: "#c62828" }}>mașina {avizRaport.auto} nu e la niciun partener — alege transportatorul</span>}
-                              {avizRaport.auto && ` • ${avizRaport.auto}`}{avizRaport.delegat && ` • ${avizRaport.delegat}`}
+                              {avizRaport.auto && ` • ${avizRaport.auto}`}
                             </div>
+                            {avizRaport.delegat && (
+                              <div style={{ marginBottom: 2 }}>
+                                {avizRaport.delegatNecunoscut ? "⚠️" : "✔"} <strong>Delegat:</strong> {avizRaport.delegat}
+                                {avizRaport.delegatNecunoscut && <span style={{ color: "#c62828" }}> — nu e trecut la {avizRaport.transportator || "transportator"}; adaugă-l în 🛠️ Variabile → Parteneri → Delegați</span>}
+                              </div>
+                            )}
                             {avizRaport.linii.map((l, i) => (
                               <div key={i}>
                                 {l.categorie ? "✔" : "⚠️"} <strong>{fmt(l.kilograme, 0)} kg</strong> — {l.categorie || <span style={{ color: "#c62828" }}>„{l.original}" nu e în Variabile → Produse, alege manual</span>}
                                 {l.um && l.um !== "KG" && <span style={{ color: "#e65100" }}> • ⚠️ în aviz e <strong>{l.um}</strong>, nu KG — verifică cantitatea</span>}
                               </div>
                             ))}
-                            <div style={{ marginTop: 6, color: "#777" }}>Mai completează doar <strong>Seria și Numărul</strong> de pe carnetul fizic, apoi Salvează.</div>
+                            <div style={{ marginTop: 6, color: "#777" }}>Verifică seria și numărul, apoi Salvează.</div>
                           </div>
                         )}
                       </div>
