@@ -3209,20 +3209,50 @@ Reguli:
       const curat = raw.replace(/```json|```/g, "").trim();
       const av = JSON.parse(curat.slice(curat.indexOf("{")));
 
-      // ── potrivirea cu datele din aplicatie ──
+      aplicaAviz(av);
+    } catch (e) {
+      alert("Nu am putut citi avizul: " + e.message);
+    }
+    setAvizLoading(false);
+  };
+
+  // Datele unui aviz (din PDF sau trimise de extensie din FGO) → formularul Anexa 3.
+  // Avizul venit din FGO e emis din contul nostru, deci expeditorul suntem noi.
+  const aplicaAviz = (avIntrare) => {
+      const av = avIntrare.furnizor ? avIntrare : { ...avIntrare, furnizor: { denumire: "GREEN KRAFT SRL", cui: GREEN_KRAFT_IDENTITATE.cui } };
       const optiuni = [...new Set([...ANEXA3_FIRME, ...pjList.map((f) => f.denumire), ...pfList.map((f) => f.denumire)].filter(Boolean))];
       const expeditor = gasesteFirma(av.furnizor?.denumire, av.furnizor?.cui, optiuni);
       const destinatar = gasesteFirma(av.client?.denumire, av.client?.cui, optiuni);
-      const auto = String(av.delegat?.auto || "").toUpperCase().replace(/\s/g, "");
-      const masinaGK = masiniList.find((m) => String(m.nr_auto || "").toUpperCase().replace(/\s/g, "") === auto);
-      // masina din aviz e a noastra ⇒ noi transportam; altfel transporta expeditorul
-      const transportator = masinaGK ? "GREEN KRAFT SRL" : expeditor;
+      // Transportatorul il aflam dupa numarul de inmatriculare, cautat in masinile
+      // trecute pe fiecare partener (Variabile → Parteneri → Masini) — singurul loc
+      // unde o masina e legata de o firma. Tabela `masini` e un fond comun, fara
+      // firma, deci nu poate spune cine transporta.
+      // Daca numarul nu e la niciun partener, lasam campul gol: un transportator
+      // ghicit gresit strica Anexa 3.
+      // Un camp poate contine doua numere (cap tractor + remorca), si in aviz si la
+      // partener: "GR19WRX GR08ECO", "IF15DSW / IF16DSW". Le spargem si comparam
+      // numar cu numar — e de ajuns ca unul singur sa fie al partenerului.
+      const numereAuto = (x) => String(x || "").toUpperCase().split(/[^A-Z0-9-]+/)
+        .map((t) => t.replace(/[^A-Z0-9]/g, "")).filter(Boolean);
+      const auto = String(av.delegat?.auto || "").toUpperCase().trim();
+      const numereAviz = numereAuto(auto);
+      const potrivesteMasina = (m) => numereAuto(m.auto).some((n) => numereAviz.includes(n));
+      const partenerCuMasina = numereAviz.length
+        ? pjList.find((f) => (f.anexa3?.masini || []).some(potrivesteMasina))
+        : null;
+      const masinaGasita = partenerCuMasina
+        ? (partenerCuMasina.anexa3.masini || []).find(potrivesteMasina)
+        : null;
+      const transportator = partenerCuMasina?.denumire || "";
       const delegatGK = delegatiList.find((d) => normFirma(d.nume) === normFirma(av.delegat?.nume));
 
       const linii = (av.linii || []).map((l) => ({
         categorie: gasesteProdus(l.denumire),
         kilograme: parseCant(l.cantitate) || "",
         original: l.denumire || "",
+        // Anexa 3 se completeaza in kilograme; daca avizul are alta unitate
+        // (in FGO unele articole sunt definite pe BUC), o semnalam ca sa fie verificata
+        um: String(l.um || "").toUpperCase(),
       }));
 
       const dataAviz = av.data || today();
@@ -3230,15 +3260,16 @@ Reguli:
         ...p,
         // daca avizul numeste o firma pe care nu o gasim in Parteneri, golim campul:
         // o valoare ramasa de la formularul anterior ar parea corecta, desi nu e din aviz
-        transportator: transportator || (av.furnizor?.denumire ? "" : p.transportator),
+        transportator: transportator || (auto ? "" : p.transportator),
         expeditor: av.furnizor?.denumire ? expeditor : p.expeditor,
         destinatar: av.client?.denumire ? destinatar : p.destinatar,
         data_incarcare: dataAviz, data_descarcare: dataAviz,
         delegat: av.delegat?.nume ? { nume: av.delegat.nume, ci: delegatGK ? [delegatGK.ci_serie, delegatGK.ci_numar].filter(Boolean).join(" ") : (av.delegat.ci || "") } : p.delegat,
-        masina: auto ? { auto, licenta: masinaGK?.licenta || "", licenta_expira: masinaGK?.licenta_expira || "" } : p.masina,
+        masina: auto ? { auto, licenta: masinaGasita?.licenta || "", licenta_expira: masinaGasita?.licenta_expira || "" } : p.masina,
         linii: linii.length ? linii.map(({ categorie, kilograme }) => ({ categorie, kilograme: String(kilograme) })) : p.linii,
         kg_cunoscut: true,
-        obs: [p.obs, `Aviz FGO ${[av.aviz_serie, av.aviz_numar].filter(Boolean).join(" ")}`].filter(Boolean).join(" • "),
+        // inlocuim marcajul unui aviz incarcat anterior, ca sa nu se adune in Observatii
+        obs: [String(p.obs || "").replace(/\s*•?\s*Aviz FGO [^•]*/g, "").trim(), `Aviz FGO ${[av.aviz_serie, av.aviz_numar].filter(Boolean).join(" ")}`].filter(Boolean).join(" • "),
       }));
 
       setAvizRaport({
@@ -3248,14 +3279,27 @@ Reguli:
         destinatar: { din: av.client?.denumire || "", gasit: destinatar },
         transportator,
         delegat: av.delegat?.nume || "", auto,
+        autoNecunoscut: !!auto && !partenerCuMasina,
         linii,
       });
       setA3SubTab("nou");
-    } catch (e) {
-      alert("Nu am putut citi avizul: " + e.message);
-    }
-    setAvizLoading(false);
+      setPvSubTab("anexa3");
+      setTab("pv");
   };
+
+  // Avizele trimise din FGO de extensia Greenkraft. Primim doar mesaje de la
+  // propria fereastra (content script-ul extensiei), nu din iframe-uri straine.
+  const aplicaAvizRef = useRef(aplicaAviz);
+  aplicaAvizRef.current = aplicaAviz;
+  useEffect(() => {
+    const onMesaj = (e) => {
+      if (e.source !== window || e.origin !== window.location.origin) return;
+      if (!e.data || e.data.type !== "FGO_AVIZ" || !e.data.payload) return;
+      aplicaAvizRef.current(e.data.payload);
+    };
+    window.addEventListener("message", onMesaj);
+    return () => window.removeEventListener("message", onMesaj);
+  }, []);
 
   // ── Scanare Buletin ───────────────────────────────────────
   const scanBuletin = async (file) => {
@@ -4820,10 +4864,15 @@ Reguli:
                                 {v.gasit ? "✔" : "⚠️"} <strong>{et}:</strong> {v.gasit || <span style={{ color: "#c62828" }}>„{v.din}" nu e în Parteneri — alege manual</span>}
                               </div>
                             ))}
-                            <div style={{ marginBottom: 2 }}>🚛 <strong>Transportator:</strong> {avizRaport.transportator || "—"} {avizRaport.auto && `• ${avizRaport.auto}`} {avizRaport.delegat && `• ${avizRaport.delegat}`}</div>
+                            <div style={{ marginBottom: 2 }}>
+                              {avizRaport.autoNecunoscut ? "⚠️" : "🚛"} <strong>Transportator:</strong>{" "}
+                              {avizRaport.transportator || <span style={{ color: "#c62828" }}>mașina {avizRaport.auto} nu e la niciun partener — alege transportatorul</span>}
+                              {avizRaport.auto && ` • ${avizRaport.auto}`}{avizRaport.delegat && ` • ${avizRaport.delegat}`}
+                            </div>
                             {avizRaport.linii.map((l, i) => (
                               <div key={i}>
                                 {l.categorie ? "✔" : "⚠️"} <strong>{fmt(l.kilograme, 0)} kg</strong> — {l.categorie || <span style={{ color: "#c62828" }}>„{l.original}" nu e în Variabile → Produse, alege manual</span>}
+                                {l.um && l.um !== "KG" && <span style={{ color: "#e65100" }}> • ⚠️ în aviz e <strong>{l.um}</strong>, nu KG — verifică cantitatea</span>}
                               </div>
                             ))}
                             <div style={{ marginTop: 6, color: "#777" }}>Mai completează doar <strong>Seria și Numărul</strong> de pe carnetul fizic, apoi Salvează.</div>

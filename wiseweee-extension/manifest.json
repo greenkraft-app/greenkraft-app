@@ -1,26 +1,48 @@
 {
   "manifest_version": 3,
-  "name": "Greenkraft \u2192 WiseWeee",
-  "version": "1.0",
-  "description": "Trimite automat datele unei achizitii din Greenkraft catre formularul de Document Nou din WiseWeee.",
-  "permissions": ["storage", "tabs"],
+  "name": "Greenkraft - WiseWeee & FGO",
+  "version": "1.1",
+  "description": "Trimite achizitiile din Greenkraft catre WiseWeee si aduce avizele din FGO in Greenkraft, pentru Anexa 3.",
+  "permissions": [
+    "storage",
+    "tabs"
+  ],
   "host_permissions": [
     "https://greenkraft-app.vercel.app/*",
     "http://localhost:5173/*",
-    "https://dash.wiseweee.com/*"
+    "https://dash.wiseweee.com/*",
+    "https://www.fgo.ro/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
     {
-      "matches": ["https://greenkraft-app.vercel.app/*", "http://localhost:5173/*"],
-      "js": ["content-greenkraft.js"],
+      "matches": [
+        "https://greenkraft-app.vercel.app/*",
+        "http://localhost:5173/*"
+      ],
+      "js": [
+        "content-greenkraft.js"
+      ],
       "run_at": "document_idle"
     },
     {
-      "matches": ["https://dash.wiseweee.com/*"],
-      "js": ["content-wiseweee.js"],
+      "matches": [
+        "https://dash.wiseweee.com/*"
+      ],
+      "js": [
+        "content-wiseweee.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.fgo.ro/v4/*"
+      ],
+      "js": [
+        "content-fgo.js"
+      ],
       "run_at": "document_idle"
     }
   ],

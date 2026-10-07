@@ -13,3 +13,26 @@ window.addEventListener("message", (event) => {
     }
   });
 });
+
+// Sensul invers: un aviz trimis din FGO. Il scoatem din storage si il predam
+// paginii, care completeaza singura formularul de Anexa 3.
+const predaAvizul = () => {
+  chrome.storage.local.get("gkPendingAviz", (res) => {
+    const aviz = res && res.gkPendingAviz;
+    if (!aviz) return;
+    // un aviz ramas de mult in storage nu mai e "proaspat trimis"
+    if (Date.now() - (aviz.ts || 0) > 5 * 60 * 1000) {
+      chrome.storage.local.remove("gkPendingAviz");
+      return;
+    }
+    chrome.storage.local.remove("gkPendingAviz", () => {
+      window.postMessage({ type: "FGO_AVIZ", payload: aviz }, window.location.origin);
+    });
+  });
+};
+
+// pagina poate sa nu fie gata in momentul livrarii — mai incercam de cateva ori
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg && msg.type === "GK_AVIZ_NOU") predaAvizul();
+});
+[0, 800, 2000, 4000].forEach((ms) => setTimeout(predaAvizul, ms));

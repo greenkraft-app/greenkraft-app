@@ -1,5 +1,13 @@
-GREENKRAFT -> WISEWEEE — Extensie Chrome
-==========================================
+GREENKRAFT — Extensie Chrome (WiseWeee + FGO)
+==============================================
+
+Extensia face doua lucruri, in doua sensuri:
+  A) Greenkraft -> WiseWeee : trimite o achizitie in formularul WiseWeee
+  B) FGO -> Greenkraft      : aduce un aviz emis in FGO si completeaza Anexa 3
+
+
+A) GREENKRAFT -> WISEWEEE
+=========================
 
 CE FACE
 -------
@@ -58,3 +66,54 @@ Structura paginii WiseWeee se poate schimba in timp (actualizari ale lor),
 caz in care extensia ar putea sa nu mai gaseasca un camp anume. Bannerul
 va arata clar campul respectiv ca "de completat manual" — nu se blocheaza
 si nu strica nimic, doar sare peste acel camp.
+
+
+B) FGO -> GREENKRAFT (aviz -> Anexa 3)
+======================================
+
+CE FACE
+-------
+In FGO, la Vanzari -> "Facturi, proforme, avize, bonuri", fiecare rand de aviz
+(coloana TIP = "A") are acum un buton verde mic "GK", langa serie+numar.
+Apasandu-l, extensia:
+  1. Cere documentul intreg de la FGO (serie, numar, data, client cu CUI,
+     delegat cu CI si nr. auto, produsele cu cantitatile)
+  2. Deschide (sau focalizeaza) tab-ul Greenkraft
+  3. Greenkraft completeaza singur formularul Anexa 3 Noua si arata un
+     rezumat cu ce a recunoscut si ce trebuie verificat
+
+Mai completezi doar Seria si Numarul de pe carnetul fizic, apoi Salveaza.
+
+Extensia doar CITESTE din FGO. Nu emite, nu modifica si nu sterge nimic acolo.
+
+
+CUM SE FOLOSESTE
+-----------------
+1. Emiti avizul in FGO, ca de obicei
+2. In lista de documente, apesi butonul verde "GK" de pe randul avizului
+3. Se deschide Greenkraft, cu Anexa 3 aproape gata
+4. Verifici rezumatul portocaliu de sus: ce are bifa e preluat sigur,
+   ce are ⚠️ trebuie ales de tine
+5. Completezi Seria si Numarul de pe carnet si apesi "Salveaza Anexa 3"
+
+
+CE VERIFICA SINGUR
+-------------------
+- Clientul din aviz e cautat in Parteneri intai dupa CUI, apoi dupa denumire
+  ("GREEN PACK S.R.L." gaseste "GREEN PACK SRL")
+- Transportatorul e dedus din numarul de inmatriculare, cautat in masinile
+  trecute pe fiecare partener (Variabile -> Parteneri -> Masini). Daca avizul
+  are doua numere (cap tractor + remorca), e de ajuns ca unul sa fie gasit.
+  Daca numarul nu e la niciun partener, campul ramane GOL si esti avertizat —
+  nu ghiceste.
+- Produsul e cautat in Variabile -> Produse dupa denumire sau dupa codul de deseu
+- Daca in aviz unitatea de masura nu e KG (in FGO unele articole sunt pe BUC),
+  cantitatea e preluata, dar esti avertizat sa o verifici
+
+
+DE RETINUT
+----------
+- Trebuie sa fii logat in FGO (extensia foloseste sesiunea ta, nu cere parola)
+- Daca nu vrei sa folosesti extensia, acelasi lucru se poate face si fara ea:
+  descarci PDF-ul avizului din FGO si il incarci cu butonul
+  "Preia din aviz FGO (PDF)" din Anexa 3 Noua
