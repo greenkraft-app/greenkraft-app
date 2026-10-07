@@ -209,21 +209,6 @@ const CAT_PAROLE = ["Email","Bancă","Card","Platformă","WiFi","Altele"];
 const PIN_CORRECT = "336699";
 const USER_PASSWORDS = { Catalin: "Kraft$888", Alexandru: "310890", Mihai: "336699" };
 
-// ── FGO (facturare) ───────────────────────────────────────────
-// Judetele exact cum le scrie nomenclatorul FGO (fara diacritice) — FGO respinge
-// documentul daca judetul nu e scris identic. Lista reala se incarca de la FGO la
-// deschiderea ferestrei; asta e doar pentru ghicirea judetului din adresa.
-const FGO_JUDETE = ["Alba","Arad","Arges","Bacau","Bihor","Bistrita-Nasaud","Botosani","Braila","Brasov","Bucuresti","Buzau","Calarasi","Caras-Severin","Cluj","Constanta","Covasna","Dambovita","Dolj","Galati","Giurgiu","Gorj","Harghita","Hunedoara","Ialomita","Iasi","Ilfov","Maramures","Mehedinti","Mures","Neamt","Olt","Prahova","Salaj","Satu Mare","Sibiu","Suceava","Teleorman","Timis","Tulcea","Valcea","Vaslui","Vrancea"];
-// "Ștefănești, Jud. Ilfov" → "Ilfov"; adresele cu Sector/București → "Bucuresti"
-const ghicesteJudet = (adresa, lista = FGO_JUDETE) => {
-  const a = String(adresa || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-  if (!a) return "";
-  if (/sector\s*\d|bucuresti/.test(a)) return lista.find((j) => j === "Bucuresti") || "";
-  const dupaJud = a.match(/jud(?:e[tț]u?l?)?\.?\s*([a-z -]+)/);
-  const cauta = (txt) => lista.find((j) => txt.includes(j.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()));
-  return (dupaJud && cauta(dupaJud[1])) || cauta(a) || "";
-};
-
 // ── PV constants ──────────────────────────────────────────────
 const PV_MATERIALE = [
   { den: "Deseuri de ambalaje din carton", cod: "15 01 01" },
@@ -2095,151 +2080,6 @@ export default function App() {
     await sb.from("anexa3").update(patch).in("id", ids);
     logAction("Editare", "Anexa 3", a3.serie + " " + a3.numar, rol + " → " + valoare);
   };
-  // ── FGO: emitere aviz pe baza unei Anexe 3 ───────────────────────────────
-  // API-ul FGO nu poate CITI avizele emise in FGO (nu exista listare de documente,
-  // iar getstatus da doar numar/serie/valoare). De asta avizul se emite din aplicatie,
-  // prin /factura/emitere cu TipFactura "Aviz" — ajunge in contul FGO ca oricare altul.
-  //
-  // Tabela anexa3 nu poate primi coloane noi, asa ca referinta avizului emis se
-  // pastreaza ca marcaj in `obs`. Campul Observatii din UI arata doar textul curat.
-  const FGO_TAG = /\s*\[FGO:([^|\]]*)\|([^|\]]*)\|([^\]]*)\]/;
-  const fgoDinObs = (obs) => {
-    const m = String(obs || "").match(FGO_TAG);
-    return m ? { serie: m[1], numar: m[2], link: m[3] } : null;
-  };
-  const obsFaraFgo = (obs) => String(obs || "").replace(FGO_TAG, "").trim();
-  const obsCuFgo = (obs, f) => (f ? `${obsFaraFgo(obs)} [FGO:${f.serie}|${f.numar}|${f.link}]`.trim() : obsFaraFgo(obs));
-
-  const [fgoModal, setFgoModal] = useState(null); // formularul de emitere aviz
-  const [fgoBusy, setFgoBusy] = useState(false);
-  const [fgoJudete, setFgoJudete] = useState(FGO_JUDETE);
-
-  const deschideFgoAviz = (a3) => {
-    const linii = liniiA3(a3);
-    // Avizul il emite cel care expediaza marfa. Clientul e cealalta parte din Anexa 3.
-    const gkExpeditor = (a3.expeditor || "").toUpperCase().includes("GREEN KRAFT");
-    const client = gkExpeditor ? a3.destinatar : a3.expeditor;
-    const rol = gkExpeditor ? "destinatar" : "expeditor";
-    const info = a3FirmaInfo(client) || {};
-    const adresa = a3[rol + "_adresa"] || info.adresa || "";
-    const estePF = !!pfList.find((x) => x.denumire === client);
-    const delegat = [a3.delegat_nume && "Delegat " + a3.delegat_nume, a3.delegat_ci && "CI " + a3.delegat_ci, a3.delegat_auto && "Auto " + a3.delegat_auto].filter(Boolean).join(", ");
-    setFgoModal({
-      a3,
-      serie: localStorage.getItem("fgo_serie_aviz") || "",
-      client: client || "",
-      clientCui: a3[rol + "_cui"] || info.cui || "",
-      clientTip: estePF ? "PF" : "PJ",
-      clientJudet: ghicesteJudet(adresa),
-      clientAdresa: adresa,
-      // GREEN KRAFT ca destinatar = marfa intra la noi, avizul ar trebui sa vina de la expeditor
-      avertisment: gkExpeditor ? "" : "GREEN KRAFT este destinatarul acestei Anexe 3 — de regulă avizul îl emite expeditorul. Verifică înainte de a emite.",
-      linii: linii.map((l) => ({ id: l.id, denumire: l.categorie || "", kg: l.kilograme ?? "", pret: "", tva: "21" })),
-      text: delegat,
-      explicatii: `Anexa 3 seria ${a3.serie} nr. ${a3.numar}`,
-      genTichet: false,
-      rezultat: null,
-    });
-    // lista oficiala de judete, ca sa nu fie respins documentul
-    fetch("/api/fgo?nomenclator=judet")
-      .then((r) => r.json())
-      .then((d) => { if (d?.Success && Array.isArray(d.List) && d.List.length) setFgoJudete(d.List.map((x) => x.Nume)); })
-      .catch(() => {});
-  };
-
-  // Tichet de cantar pornit din Anexa 3. Din anexa cunoastem doar cantitatea neta,
-  // nu si cele doua cantariri, deci tichetul se creeaza REZERVAT (gol), cu datele
-  // completate — operatorul nu mai trece decat BRUT si TARA.
-  const creeazaTichetDinA3 = async (a3, avizTxt) => {
-    const gkExpeditor = (a3.expeditor || "").toUpperCase().includes("GREEN KRAFT");
-    const partener = gkExpeditor ? a3.destinatar : a3.expeditor;
-    const ts = timestampAcum();
-    const row = {
-      serie: "TC", nr_tichet: getNextTichetNr(), data: a3.data_incarcare || today(),
-      ora_intrare: oraAcum(), ora_iesire: "",
-      tip: gkExpeditor ? "Iesire" : "Intrare",
-      partener: partener || "", partener_cui: (gkExpeditor ? a3.destinatar_cui : a3.expeditor_cui) || "",
-      client: "GREEN KRAFT SRL",
-      transportator: a3.transportator || "", transportator_cui: a3.transportator_cui || "",
-      nr_masina: a3.delegat_auto || "", sofer: a3.delegat_nume || "",
-      material: a3.categorie || "", brut: null, tara: null, net: null, brut_la: ts, tara_la: ts,
-      status: "gol", operator: currentUser || "", factura: "", aviz: avizTxt || "",
-      obs: `din Anexa 3 ${a3.serie} ${a3.numar}`,
-    };
-    const { data, error } = await sb.from("tichete_cantar").insert(row).select();
-    if (error) return { error: error.message };
-    if (data) setTicheteList((p) => [...p, data[0]]);
-    logAction("Rezervare", "Tichet cântar", row.serie + " " + row.nr_tichet, `din Anexa 3 ${a3.serie} ${a3.numar} • aviz FGO ${avizTxt || "—"}`);
-    return { nr: row.nr_tichet };
-  };
-
-  const emiteAvizFgo = async () => {
-    const m = fgoModal;
-    if (!m || fgoBusy) return;
-    if (!m.serie.trim()) { alert("Completați seria avizului (exact cum e definită în FGO → Setări → Serii)!"); return; }
-    if (!m.client.trim()) { alert("Completați clientul!"); return; }
-    if (!m.clientJudet.trim()) { alert("Județul clientului este obligatoriu pentru FGO!"); return; }
-    const linii = m.linii.filter((l) => l.denumire && parseSuma(l.kg) > 0);
-    if (!linii.length) { alert("Avizul nu are nicio linie cu cantitate!"); return; }
-
-    setFgoBusy(true);
-    try {
-      const d = parseDateRO(m.a3.data_incarcare);
-      const payload = {
-        action: "emitere",
-        serie: m.serie.trim(),
-        valuta: "RON",
-        tipFactura: "Aviz",
-        dataEmitere: d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` : undefined,
-        // acelasi IdExtern => daca se apasa de doua ori, FGO intoarce avizul deja emis
-        idExtern: `A3-${m.a3.serie}-${m.a3.numar}`.slice(0, 36),
-        text: m.text || "",
-        explicatii: m.explicatii || "",
-        client: {
-          Denumire: m.client.trim(),
-          CodUnic: m.clientCui || "",
-          Tara: "RO",
-          Judet: m.clientJudet.trim(),
-          Adresa: m.clientAdresa || "",
-          Tip: m.clientTip,
-        },
-        continut: linii.map((l) => {
-          const linie = { Denumire: l.denumire, NrProduse: parseSuma(l.kg), UM: "KG", CotaTVA: parseSuma(l.tva) || 0 };
-          const pret = parseSuma(l.pret);
-          if (pret > 0) linie.PretUnitar = pret;
-          return linie;
-        }),
-      };
-      const r = await fetch("/api/fgo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      const data = await r.json().catch(() => null);
-      if (!data || !data.Success) {
-        setFgoModal((p) => (p ? { ...p, rezultat: { ok: false, mesaj: data?.Message || `Eroare HTTP ${r.status}` } } : p));
-        return;
-      }
-      const f = data.Factura || {};
-      const ref = { serie: f.Serie || m.serie.trim(), numar: String(f.Numar || ""), link: f.Link || "" };
-      const avizTxt = `${ref.serie} ${ref.numar}`.trim();
-
-      // leg avizul de toate liniile Anexei 3, ca sa nu fie emis a doua oara
-      const ids = liniiA3(m.a3).map((x) => x.id);
-      const obsNou = obsCuFgo(m.a3.obs, ref);
-      setAnexa3List((p) => p.map((x) => (ids.includes(x.id) ? { ...x, obs: obsNou } : x)));
-      await sb.from("anexa3").update({ obs: obsNou }).in("id", ids);
-      logAction("Emitere aviz FGO", "Anexa 3", m.a3.serie + " " + m.a3.numar, `aviz ${avizTxt} • ${m.client}`);
-
-      let tichetNr = null, tichetErr = null;
-      if (m.genTichet) {
-        const t = await creeazaTichetDinA3(m.a3, avizTxt);
-        if (t.error) tichetErr = t.error; else tichetNr = t.nr;
-      }
-      setFgoModal((p) => (p ? { ...p, rezultat: { ok: true, aviz: avizTxt, link: ref.link, tichetNr, tichetErr } } : p));
-    } catch (e) {
-      setFgoModal((p) => (p ? { ...p, rezultat: { ok: false, mesaj: e.message } } : p));
-    } finally {
-      setFgoBusy(false);
-    }
-  };
-
   // Construieste continutul HTML al formularului Anexa 3 (fara <html>/<body> in jur) —
   // folosit atat la print (fereastra noua + window.print) cat si la exportul PDF de o pagina.
   const buildA3Html = (a3) => {
@@ -3852,108 +3692,6 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
       )}
 
       {/* Modal Editare Tichet (factura/aviz/ore) */}
-      {fgoModal && (() => {
-        const FL = { fontSize: 11, fontWeight: 600, color: "#555", display: "block", marginBottom: 2 };
-        const FI = { width: "100%", padding: "7px 9px", border: "1px solid #d5d5d5", borderRadius: 6, fontSize: 13, boxSizing: "border-box" };
-        return (
-        <div onClick={() => !fgoBusy && setFgoModal(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 10, width: "min(96vw,520px)", display: "flex", flexDirection: "column", boxShadow: "0 8px 40px rgba(0,0,0,0.35)", overflow: "hidden" }}>
-            <div style={{ background: "linear-gradient(135deg,#e65100,#ff9800)", color: "#fff", padding: "12px 18px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <div style={{ fontWeight: 700, fontSize: 14 }}>🧾 Emite Aviz în FGO — Anexa 3 {fgoModal.a3.serie} {fgoModal.a3.numar}</div>
-              <button onClick={() => setFgoModal(null)} disabled={fgoBusy} style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.4)", color: "#fff", borderRadius: 6, padding: "3px 10px", cursor: fgoBusy ? "wait" : "pointer", fontSize: 16 }}>✕</button>
-            </div>
-
-            {fgoModal.rezultat ? (
-              <div style={{ padding: "18px", display: "flex", flexDirection: "column", gap: 12 }}>
-                {fgoModal.rezultat.ok ? (<>
-                  <div style={{ background: "#e8f5e9", border: "1px solid #a5d6a7", borderRadius: 8, padding: 14, color: "#1b5e20" }}>
-                    <div style={{ fontWeight: 700, fontSize: 15 }}>✔ Aviz emis în FGO: {fgoModal.rezultat.aviz}</div>
-                    <div style={{ fontSize: 12, marginTop: 4 }}>Apare în contul tău FGO ca orice alt aviz.</div>
-                    {fgoModal.rezultat.tichetNr && <div style={{ fontSize: 12, marginTop: 6 }}>⚖️ Tichet de cântar <strong>TC #{fgoModal.rezultat.tichetNr}</strong> creat ca <strong>Rezervat</strong> — mai trebuie doar cele două cântăriri.</div>}
-                    {fgoModal.rezultat.tichetErr && <div style={{ fontSize: 12, marginTop: 6, color: "#c62828" }}>Tichetul NU a fost creat: {fgoModal.rezultat.tichetErr}</div>}
-                  </div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    {fgoModal.rezultat.link && <button onClick={() => window.open(fgoModal.rezultat.link, "_blank")} style={{ flex: 1, padding: "10px", background: "#1565c0", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>📄 Deschide PDF-ul avizului</button>}
-                    <button onClick={() => setFgoModal(null)} style={{ padding: "10px 16px", background: "#fff", border: "1px solid #bbb", borderRadius: 6, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>Închide</button>
-                  </div>
-                </>) : (<>
-                  <div style={{ background: "#ffebee", border: "1px solid #ef9a9a", borderRadius: 8, padding: 14, color: "#b71c1c" }}>
-                    <div style={{ fontWeight: 700, fontSize: 14 }}>✕ Avizul NU a fost emis</div>
-                    <div style={{ fontSize: 12, marginTop: 6, wordBreak: "break-word" }}>{fgoModal.rezultat.mesaj}</div>
-                  </div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button onClick={() => setFgoModal((p) => ({ ...p, rezultat: null }))} style={{ flex: 1, padding: "10px", background: "#e65100", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>← Corectează și reîncearcă</button>
-                    <button onClick={() => setFgoModal(null)} style={{ padding: "10px 16px", background: "#fff", border: "1px solid #bbb", borderRadius: 6, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>Închide</button>
-                  </div>
-                </>)}
-              </div>
-            ) : (
-              <>
-                <div style={{ padding: "14px 18px", display: "flex", flexDirection: "column", gap: 10, maxHeight: "68vh", overflowY: "auto" }}>
-                  {fgoModal.avertisment && <div style={{ background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 6, padding: "8px 10px", fontSize: 11, color: "#e65100" }}>⚠️ {fgoModal.avertisment}</div>}
-
-                  <div>
-                    <label style={FL}>Seria avizului din FGO *</label>
-                    <input style={FI} value={fgoModal.serie} onChange={(e) => setFgoModal((p) => ({ ...p, serie: e.target.value }))} placeholder="ex: AV — exact cum e în FGO → Setări → Serii" />
-                    <div style={{ fontSize: 10, color: "#888", marginTop: 2 }}>Numărul îl alocă FGO automat, în continuarea seriei.</div>
-                  </div>
-
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <div style={{ flex: 2 }}><label style={FL}>Client (cine primește marfa) *</label><input style={FI} value={fgoModal.client} onChange={(e) => setFgoModal((p) => ({ ...p, client: e.target.value }))} /></div>
-                    <div style={{ flex: 1 }}><label style={FL}>CUI / CNP</label><input style={FI} value={fgoModal.clientCui} onChange={(e) => setFgoModal((p) => ({ ...p, clientCui: e.target.value }))} /></div>
-                  </div>
-
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <div style={{ flex: 1 }}>
-                      <label style={FL}>Județ * <span style={{ color: "#888", fontWeight: 400 }}>(obligatoriu la FGO)</span></label>
-                      <select style={FI} value={fgoModal.clientJudet} onChange={(e) => setFgoModal((p) => ({ ...p, clientJudet: e.target.value }))}>
-                        <option value="">— alege —</option>
-                        {fgoJudete.map((j) => <option key={j} value={j}>{j}</option>)}
-                      </select>
-                    </div>
-                    <div style={{ width: 110 }}>
-                      <label style={FL}>Tip client</label>
-                      <select style={FI} value={fgoModal.clientTip} onChange={(e) => setFgoModal((p) => ({ ...p, clientTip: e.target.value }))}>
-                        <option value="PJ">PJ (firmă)</option>
-                        <option value="PF">PF (persoană)</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div><label style={FL}>Adresă</label><input style={FI} value={fgoModal.clientAdresa} onChange={(e) => setFgoModal((p) => ({ ...p, clientAdresa: e.target.value }))} /></div>
-
-                  <div style={{ borderTop: "1px solid #eee", paddingTop: 8 }}>
-                    <label style={{ ...FL, fontSize: 12 }}>Linii aviz (din Anexa 3)</label>
-                    {fgoModal.linii.map((l, i) => (
-                      <div key={l.id ?? i} style={{ display: "flex", gap: 6, alignItems: "flex-end", marginBottom: 6 }}>
-                        <div style={{ flex: 3 }}><input style={{ ...FI, fontSize: 11 }} value={l.denumire} onChange={(e) => setFgoModal((p) => ({ ...p, linii: p.linii.map((x, j) => (j === i ? { ...x, denumire: e.target.value } : x)) }))} /></div>
-                        <div style={{ width: 72 }}><input style={{ ...FI, textAlign: "right" }} value={l.kg} onChange={(e) => setFgoModal((p) => ({ ...p, linii: p.linii.map((x, j) => (j === i ? { ...x, kg: e.target.value } : x)) }))} placeholder="kg" /></div>
-                        <div style={{ width: 72 }}><input style={{ ...FI, textAlign: "right" }} value={l.pret} onChange={(e) => setFgoModal((p) => ({ ...p, linii: p.linii.map((x, j) => (j === i ? { ...x, pret: e.target.value } : x)) }))} placeholder="lei/kg" /></div>
-                        <div style={{ width: 58 }}><input style={{ ...FI, textAlign: "right" }} value={l.tva} onChange={(e) => setFgoModal((p) => ({ ...p, linii: p.linii.map((x, j) => (j === i ? { ...x, tva: e.target.value } : x)) }))} placeholder="TVA" /></div>
-                      </div>
-                    ))}
-                    <div style={{ fontSize: 10, color: "#888" }}>Cantitatea e în KG. Prețul e opțional — lasă gol dacă avizul merge fără valori. TVA 0 pentru taxare inversă.</div>
-                  </div>
-
-                  <div><label style={FL}>Text pe aviz (delegat, mașină)</label><input style={FI} value={fgoModal.text} onChange={(e) => setFgoModal((p) => ({ ...p, text: e.target.value }))} /></div>
-                  <div><label style={FL}>Explicații</label><input style={FI} value={fgoModal.explicatii} onChange={(e) => setFgoModal((p) => ({ ...p, explicatii: e.target.value }))} /></div>
-
-                  <label style={{ display: "flex", alignItems: "center", gap: 8, background: "#f1f8e9", border: "1px solid #c5e1a5", borderRadius: 6, padding: "9px 10px", cursor: "pointer" }}>
-                    <input type="checkbox" checked={fgoModal.genTichet} onChange={(e) => setFgoModal((p) => ({ ...p, genTichet: e.target.checked }))} />
-                    <span style={{ fontSize: 12, fontWeight: 600, color: "#33691e" }}>Creează și tichetul de cântar <span style={{ fontWeight: 400, color: "#666" }}>(rezervat, cu datele completate)</span></span>
-                  </label>
-                </div>
-                <div style={{ display: "flex", gap: 8, padding: "12px 18px", borderTop: "1px solid #eee", background: "#fafafa" }}>
-                  <button onClick={() => setFgoModal(null)} disabled={fgoBusy} style={{ padding: "10px 16px", background: "#fff", border: "1px solid #bbb", borderRadius: 6, cursor: fgoBusy ? "wait" : "pointer", fontSize: 13, fontWeight: 700 }}>Anulează</button>
-                  <button onClick={() => { localStorage.setItem("fgo_serie_aviz", fgoModal.serie.trim()); emiteAvizFgo(); }} disabled={fgoBusy} style={{ flex: 1, padding: "10px", background: fgoBusy ? "#bbb" : "#e65100", color: "#fff", border: "none", borderRadius: 6, cursor: fgoBusy ? "wait" : "pointer", fontSize: 13, fontWeight: 700 }}>{fgoBusy ? "⏳ Se emite în FGO..." : "🧾 Emite avizul în FGO"}</button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-        );
-      })()}
-
       {ticEdit && (
         <div onClick={() => setTicEdit(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 10, width: "min(96vw,440px)", display: "flex", flexDirection: "column", boxShadow: "0 8px 40px rgba(0,0,0,0.35)", overflow: "hidden" }}>
@@ -5077,13 +4815,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                                     <td style={td({ textAlign: "center", padding: 2, whiteSpace: "nowrap" })}>
                                       {primaDinGrup && (<>
                                         <button onClick={() => printA3(a3)} title={`Printează formularul${nrLiniiGrup > 1 ? ` (${nrLiniiGrup} categorii)` : ""}`} style={{ background: "#f3e5f5", border: "1px solid #ce93d8", borderRadius: 4, cursor: "pointer", color: "#6a1b9a", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>🖨️ {nrLiniiGrup > 1 ? `(${nrLiniiGrup})` : ""}</button>{" "}
-                                        <button onClick={() => downloadA3Pdf(a3)} disabled={a3PdfLoading === a3.id} title="Descarcă PDF (1 pagină)" style={{ background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 4, cursor: a3PdfLoading === a3.id ? "wait" : "pointer", color: "#1565c0", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>{a3PdfLoading === a3.id ? "⏳" : "📄"}</button>{" "}
-                                        {(() => {
-                                          const f = fgoDinObs(a3.obs);
-                                          return f
-                                            ? <button onClick={() => (f.link ? window.open(f.link, "_blank") : alert(`Aviz FGO ${f.serie} ${f.numar} (fără link de PDF salvat)`))} title={`Aviz emis în FGO: ${f.serie} ${f.numar}`} style={{ background: "#e8f5e9", border: "1px solid #a5d6a7", borderRadius: 4, cursor: "pointer", color: "#2e7d32", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>🧾 {f.numar}</button>
-                                            : <button onClick={() => deschideFgoAviz(a3)} title="Emite aviz în FGO pe baza acestei Anexe 3" style={{ background: "#fff3e0", border: "1px solid #ffb74d", borderRadius: 4, cursor: "pointer", color: "#e65100", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>🧾 FGO</button>;
-                                        })()}
+                                        <button onClick={() => downloadA3Pdf(a3)} disabled={a3PdfLoading === a3.id} title="Descarcă PDF (1 pagină)" style={{ background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 4, cursor: a3PdfLoading === a3.id ? "wait" : "pointer", color: "#1565c0", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>{a3PdfLoading === a3.id ? "⏳" : "📄"}</button>
                                       </>)}
                                     </td>
                                     <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => delA3(a3)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
@@ -5124,7 +4856,7 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                                           </div>
                                           <div style={{ flex: "1 1 200px", minWidth: 200 }}>
                                             <label style={FL}>Observații</label>
-                                            <input style={FI} value={obsFaraFgo(a3.obs)} onChange={(e) => updA3Doc(a3, "obs", obsCuFgo(e.target.value, fgoDinObs(a3.obs)))} placeholder="opțional" />
+                                            <input style={FI} value={a3.obs || ""} onChange={(e) => updA3Doc(a3, "obs", e.target.value)} placeholder="opțional" />
                                           </div>
                                         </div>
                                       </td>
