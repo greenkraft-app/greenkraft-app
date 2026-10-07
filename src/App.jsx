@@ -703,6 +703,7 @@ export default function App() {
   const printRef = useRef();
   const regPrintRef = useRef();
   const scanInputRef = useRef();
+  const avizInputRef = useRef();
   const pvPrintRef = useRef();
   const debounce = useRef({});
 
@@ -3079,6 +3080,183 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
     }, 150);
   };
 
+  // ── Preluare aviz FGO → Anexa 3 ───────────────────────────
+  // Avizul se emite manual in FGO; de acolo ii descarcam PDF-ul si il citim aici,
+  // ca sa nu mai rescriem datele in formularul Anexa 3.
+  const incarcaPdfJs = async () => {
+    if (window.pdfjsLib) return;
+    await new Promise((res, rej) => {
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+      s.onload = res;
+      s.onerror = () => rej(new Error("Nu s-a putut încărca cititorul de PDF"));
+      document.head.appendChild(s);
+    });
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  };
+
+  // Textul paginii, pe randuri (pdf.js da fragmente razlete; le grupam dupa pozitia pe verticala,
+  // altfel se amesteca denumirea produsului cu cantitatea de pe alta coloana).
+  const textPdfPeRanduri = async (pdf) => {
+    const page = await pdf.getPage(1);
+    const tc = await page.getTextContent();
+    const randuri = new Map();
+    tc.items.forEach((it) => {
+      const y = Math.round(it.transform[5]);
+      const cheie = [...randuri.keys()].find((k) => Math.abs(k - y) <= 3);
+      const k = cheie !== undefined ? cheie : y;
+      if (!randuri.has(k)) randuri.set(k, []);
+      randuri.get(k).push({ x: it.transform[4], s: it.str });
+    });
+    return [...randuri.entries()]
+      .sort((a, b) => b[0] - a[0])
+      .map(([, buc]) => buc.sort((a, b) => a.x - b.x).map((b) => b.s).join(" ").replace(/\s+/g, " ").trim())
+      .filter(Boolean)
+      .join("\n");
+  };
+
+  // "GREEN PACK S.R.L." si "GREEN PACK SRL" sunt aceeasi firma
+  const normFirma = (s) => String(s || "").toUpperCase().replace(/\./g, "").replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+  const doarCifre = (s) => String(s || "").replace(/\D/g, "");
+  const gasesteFirma = (nume, cui, optiuni) => {
+    const c = doarCifre(cui);
+    if (c) {
+      if (c === doarCifre(GREEN_KRAFT_IDENTITATE.cui)) return "GREEN KRAFT SRL";
+      const dupaCui = [...pjList, ...pfList].find((f) => doarCifre(f.cod_fiscal) === c);
+      if (dupaCui) return dupaCui.denumire;
+    }
+    const n = normFirma(nume);
+    if (!n) return "";
+    return optiuni.find((o) => normFirma(o) === n) || optiuni.find((o) => normFirma(o).startsWith(n) || n.startsWith(normFirma(o))) || "";
+  };
+  // "DESEURI MATERIALE PLASTICE - COD: 20 01 39" → produsul din Variabile → Produse.
+  // In PDF denumirea se poate rupe pe doua randuri, asa ca ultima cifra a codului poate
+  // lipsi ("...COD: 20 01"); de aceea incercam si potrivirea pe inceputul denumirii.
+  const gasesteProdus = (denumire) => {
+    const lista = PRODUSE_DYN;
+    const n = normFirma(denumire);
+    if (!n) return "";
+    const exact = lista.find((p) => normFirma(p) === n);
+    if (exact) return exact;
+    const cod = String(denumire || "").match(/(\d{2})\s*(\d{2})\s*(\d{2})/);
+    if (cod) {
+      const codTxt = `${cod[1]} ${cod[2]} ${cod[3]}`;
+      const dupaCod = lista.filter((p) => p.includes(codTxt));
+      if (dupaCod.length === 1) return dupaCod[0];
+      if (dupaCod.length > 1) {
+        const cuvinte = n.split(" ").filter((w) => w.length > 3);
+        return dupaCod.find((p) => cuvinte.every((w) => normFirma(p).includes(w))) || dupaCod[0];
+      }
+    }
+    const prefix = lista.filter((p) => normFirma(p).startsWith(n));
+    if (prefix.length === 1) return prefix[0];
+    if (prefix.length > 1) return prefix.sort((a, b) => a.length - b.length)[0];
+    return "";
+  };
+  // cantitatile din aviz vin ca "1 400" sau "1.400,5"
+  const parseCant = (v) => {
+    if (typeof v === "number") return v;
+    const s = String(v || "").replace(/\s/g, "");
+    return parseSuma(s);
+  };
+
+  const [avizLoading, setAvizLoading] = useState(false);
+  const [avizRaport, setAvizRaport] = useState(null); // ce a reusit sa potriveasca si ce nu
+
+  const preiaAvizFgo = async (file) => {
+    if (!file) return;
+    setAvizLoading(true);
+    setAvizRaport(null);
+    try {
+      await incarcaPdfJs();
+      const pdf = await window.pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+      let text = await textPdfPeRanduri(pdf);
+      let continut;
+      if (text.replace(/\s/g, "").length > 120) {
+        continut = [{ type: "text", text: `Acesta este textul unui aviz de însoțire a mărfii emis în FGO:\n\n${text}` }];
+      } else {
+        // aviz scanat, fara strat de text — il trimitem ca imagine
+        const page = await pdf.getPage(1);
+        const viewport = page.getViewport({ scale: 2 });
+        const canvas = document.createElement("canvas");
+        canvas.width = viewport.width; canvas.height = viewport.height;
+        await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+        continut = [{ type: "image", source: { type: "base64", media_type: "image/jpeg", data: canvas.toDataURL("image/jpeg", 0.85).split(",")[1] } }];
+      }
+      const intrebare = `Extrage datele avizului și returnează DOAR JSON valid, fără alt text:
+{"aviz_serie":"ex GKF","aviz_numar":"ex 9004","data":"DD.MM.YYYY (data emiterii)",
+"furnizor":{"denumire":"","cui":""},
+"client":{"denumire":"","cui":""},
+"delegat":{"nume":"","ci":"seria+nr CI","auto":"nr inmatriculare"},
+"linii":[{"denumire":"denumirea exacta a produsului","um":"","cantitate":0}]}
+Reguli:
+- cantitățile pot fi scrise cu spațiu ca separator de mii (1 400 = 1400); ia valoarea de pe coloana Cant., nu preț/valoare/TVA
+- denumirea produsului se poate rupe pe două rânduri (ex. "...COD: 20 01" pe un rând și "39" pe următorul) — reconstituie-o întreagă
+- delegatul, seria+nr CI și numărul de înmatriculare apar de obicei unul sub altul, spre finalul avizului
+- dacă un câmp lipsește, pune ""`;
+
+      const resp = await fetch("/api/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 1500, messages: [{ role: "user", content: [...continut, { type: "text", text: intrebare }] }] }),
+      });
+      const respText = await resp.text();
+      if (!respText.trim()) throw new Error("Răspuns gol — verifică ANTHROPIC_API_KEY în Vercel");
+      let data;
+      try { data = JSON.parse(respText); } catch { throw new Error("Răspuns invalid: " + respText.slice(0, 150)); }
+      if (data.error) throw new Error(JSON.stringify(data.error));
+      const raw = data.content?.filter((c) => c.type === "text").map((c) => c.text).join("") || "";
+      const curat = raw.replace(/```json|```/g, "").trim();
+      const av = JSON.parse(curat.slice(curat.indexOf("{")));
+
+      // ── potrivirea cu datele din aplicatie ──
+      const optiuni = [...new Set([...ANEXA3_FIRME, ...pjList.map((f) => f.denumire), ...pfList.map((f) => f.denumire)].filter(Boolean))];
+      const expeditor = gasesteFirma(av.furnizor?.denumire, av.furnizor?.cui, optiuni);
+      const destinatar = gasesteFirma(av.client?.denumire, av.client?.cui, optiuni);
+      const auto = String(av.delegat?.auto || "").toUpperCase().replace(/\s/g, "");
+      const masinaGK = masiniList.find((m) => String(m.nr_auto || "").toUpperCase().replace(/\s/g, "") === auto);
+      // masina din aviz e a noastra ⇒ noi transportam; altfel transporta expeditorul
+      const transportator = masinaGK ? "GREEN KRAFT SRL" : expeditor;
+      const delegatGK = delegatiList.find((d) => normFirma(d.nume) === normFirma(av.delegat?.nume));
+
+      const linii = (av.linii || []).map((l) => ({
+        categorie: gasesteProdus(l.denumire),
+        kilograme: parseCant(l.cantitate) || "",
+        original: l.denumire || "",
+      }));
+
+      const dataAviz = av.data || today();
+      setA3Nou((p) => ({
+        ...p,
+        // daca avizul numeste o firma pe care nu o gasim in Parteneri, golim campul:
+        // o valoare ramasa de la formularul anterior ar parea corecta, desi nu e din aviz
+        transportator: transportator || (av.furnizor?.denumire ? "" : p.transportator),
+        expeditor: av.furnizor?.denumire ? expeditor : p.expeditor,
+        destinatar: av.client?.denumire ? destinatar : p.destinatar,
+        data_incarcare: dataAviz, data_descarcare: dataAviz,
+        delegat: av.delegat?.nume ? { nume: av.delegat.nume, ci: delegatGK ? [delegatGK.ci_serie, delegatGK.ci_numar].filter(Boolean).join(" ") : (av.delegat.ci || "") } : p.delegat,
+        masina: auto ? { auto, licenta: masinaGK?.licenta || "", licenta_expira: masinaGK?.licenta_expira || "" } : p.masina,
+        linii: linii.length ? linii.map(({ categorie, kilograme }) => ({ categorie, kilograme: String(kilograme) })) : p.linii,
+        kg_cunoscut: true,
+        obs: [p.obs, `Aviz FGO ${[av.aviz_serie, av.aviz_numar].filter(Boolean).join(" ")}`].filter(Boolean).join(" • "),
+      }));
+
+      setAvizRaport({
+        aviz: [av.aviz_serie, av.aviz_numar].filter(Boolean).join(" "),
+        data: dataAviz,
+        expeditor: { din: av.furnizor?.denumire || "", gasit: expeditor },
+        destinatar: { din: av.client?.denumire || "", gasit: destinatar },
+        transportator,
+        delegat: av.delegat?.nume || "", auto,
+        linii,
+      });
+      setA3SubTab("nou");
+    } catch (e) {
+      alert("Nu am putut citi avizul: " + e.message);
+    }
+    setAvizLoading(false);
+  };
+
   // ── Scanare Buletin ───────────────────────────────────────
   const scanBuletin = async (file) => {
     if (!file) return;
@@ -4627,6 +4805,32 @@ th { border: 1px solid #000; padding: 4px 5px; background: #f0f0f0; font-weight:
                           </Fragment>
                         ))}
                       </div>
+
+                      <div style={{ background: "#fff8e1", border: "1px dashed #ffb74d", borderRadius: 10, padding: 12, marginBottom: 14 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                          <button onClick={() => avizInputRef.current.click()} disabled={avizLoading} style={{ padding: "9px 16px", background: avizLoading ? "#ccc" : "#e65100", color: "#fff", border: "none", borderRadius: 7, cursor: avizLoading ? "wait" : "pointer", fontSize: 13, fontWeight: 700 }}>{avizLoading ? "⏳ Citesc avizul..." : "📄 Preia din aviz FGO (PDF)"}</button>
+                          <input ref={avizInputRef} type="file" accept=".pdf,application/pdf" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) preiaAvizFgo(e.target.files[0]); e.target.value = ""; }} />
+                          <span style={{ fontSize: 11, color: "#8d6e63" }}>Emiți avizul în FGO, îi descarci PDF-ul și îl încarci aici — formularul se completează singur.</span>
+                        </div>
+                        {avizRaport && (
+                          <div style={{ marginTop: 10, background: "#fff", border: "1px solid #ffe0b2", borderRadius: 8, padding: 10, fontSize: 12 }}>
+                            <div style={{ fontWeight: 700, color: "#e65100", marginBottom: 6 }}>✔ Preluat din avizul {avizRaport.aviz || "(fără număr)"} • {avizRaport.data}</div>
+                            {[["Expeditor", avizRaport.expeditor], ["Destinatar", avizRaport.destinatar]].map(([et, v]) => (
+                              <div key={et} style={{ marginBottom: 2 }}>
+                                {v.gasit ? "✔" : "⚠️"} <strong>{et}:</strong> {v.gasit || <span style={{ color: "#c62828" }}>„{v.din}" nu e în Parteneri — alege manual</span>}
+                              </div>
+                            ))}
+                            <div style={{ marginBottom: 2 }}>🚛 <strong>Transportator:</strong> {avizRaport.transportator || "—"} {avizRaport.auto && `• ${avizRaport.auto}`} {avizRaport.delegat && `• ${avizRaport.delegat}`}</div>
+                            {avizRaport.linii.map((l, i) => (
+                              <div key={i}>
+                                {l.categorie ? "✔" : "⚠️"} <strong>{fmt(l.kilograme, 0)} kg</strong> — {l.categorie || <span style={{ color: "#c62828" }}>„{l.original}" nu e în Variabile → Produse, alege manual</span>}
+                              </div>
+                            ))}
+                            <div style={{ marginTop: 6, color: "#777" }}>Mai completează doar <strong>Seria și Numărul</strong> de pe carnetul fizic, apoi Salvează.</div>
+                          </div>
+                        )}
+                      </div>
+
                       <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
                         <div style={{ flex: "1 1 420px", background: "#fff", border: "1px solid #e0e0e0", borderRadius: 10, padding: 16 }}>
                           <div style={{ fontWeight: 700, color: "#444", fontSize: 12, marginBottom: 12, textTransform: "uppercase", letterSpacing: 0.5 }}>Document</div>
