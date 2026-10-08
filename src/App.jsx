@@ -1778,16 +1778,57 @@ export default function App() {
   };
   // Copiaza datele unui tichet vechi intr-un tichet nou (partener, transport, material) — fara greutati,
   // factura/aviz sau numar, care sunt specifice cantaririi curente.
-  const copiazaTichet = (t) => {
-    setTicNou({
-      tip: t.tip || "Intrare", prima: "plin",
-      partener: t.partener || "", partener_cui: t.partener_cui || "",
-      client: t.client || "GREEN KRAFT SRL",
-      transportator: t.transportator || "", transportator_cui: t.transportator_cui || "",
-      nr_masina: t.nr_masina || "", sofer: t.sofer || "", material: t.material || "",
-      greutate: "", factura: "", aviz: "", obs: "",
-    });
-    setTicSubTab("nou");
+  // Copiaza integral un tichet intr-unul nou: aceleasi date, aceleasi cantariri,
+  // aceeasi factura/aviz/observatii. Noi sunt doar numarul tichetului, data si orele.
+  // Daca tichetul copiat e inchis, se creeaza si achizitia/vanzarea, exact ca la
+  // inchiderea unui tichet — altfel marfa ar aparea in registru, dar nu si in stoc.
+  const copiazaTichet = async (t) => {
+    if (ticSavingRef.current) return; // dublu-clic ar face doua tichete
+    ticSavingRef.current = true;
+    setTicSaving(true);
+    try {
+      const ts = timestampAcum();
+      const row = {
+        serie: t.serie || "TC",
+        nr_tichet: getNextTichetNr(),
+        data: today(),
+        ora_intrare: oraAcum(),
+        // ora de iesire se pune doar daca tichetul copiat o avea (adica era inchis)
+        ora_iesire: t.ora_iesire ? oraAcum() : "",
+        tip: t.tip || "Intrare",
+        partener: t.partener || "", partener_cui: t.partener_cui || "",
+        client: t.client || "GREEN KRAFT SRL",
+        transportator: t.transportator || "", transportator_cui: t.transportator_cui || "",
+        nr_masina: t.nr_masina || "", sofer: t.sofer || "", material: t.material || "",
+        brut: t.brut ?? null, tara: t.tara ?? null, net: t.net ?? null,
+        // "cantarit la" sunt data+ora, deci si ele sunt de acum
+        brut_la: t.brut_la ? ts : "", tara_la: t.tara_la ? ts : "",
+        status: t.status || "deschis",
+        operator: currentUser || "",
+        factura: t.factura || "", aviz: t.aviz || "", obs: t.obs || "",
+      };
+      const { data, error } = await sb.from("tichete_cantar").insert(row).select();
+      if (error) { alert("Eroare la copiere: " + error.message); return; }
+      const nou = data && data[0];
+      if (nou) setTicheteList((p) => [...p, nou]);
+      logAction("Copiere", "Tichet cântar", row.serie + " " + row.nr_tichet, `copiat după TC ${t.nr_tichet} • ${row.partener}${row.net != null ? ` • NET ${row.net} kg` : ""}`);
+
+      let siAltceva = "";
+      if (nou && row.status === "inchis" && row.net != null) {
+        if (row.tip === "Intrare") { await creeazaAchizitieDinTichet(nou); siAltceva = "\n\nS-a creat și achiziția în 🚛 Achiziții."; }
+        else if (row.tip === "Iesire") { await creeazaVanzareDinTichet(nou); siAltceva = "\n\nS-a creat și vânzarea în 📤 Vânzări."; }
+      }
+      setTicSubTab(row.status === "inchis" ? "registru" : row.status === "gol" ? "gol" : "deschise");
+      alert(
+        `✅ Tichetul TC ${t.nr_tichet} a fost copiat în TC ${row.nr_tichet}.\n\n` +
+        `${row.tip} • ${row.partener || "—"}\n${row.material || "—"}\n` +
+        (row.net != null ? `BRUT ${fmt(row.brut, 0)} − TARA ${fmt(row.tara, 0)} = NET ${fmt(row.net, 0)} kg\n` : "") +
+        `${row.data} ${row.ora_intrare}` + siAltceva
+      );
+    } finally {
+      ticSavingRef.current = false;
+      setTicSaving(false);
+    }
   };
   // Rezervă un număr de tichet fără date (pentru un tichet fizic completat mai târziu) — statusul "gol" îl ține în
   // afara fluxului normal deschis→închis (care presupune deja o primă cântărire), pana e completat din 📝 Rezervate.
