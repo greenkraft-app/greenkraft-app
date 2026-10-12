@@ -787,6 +787,17 @@ if (typeof document !== "undefined") {
   document.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === "Tab") trimiteCampurile(); }, true);
 }
 
+// Cine a adaugat inregistrarea — o linie mica sub data, ca sa nu ocupe o coloana
+// proprie in fiecare tabel.
+function AdaugatDe({ nume }) {
+  if (!nume) return null;
+  return (
+    <div title={"Adăugat de " + nume} style={{ fontSize: 9, color: "#9e9e9e", textAlign: "center", marginTop: 1, lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+      👤 {nume}
+    </div>
+  );
+}
+
 // Input care nu redeseneaza toata aplicatia la fiecare tasta: cat timp scrii in el isi
 // tine singur textul, iar starea aplicatiei (si salvarea) se actualizeaza la scurt timp
 // dupa ce te-ai oprit, sau cand iesi din camp. Primeste si trimite exact ca un <input>.
@@ -881,6 +892,11 @@ export default function App() {
   const [loginError, setLoginError] = useState(false);
   const [backupLoading, setBackupLoading] = useState(false);
   const [auditLog, setAuditLog] = useState([]);
+  // Cine a adăugat fiecare înregistrare. Îl luăm din istoric, care reține deja
+  // utilizatorul la fiecare adăugare — altfel ar trebui o coloană nouă în fiecare
+  // tabel. Înregistrările făcute înainte să existe istoricul rămân fără autor.
+  const [adaugatDeMap, setAdaugatDeMap] = useState({});
+  const autor = (tabela, id) => adaugatDeMap[`${tabela}:${id}`] || "";
   const [showAutMediu, setShowAutMediu] = useState(false);
   // ── Cantar (Dini Argeo via Web Serial) ────────────────────
   const [scalePort, setScalePort] = useState(null);
@@ -1293,6 +1309,21 @@ export default function App() {
   const [livRows, setLivRows] = useState([]);
   const [datRows, setDatRows] = useState([]);
   const [avRows, setAvRows] = useState([]);
+  // Cine a adăugat fiecare achiziție, cheltuială, vânzare și depunere de bani.
+  // Se reîncarcă odată cu lista respectivă, ca o înregistrare nouă să-și arate autorul imediat.
+  useEffect(() => {
+    (async () => {
+      const { data } = await sb
+        .from("audit_log")
+        .select("entity,entity_id,user_name")
+        .eq("action", "add")
+        .in("entity", ["colectari", "cheltuieli", "livrari", "avansuri"]);
+      if (!data) return;
+      const m = {};
+      data.forEach((r) => { if (r.entity_id) m[`${r.entity}:${r.entity_id}`] = r.user_name; });
+      setAdaugatDeMap(m);
+    })();
+  }, [colRows.length, chRows.length, livRows.length, avRows.length]);
   const [contracte, setContracte] = useState([]);
   const [pfList, setPfList] = useState([]);
   const [pjList, setPjList] = useState([]);
@@ -1397,6 +1428,25 @@ export default function App() {
     const row = { data: today(), agent: "", furn: "", nr_doc: "", cat: "Curte", produs: "", cant: 0, pret: 0, ach: "", ach_de: "", det: "" };
     const { data } = await sb.from("colectari").insert(row).select();
     if (data && data.length) { setColRows((p) => [...p, data[0]]); logAction("add", "colectari", data[0].id); }
+  };
+
+  // Bifa „Din casă": achiziția a fost plătită din banii aduși, deci se scade din
+  // „Rămas în casă". Se salvează pe loc, nu cu întârziere ca restul câmpurilor —
+  // e o sumă de bani, vrem să fie în baza de date în momentul bifării.
+  const toggleDinCasa = async (r, valoare) => {
+    setColRows((p) => p.map((x) => (x.id === r.id ? { ...x, din_casa: valoare } : x)));
+    const { error } = await sb.from("colectari").update({ din_casa: valoare }).eq("id", r.id);
+    if (error) {
+      setColRows((p) => p.map((x) => (x.id === r.id ? { ...x, din_casa: !valoare } : x)));
+      alert(
+        /din_casa/.test(error.message)
+          ? "Lipsește coloana „din_casa” din tabelul colectari.\n\nDeschide Supabase → SQL Editor și rulează o singură dată:\n\nalter table colectari add column din_casa boolean not null default false;"
+          : "Eroare la salvare: " + error.message
+      );
+      return;
+    }
+    logAction(valoare ? "Plătit din casă" : "Anulat plata din casă", "colectari", r.id,
+      { furnizor: r.furn, suma: (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0) });
   };
 
   // ── Transfer catre WiseWeee (extensie Chrome) ──────────────
@@ -3702,12 +3752,19 @@ Reguli:
   const totDiv = avRows.filter((r) => r.tip === "dividend").reduce((s, r) => s + (parseSuma(r.suma) || 0), 0);
   const persList = [...new Set(avRows.map((r) => r.catre).filter(Boolean))];
 
-  // Bani aduși în casă computed — plățile din acești bani se introduc manual (câmpul "decont")
+  // Bani aduși în casă. Banii sunt un singur fond, nu legat de o depunere anume:
+  // din el se scad achizițiile bifate „Din casă" în 🚛 Achiziții.
   const baniAdusiRows = sortByDateAsc(avRows.filter((r) => r.tip === "bani_adus"));
   const platitManual = (r) => (r.decont || []).reduce((s, d) => s + (parseSuma(d.suma) || 0), 0);
-  // Total "Rămas în casă" — suma peste toate depunerile de bani aduși (suma + sold anterior - plătit manual),
-  // afișat si in headerul aplicatiei pentru vizibilitate rapida.
-  const ramasInCasaTotal = baniAdusiRows.reduce((s, r) => { const totalDisp = (parseSuma(r.suma) || 0) + (parseSuma(r.sold_anterior) || 0); return s + (totalDisp - platitManual(r)); }, 0);
+  // Plățile introduse manual înainte să existe bifa. Banii chiar au ieșit din casă,
+  // deci rămân scăzuți, dar nu se mai pot adăuga sau modifica — istoric înghețat.
+  const platiVechiTotal = baniAdusiRows.reduce((s, r) => s + platitManual(r), 0);
+  const totalAdusInCasa = baniAdusiRows.reduce((s, r) => s + (parseSuma(r.suma) || 0) + (parseSuma(r.sold_anterior) || 0), 0);
+  const valoareAchizitie = (r) => (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0);
+  const achizitiiDinCasa = colRows.filter((r) => r.din_casa);
+  const cheltuitDinCasa = achizitiiDinCasa.reduce((s, r) => s + valoareAchizitie(r), 0);
+  // Afișat si in headerul aplicatiei pentru vizibilitate rapida.
+  const ramasInCasaTotal = totalAdusInCasa - platiVechiTotal - cheltuitDinCasa;
 
   // Contracte computed
   const filtCT = sortByDateAsc(contracte.filter((r) => !ctSearch || r.companie?.toLowerCase().includes(ctSearch.toLowerCase()) || r.nr?.includes(ctSearch) || r.detalii?.toLowerCase().includes(ctSearch.toLowerCase())));
@@ -5468,7 +5525,7 @@ Reguli:
                   <th style={th({})}>Note</th>
                   <th style={th({})}></th>
                 </tr></thead>
-                <tbody>{chFiltered.map((r, idx) => { const i = chRows.indexOf(r); const rowBg = idx % 2 === 0 ? "#fff" : "#f7faf8"; const achBg = r.ach === "Da" ? "#e8f5e9" : r.ach === "Parțial" ? "#fff8e1" : r.ach === "Nu" ? "#ffebee" : "#fff"; const achC = r.ach === "Da" ? G : r.ach === "Parțial" ? "#e65100" : r.ach === "Nu" ? "#c62828" : "#555"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 1}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updCH(i, "data", v)} /></td><td style={td({ background: "#fffde7" })}><select style={sel({ textAlign: "center" })} value={r.gk || ""} onChange={(e) => updCH(i, "gk", e.target.value)}>{GREENKRAFT_OPT.map((o) => <option key={o}>{o}</option>)}</select></td><td style={td({ background: rowBg })}><FastInput style={inp({ textAlign: "right" })} value={r.suma || ""} onChange={(e) => updCH(i, "suma", e.target.value)} /></td><td style={td({ background: "#fffde7" })}><select style={sel({ textAlign: "center" })} value={r.cat || ""} onChange={(e) => updCH(i, "cat", e.target.value)}>{CATEGORIE_CH.map((o) => <option key={o}>{o}</option>)}</select></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><FastInput title={r.det || undefined} style={inp({ textAlign: "center" })} value={r.det || ""} onChange={(e) => updCH(i, "det", e.target.value)} /></td><td style={td({ background: achBg })}><select style={sel({ color: achC, fontWeight: 700, textAlign: "center" })} value={r.ach || ""} onChange={(e) => updCH(i, "ach", e.target.value)}><option value=""></option><option>Da</option><option>Parțial</option><option>Nu</option></select></td><td style={td({ background: "#fffde7" })}><ACStrict value={r.ach_de || ""} options={achitatOptions} onChange={(v) => updCH(i, "ach_de", v)} placeholder="—" /></td><td style={td({ textAlign: "center", background: r.luna_precedenta ? "#fff3e0" : rowBg })}><input type="checkbox" checked={!!r.luna_precedenta} onChange={(e) => updCH(i, "luna_precedenta", e.target.checked)} style={{ cursor: "pointer", width: 16, height: 16 }} /></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><FastInput title={r.note || undefined} style={inp({ textAlign: "center" })} value={r.note || ""} onChange={(e) => updCH(i, "note", e.target.value)} /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delCH(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                <tbody>{chFiltered.map((r, idx) => { const i = chRows.indexOf(r); const rowBg = idx % 2 === 0 ? "#fff" : "#f7faf8"; const achBg = r.ach === "Da" ? "#e8f5e9" : r.ach === "Parțial" ? "#fff8e1" : r.ach === "Nu" ? "#ffebee" : "#fff"; const achC = r.ach === "Da" ? G : r.ach === "Parțial" ? "#e65100" : r.ach === "Nu" ? "#c62828" : "#555"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 1}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updCH(i, "data", v)} /><AdaugatDe nume={autor("cheltuieli", r.id)} /></td><td style={td({ background: "#fffde7" })}><select style={sel({ textAlign: "center" })} value={r.gk || ""} onChange={(e) => updCH(i, "gk", e.target.value)}>{GREENKRAFT_OPT.map((o) => <option key={o}>{o}</option>)}</select></td><td style={td({ background: rowBg })}><FastInput style={inp({ textAlign: "right" })} value={r.suma || ""} onChange={(e) => updCH(i, "suma", e.target.value)} /></td><td style={td({ background: "#fffde7" })}><select style={sel({ textAlign: "center" })} value={r.cat || ""} onChange={(e) => updCH(i, "cat", e.target.value)}>{CATEGORIE_CH.map((o) => <option key={o}>{o}</option>)}</select></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><FastInput title={r.det || undefined} style={inp({ textAlign: "center" })} value={r.det || ""} onChange={(e) => updCH(i, "det", e.target.value)} /></td><td style={td({ background: achBg })}><select style={sel({ color: achC, fontWeight: 700, textAlign: "center" })} value={r.ach || ""} onChange={(e) => updCH(i, "ach", e.target.value)}><option value=""></option><option>Da</option><option>Parțial</option><option>Nu</option></select></td><td style={td({ background: "#fffde7" })}><ACStrict value={r.ach_de || ""} options={achitatOptions} onChange={(v) => updCH(i, "ach_de", v)} placeholder="—" /></td><td style={td({ textAlign: "center", background: r.luna_precedenta ? "#fff3e0" : rowBg })}><input type="checkbox" checked={!!r.luna_precedenta} onChange={(e) => updCH(i, "luna_precedenta", e.target.checked)} style={{ cursor: "pointer", width: 16, height: 16 }} /></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><FastInput title={r.note || undefined} style={inp({ textAlign: "center" })} value={r.note || ""} onChange={(e) => updCH(i, "note", e.target.value)} /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delCH(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
                 <tfoot><tr style={{ background: G, color: "#fff" }}><td></td><td colSpan={2} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(chFiltered.reduce((s, r) => s + parseSuma(r.suma), 0))}</td><td colSpan={6}></td><td></td></tr></tfoot>
               </table>
             </div>
@@ -5544,6 +5601,7 @@ Reguli:
                   <col style={{ width: 82 }} />
                   <col style={{ width: 75 }} />
                   <col style={{ width: 160 }} />
+                  <col style={{ width: 68 }} />
                   <col style={{ width: 90 }} />
                   <col style={{ width: 30 }} />
                   <col style={{ width: 28 }} />
@@ -5561,12 +5619,13 @@ Reguli:
                   <th style={th({ textAlign: "center" })}>Fără Imp.12%</th>
                   <th style={th({ textAlign: "center" })}>Achitat</th>
                   <th style={th({ textAlign: "center" })}>Achitat De</th>
+                  <th style={th({ textAlign: "center" })} title="Bifează dacă ai plătit din banii aduși în casă — se scade automat din „Rămas în casă”">Din casă</th>
                   <th style={th({})}>Detalii</th>
                   <th style={th({})} title="Trimite catre WiseWeee">📤</th>
                   <th style={th({})}></th>
                 </tr></thead>
-                <tbody>{colFiltered.map((r, idx) => { const i = colRows.indexOf(r); const tot = parseSuma(r.cant) * parseSuma(r.pret); const faraImp = tot ? +(tot * 0.88).toFixed(2) : 0; const rowBg = idx % 2 === 0 ? "#fff" : "#f8fbf9"; const achBg = r.ach === "Da" ? "#e8f5e9" : r.ach === "Parțial" ? "#fff8e1" : r.ach === "Nu" ? "#ffebee" : "#fff"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 1}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updCOL(i, "data", v)} /></td><td style={td({ background: rowBg })}><ACStrict value={r.furn || ""} options={furnOptions} onChange={(v) => updCOL(i, "furn", v)} placeholder="—" strict /></td><td style={td({ background: r.nr_doc ? "#e8f5e9" : "#fff3e0" })}><FastInput style={inp({ textAlign: "center", fontWeight: 600 })} value={r.nr_doc || ""} onChange={(e) => updCOL(i, "nr_doc", e.target.value)} placeholder="—" /></td><td style={td({ background: COL_COLORS[r.cat] || "#eee", textAlign: "center" })}><select style={sel({ fontWeight: 600, textAlign: "center" })} value={r.cat || ""} onChange={(e) => updCOL(i, "cat", e.target.value)}>{CATEGORIE_COL.map((o) => <option key={o}>{o}</option>)}</select></td><td style={td({ background: rowBg })}><ACStrict value={r.produs || ""} options={PRODUSE_DYN} onChange={(v) => updCOL(i, "produs", v)} /></td><td style={td({ background: rowBg })}><div style={{ display: "flex", gap: 2, alignItems: "center" }}><FastInput style={inpNum({ textAlign: "right", minWidth: 34 })} type="text" inputMode="decimal" value={r.cant || ""} onChange={(e) => updCOL(i, "cant", e.target.value)} />{scalePort && <button onClick={() => useScaleWeight(v => updCOL(i, "cant", v))} title="Citește din cantar" style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 3, padding: "1px 3px", cursor: "pointer", fontSize: 10, flexShrink: 0 }}>⚖️</button>}</div></td><td style={td({ background: rowBg })}><FastInput style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.pret || ""} onChange={(e) => updCOL(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 600 })}>{tot > 0 ? fmt(tot) : "0,00"}</td><td style={td({ textAlign: "right", background: "#fce4d6", fontWeight: 600, color: "#bf360c" })}>{faraImp > 0 ? fmt(faraImp) : "0,00"}</td><td style={td({ background: achBg })}><select style={sel({ color: r.ach === "Da" ? G : r.ach === "Parțial" ? "#e65100" : r.ach === "Nu" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.ach || ""} onChange={(e) => updCOL(i, "ach", e.target.value)}><option value=""></option><option>Da</option><option>Parțial</option><option>Nu</option></select></td><td style={td({ background: r.ach_de ? "#ffe0b2" : "#fff" })}><ACStrict value={r.ach_de || ""} options={achitatOptions} onChange={(v) => updCOL(i, "ach_de", v)} placeholder="—" /></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><FastInput title={r.det || undefined} style={inp()} value={r.det || ""} onChange={(e) => updCOL(i, "det", e.target.value)} placeholder="..." /></td><td style={td({ textAlign: "center", padding: 2 })}>{wwSent[r.id] ? <span style={{ color: G, fontSize: 15 }} title="Trimis">✓</span> : <button onClick={() => trimiteWiseWeee(r)} title="Trimite spre WiseWeee" style={{ background: "#fff3e0", border: "1px solid #ffb74d", borderRadius: 4, cursor: "pointer", fontSize: 13, padding: "2px 5px" }}>📤</button>}</td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delCOL(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
-                <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={6} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(colFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0), 0))} kg</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(colFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0))}</td><td colSpan={6}></td></tr></tfoot>
+                <tbody>{colFiltered.map((r, idx) => { const i = colRows.indexOf(r); const tot = parseSuma(r.cant) * parseSuma(r.pret); const faraImp = tot ? +(tot * 0.88).toFixed(2) : 0; const rowBg = idx % 2 === 0 ? "#fff" : "#f8fbf9"; const achBg = r.ach === "Da" ? "#e8f5e9" : r.ach === "Parțial" ? "#fff8e1" : r.ach === "Nu" ? "#ffebee" : "#fff"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 1}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updCOL(i, "data", v)} /><AdaugatDe nume={autor("colectari", r.id)} /></td><td style={td({ background: rowBg })}><ACStrict value={r.furn || ""} options={furnOptions} onChange={(v) => updCOL(i, "furn", v)} placeholder="—" strict /></td><td style={td({ background: r.nr_doc ? "#e8f5e9" : "#fff3e0" })}><FastInput style={inp({ textAlign: "center", fontWeight: 600 })} value={r.nr_doc || ""} onChange={(e) => updCOL(i, "nr_doc", e.target.value)} placeholder="—" /></td><td style={td({ background: COL_COLORS[r.cat] || "#eee", textAlign: "center" })}><select style={sel({ fontWeight: 600, textAlign: "center" })} value={r.cat || ""} onChange={(e) => updCOL(i, "cat", e.target.value)}>{CATEGORIE_COL.map((o) => <option key={o}>{o}</option>)}</select></td><td style={td({ background: rowBg })}><ACStrict value={r.produs || ""} options={PRODUSE_DYN} onChange={(v) => updCOL(i, "produs", v)} /></td><td style={td({ background: rowBg })}><div style={{ display: "flex", gap: 2, alignItems: "center" }}><FastInput style={inpNum({ textAlign: "right", minWidth: 34 })} type="text" inputMode="decimal" value={r.cant || ""} onChange={(e) => updCOL(i, "cant", e.target.value)} />{scalePort && <button onClick={() => useScaleWeight(v => updCOL(i, "cant", v))} title="Citește din cantar" style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 3, padding: "1px 3px", cursor: "pointer", fontSize: 10, flexShrink: 0 }}>⚖️</button>}</div></td><td style={td({ background: rowBg })}><FastInput style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.pret || ""} onChange={(e) => updCOL(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 600 })}>{tot > 0 ? fmt(tot) : "0,00"}</td><td style={td({ textAlign: "right", background: "#fce4d6", fontWeight: 600, color: "#bf360c" })}>{faraImp > 0 ? fmt(faraImp) : "0,00"}</td><td style={td({ background: achBg })}><select style={sel({ color: r.ach === "Da" ? G : r.ach === "Parțial" ? "#e65100" : r.ach === "Nu" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.ach || ""} onChange={(e) => updCOL(i, "ach", e.target.value)}><option value=""></option><option>Da</option><option>Parțial</option><option>Nu</option></select></td><td style={td({ background: r.ach_de ? "#ffe0b2" : "#fff" })}><ACStrict value={r.ach_de || ""} options={achitatOptions} onChange={(v) => updCOL(i, "ach_de", v)} placeholder="—" /></td><td style={td({ textAlign: "center", background: r.din_casa ? "#b2ebf2" : rowBg })} title={r.din_casa ? `Se scade din casă: ${fmt(tot)} lei` : "Bifează dacă ai plătit din banii aduși în casă"}><input type="checkbox" checked={!!r.din_casa} onChange={(e) => toggleDinCasa(r, e.target.checked)} style={{ cursor: "pointer", width: 16, height: 16 }} /></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><FastInput title={r.det || undefined} style={inp()} value={r.det || ""} onChange={(e) => updCOL(i, "det", e.target.value)} placeholder="..." /></td><td style={td({ textAlign: "center", padding: 2 })}>{wwSent[r.id] ? <span style={{ color: G, fontSize: 15 }} title="Trimis">✓</span> : <button onClick={() => trimiteWiseWeee(r)} title="Trimite spre WiseWeee" style={{ background: "#fff3e0", border: "1px solid #ffb74d", borderRadius: 4, cursor: "pointer", fontSize: 13, padding: "2px 5px" }}>📤</button>}</td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delCOL(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={6} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(colFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0), 0))} kg</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(colFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0))}</td><td colSpan={7}></td></tr></tfoot>
               </table>
             </div>
             <AddBtn onClick={addCOL} label="+ Adaugă achiziție" />
@@ -5642,7 +5701,7 @@ Reguli:
                   <th style={th({})}>Detalii</th>
                   <th style={th({})}></th>
                 </tr></thead>
-                <tbody>{livFiltered.map((r, idx) => { const i = livRows.indexOf(r); const tot = parseSuma(r.cant) * parseSuma(r.pret); const rowBg = idx % 2 === 0 ? "#fff" : "#f8fbf9"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 1}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updLIV(i, "data", v)} /></td><td style={td({ background: rowBg })}><FastInput style={inp({ textAlign: "center" })} value={r.nr || ""} onChange={(e) => updLIV(i, "nr", e.target.value)} /></td><td style={td({ background: "#fffde7" })}><ACStrict value={r.client || ""} options={clientOptions} onChange={(v) => updLIV(i, "client", v)} placeholder="—" strict /></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.produs}><ACStrict value={r.produs || ""} options={PRODUSE_DYN} onChange={(v) => updLIV(i, "produs", v)} /></td><td style={td({ background: rowBg })}><FastInput style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.cant || ""} onChange={(e) => updLIV(i, "cant", e.target.value)} /></td><td style={td({ background: rowBg })}><FastInput style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.pret || ""} onChange={(e) => updLIV(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 600 })}>{tot > 0 ? fmt(tot) : "0,00"}</td><td style={td({ background: r.fact === "DA" ? "#e8f5e9" : r.fact === "NU" ? "#ffebee" : "#fff", textAlign: "center" })}><select style={sel({ color: r.fact === "DA" ? G : r.fact === "NU" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.fact || ""} onChange={(e) => updLIV(i, "fact", e.target.value)}><option value=""></option><option>DA</option><option>NU</option></select></td><td style={td({ background: r.inc === "DA" ? "#c8e6c9" : r.inc === "PARTIAL" ? "#fff8e1" : r.inc === "NU" ? "#ffebee" : "#fff", textAlign: "center" })}><select style={sel({ color: r.inc === "DA" ? G : r.inc === "PARTIAL" ? "#e65100" : r.inc === "NU" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.inc || ""} onChange={(e) => updLIV(i, "inc", e.target.value)}><option value=""></option><option>DA</option><option>PARTIAL</option><option>NU</option></select></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><FastInput title={r.det || undefined} style={inp()} value={r.det || ""} onChange={(e) => updLIV(i, "det", e.target.value)} placeholder="..." /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delLIV(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                <tbody>{livFiltered.map((r, idx) => { const i = livRows.indexOf(r); const tot = parseSuma(r.cant) * parseSuma(r.pret); const rowBg = idx % 2 === 0 ? "#fff" : "#f8fbf9"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 1}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updLIV(i, "data", v)} /><AdaugatDe nume={autor("livrari", r.id)} /></td><td style={td({ background: rowBg })}><FastInput style={inp({ textAlign: "center" })} value={r.nr || ""} onChange={(e) => updLIV(i, "nr", e.target.value)} /></td><td style={td({ background: "#fffde7" })}><ACStrict value={r.client || ""} options={clientOptions} onChange={(v) => updLIV(i, "client", v)} placeholder="—" strict /></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.produs}><ACStrict value={r.produs || ""} options={PRODUSE_DYN} onChange={(v) => updLIV(i, "produs", v)} /></td><td style={td({ background: rowBg })}><FastInput style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.cant || ""} onChange={(e) => updLIV(i, "cant", e.target.value)} /></td><td style={td({ background: rowBg })}><FastInput style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.pret || ""} onChange={(e) => updLIV(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 600 })}>{tot > 0 ? fmt(tot) : "0,00"}</td><td style={td({ background: r.fact === "DA" ? "#e8f5e9" : r.fact === "NU" ? "#ffebee" : "#fff", textAlign: "center" })}><select style={sel({ color: r.fact === "DA" ? G : r.fact === "NU" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.fact || ""} onChange={(e) => updLIV(i, "fact", e.target.value)}><option value=""></option><option>DA</option><option>NU</option></select></td><td style={td({ background: r.inc === "DA" ? "#c8e6c9" : r.inc === "PARTIAL" ? "#fff8e1" : r.inc === "NU" ? "#ffebee" : "#fff", textAlign: "center" })}><select style={sel({ color: r.inc === "DA" ? G : r.inc === "PARTIAL" ? "#e65100" : r.inc === "NU" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.inc || ""} onChange={(e) => updLIV(i, "inc", e.target.value)}><option value=""></option><option>DA</option><option>PARTIAL</option><option>NU</option></select></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><FastInput title={r.det || undefined} style={inp()} value={r.det || ""} onChange={(e) => updLIV(i, "det", e.target.value)} placeholder="..." /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delLIV(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
                 <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={5} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(livFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0), 0))} kg</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(livFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0))}</td><td colSpan={4}></td></tr></tfoot>
               </table>
             </div>
@@ -6484,116 +6543,66 @@ Reguli:
             {/* ── Bani aduși în casă ── */}
             <div style={{ marginTop: 26 }}>
               <div style={{ fontWeight: 700, color: "#00838f", fontSize: 14, marginBottom: 10 }}>💵 Bani aduși în casă</div>
+              <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+                <SC label="Total adus" value={fmt(totalAdusInCasa) + " lei"} c="#00695c" bg="#e0f2f1" />
+                {platiVechiTotal > 0 && <SC label="Plăți anterioare" value={fmt(platiVechiTotal) + " lei"} c="#6a1b9a" bg="#f3e5f5" />}
+                <SC label="Plătit din casă" value={fmt(cheltuitDinCasa) + " lei"} c="#bf360c" bg="#fce4d6" />
+                <SC label="Rămas în casă" value={fmt(ramasInCasaTotal) + " lei"} c={ramasInCasaTotal < 0 ? "#c62828" : G} bg={ramasInCasaTotal < 0 ? "#ffebee" : "#e8f5e9"} />
+              </div>
+              <div style={{ background: "#e0f7fa", border: "1px solid #80deea", borderRadius: 8, padding: "9px 12px", marginBottom: 12, fontSize: 12, color: "#00636b" }}>
+                Banii se scad automat: bifează <strong>„Din casă"</strong> pe achiziția plătită din casă, în 🚛 Achiziții.
+                {platiVechiTotal > 0 && <> Cele <strong>{fmt(platiVechiTotal)} lei</strong> de la „Plăți anterioare" sunt plățile introduse manual înainte de bifă — rămân scăzute, dar nu se mai modifică. Nu bifa achiziții plătite deja atunci, că s-ar scădea de două ori.</>}
+              </div>
               <div style={{ overflowX: "auto" }}>
-                <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 1000 }}>
-                  <colgroup><col style={{ width: 28 }} /><col style={{ width: 28 }} /><col style={{ width: 100 }} /><col style={{ width: 155 }} /><col style={{ width: 105 }} /><col style={{ width: 105 }} /><col style={{ width: 115 }} /><col style={{ width: 120 }} /><col style={{ width: 122 }} /><col style={{ width: 30 }} /></colgroup>
+                <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 760 }}>
+                  <colgroup><col style={{ width: 28 }} /><col style={{ width: 110 }} /><col style={{ width: 170 }} /><col style={{ width: 120 }} /><col style={{ width: 120 }} /><col style={{ width: 130 }} /><col style={{ width: 30 }} /></colgroup>
                   <thead><tr style={{ background: "#00838f" }}>
-                    <th style={th({ background: "#00636b" })}></th>
                     <th style={th({ background: "#00636b" })}></th>
                     <th style={th({ textAlign: "center" })}>Data</th>
                     <th style={th({ textAlign: "center" })}>Adus de</th>
                     <th style={th({ textAlign: "center" })}>Sumă adusă</th>
                     <th style={th({ textAlign: "center" })} title="Câți bani mai erau în casă în ziua respectivă">Sold anterior</th>
                     <th style={th({ textAlign: "center" })}>Total disponibil</th>
-                    <th style={th({ textAlign: "center" })} title="Introdus manual — vezi/adaugă plăți">Plătit (manual)</th>
-                    <th style={th({ textAlign: "center" })}>Rămas în casă</th>
                     <th style={th({})}></th>
                   </tr></thead>
                   <tbody>
-                    {baniAdusiRows.length === 0 && <tr><td colSpan={10} style={{ textAlign: "center", padding: 20, color: "#aaa" }}>Nicio înregistrare.</td></tr>}
+                    {baniAdusiRows.length === 0 && <tr><td colSpan={7} style={{ textAlign: "center", padding: 20, color: "#aaa" }}>Nicio înregistrare.</td></tr>}
                     {baniAdusiRows.map((r, i) => {
                       const oi = avRows.indexOf(r);
                       const suma = parseSuma(r.suma) || 0;
                       const soldAnt = parseSuma(r.sold_anterior) || 0;
                       const totalDisp = suma + soldAnt;
-                      const plati = r.decont || [];
-                      const cheltuit = platitManual(r);
-                      const ramas = totalDisp - cheltuit;
-                      const isExpanded = expandedAv === r.id;
                       const rowBg = i % 2 === 0 ? "#fff" : "#e0f7fa";
                       return (
-                        <Fragment key={r.id || i}>
-                          <tr style={{ background: rowBg, height: 38 }}>
-                            <td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td>
-                            <td style={td({ textAlign: "center", padding: 2 })}>
-                              <button onClick={() => setExpandedAv(isExpanded ? null : r.id)} title={isExpanded ? "Ascunde plăți" : "Vezi/Adaugă plăți"} style={{ background: isExpanded ? "#00838f" : "#e0f7fa", color: isExpanded ? "#fff" : "#00838f", border: "1px solid #00838f", borderRadius: 4, padding: "2px 7px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>{isExpanded ? "▼" : "▶"} {plati.length}</button>
-                            </td>
-                            <td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updAV(oi, "data", v)} /></td>
-                            <td style={td({ background: rowBg, fontWeight: 600 })}><FastInput style={inp({ textAlign: "center", fontWeight: 600 })} value={r.catre || ""} onChange={(e) => updAV(oi, "catre", e.target.value)} placeholder="Cine a adus" /></td>
-                            <td style={td({ background: "#e0f2f1", textAlign: "right", fontWeight: 700, color: "#00695c" })}><FastInput style={inp({ textAlign: "right", fontWeight: 700, color: "#00695c" })} value={r.suma || ""} onChange={(e) => updAV(oi, "suma", e.target.value)} placeholder="0" /></td>
-                            <td style={td({ background: "#fff8e1", textAlign: "right" })}><FastInput style={inp({ textAlign: "right" })} value={r.sold_anterior ?? ""} onChange={(e) => updAV(oi, "sold_anterior", e.target.value === "" ? null : e.target.value)} placeholder="0" /></td>
-                            <td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 700 })}>{fmt(totalDisp)}</td>
-                            <td style={td({ textAlign: "right", background: "#fce4d6", fontWeight: 600, color: "#bf360c" })}>{fmt(cheltuit)}</td>
-                            <td style={td({ textAlign: "right", background: ramas < 0 ? "#ffebee" : "#e8f5e9", fontWeight: 700, color: ramas < 0 ? "#c62828" : G })}>{fmt(ramas)}</td>
-                            <td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delBaniAdusi(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 14 }}>✕</button></td>
-                          </tr>
-                          {isExpanded && (
-                            <tr>
-                              <td colSpan={10} style={{ padding: 12, background: "#fafafa", borderTop: "2px solid #00838f", borderBottom: "2px solid #00838f" }}>
-                                <div style={{ background: "#fff", border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
-                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                                    <div style={{ fontWeight: 700, color: "#00838f", fontSize: 13 }}>📋 Plăți din banii aduși de {r.catre || "—"} ({fmt(totalDisp)} lei disponibil)</div>
-                                    <button onClick={() => addDecontItem(r.id)} style={{ background: "#00838f", color: "#fff", border: "none", borderRadius: 5, padding: "5px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Adaugă Plată</button>
-                                  </div>
-                                  {plati.length === 0 ? (
-                                    <div style={{ textAlign: "center", padding: 14, color: "#aaa", fontSize: 12 }}>Nicio plată încă. Click pe "+ Adaugă Plată" mai sus.</div>
-                                  ) : (
-                                    <table style={{ borderCollapse: "collapse", width: "100%" }}>
-                                      <colgroup><col style={{ width: 28 }} /><col style={{ width: 120 }} /><col style={{ width: 110 }} /><col /><col style={{ width: 30 }} /></colgroup>
-                                      <thead><tr style={{ background: "#00636b" }}>
-                                        <th style={th({ background: "#00636b", textAlign: "center" })}>#</th>
-                                        <th style={th({ background: "#00838f", textAlign: "center" })}>Data</th>
-                                        <th style={th({ background: "#00838f", textAlign: "center" })}>Sumă (lei)</th>
-                                        <th style={th({ background: "#00838f", textAlign: "center" })}>Descriere</th>
-                                        <th style={th({ background: "#00636b" })}></th>
-                                      </tr></thead>
-                                      <tbody>
-                                        {plati.map((d, di) => (
-                                          <tr key={di} style={{ background: di % 2 === 0 ? "#fff" : "#f8fbf9" }}>
-                                            <td style={td({ textAlign: "center", color: "#888", fontSize: 10, background: "#f5f5f5" })}>{di + 1}</td>
-                                            <td style={td()}><DateInput value={d.data || ""} onChange={(v) => updDecontItem(r.id, di, "data", v)} /></td>
-                                            <td style={td({ textAlign: "right", background: "#fff8e1", fontWeight: 700, color: "#bf360c" })}>
-                                              <FastInput style={inp({ textAlign: "right", fontWeight: 700, color: "#bf360c" })} value={d.suma || ""} onChange={(e) => updDecontItem(r.id, di, "suma", e.target.value)} placeholder="0" />
-                                            </td>
-                                            <td style={td()}><FastInput style={inp({ textAlign: "center" })} value={d.det || ""} onChange={(e) => updDecontItem(r.id, di, "det", e.target.value)} placeholder="Descriere..." /></td>
-                                            <td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delDecontItem(r.id, di)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
-                                          </tr>
-                                        ))}
-                                      </tbody>
-                                      <tfoot>
-                                        <tr style={{ background: "#e0f7fa" }}>
-                                          <td colSpan={2} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12, color: "#00838f" }}>TOTAL PLĂTIT</td>
-                                          <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 700, color: "#00838f", fontSize: 12 }}>{fmt(cheltuit)} lei</td>
-                                          <td colSpan={2}></td>
-                                        </tr>
-                                        <tr style={{ background: ramas === 0 ? "#e8f5e9" : ramas < 0 ? "#ffebee" : "#fff8e1" }}>
-                                          <td colSpan={2} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12, color: ramas === 0 ? G : ramas < 0 ? "#c62828" : "#e65100" }}>RĂMAS ÎN CASĂ</td>
-                                          <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 800, color: ramas === 0 ? G : ramas < 0 ? "#c62828" : "#e65100", fontSize: 13 }}>{fmt(ramas)} lei</td>
-                                          <td colSpan={2}></td>
-                                        </tr>
-                                      </tfoot>
-                                    </table>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </Fragment>
+                        <tr key={r.id || i} style={{ background: rowBg, height: 38 }}>
+                          <td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td>
+                          <td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updAV(oi, "data", v)} /><AdaugatDe nume={autor("avansuri", r.id)} /></td>
+                          <td style={td({ background: rowBg, fontWeight: 600 })}><FastInput style={inp({ textAlign: "center", fontWeight: 600 })} value={r.catre || ""} onChange={(e) => updAV(oi, "catre", e.target.value)} placeholder="Cine a adus" /></td>
+                          <td style={td({ background: "#e0f2f1", textAlign: "right", fontWeight: 700, color: "#00695c" })}><FastInput style={inp({ textAlign: "right", fontWeight: 700, color: "#00695c" })} value={r.suma || ""} onChange={(e) => updAV(oi, "suma", e.target.value)} placeholder="0" /></td>
+                          <td style={td({ background: "#fff8e1", textAlign: "right" })}><FastInput style={inp({ textAlign: "right" })} value={r.sold_anterior ?? ""} onChange={(e) => updAV(oi, "sold_anterior", e.target.value === "" ? null : e.target.value)} placeholder="0" /></td>
+                          <td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 700 })}>{fmt(totalDisp)}</td>
+                          <td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delBaniAdusi(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 14 }}>✕</button></td>
+                        </tr>
                       );
                     })}
                   </tbody>
                   {baniAdusiRows.length > 0 && (
                     <tfoot><tr style={{ background: "#00838f", color: "#fff" }}>
-                      <td colSpan={4} style={{ padding: "7px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td>
+                      <td colSpan={3} style={{ padding: "7px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td>
                       <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700, fontSize: 13 }}>{fmt(baniAdusiRows.reduce((s, r) => s + (parseSuma(r.suma) || 0), 0))}</td>
-                      <td colSpan={2}></td>
-                      <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700, fontSize: 13 }}>{fmt(baniAdusiRows.reduce((s, r) => s + platitManual(r), 0))}</td>
-                      <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700, fontSize: 13 }}>{fmt(baniAdusiRows.reduce((s, r) => { const totalDisp = (parseSuma(r.suma) || 0) + (parseSuma(r.sold_anterior) || 0); return s + (totalDisp - platitManual(r)); }, 0))}</td>
+                      <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700, fontSize: 13 }}>{fmt(baniAdusiRows.reduce((s, r) => s + (parseSuma(r.sold_anterior) || 0), 0))}</td>
+                      <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700, fontSize: 13 }}>{fmt(totalAdusInCasa)}</td>
                       <td></td>
                     </tr></tfoot>
                   )}
                 </table>
               </div>
+              {achizitiiDinCasa.length > 0 && (
+                <div style={{ marginTop: 10, fontSize: 12, color: "#555" }}>
+                  Scăzute din casă: <strong>{achizitiiDinCasa.length}</strong> {achizitiiDinCasa.length === 1 ? "achiziție" : "achiziții"} bifate „Din casă", în total <strong style={{ color: "#bf360c" }}>{fmt(cheltuitDinCasa)} lei</strong>.{" "}
+                  <span onClick={() => setTab("colectari")} style={{ color: "#1565c0", cursor: "pointer", textDecoration: "underline" }}>Vezi în Achiziții</span>
+                </div>
+              )}
             </div>
           </div>
         )}
