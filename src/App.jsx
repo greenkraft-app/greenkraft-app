@@ -206,6 +206,9 @@ const ANEXA3_FIRME = ["GREEN KRAFT SRL","AWR GREEN POINT SRL","CRILELMAR SRL","E
 const LUNI = ["Ian","Feb","Mar","Apr","Mai","Iun","Iul","Aug","Sep","Oct","Nov","Dec"];
 const SERII = ["GK","GKR"];
 const CAT_PAROLE = ["Email","Bancă","Card","Platformă","WiFi","Altele"];
+// Ziua de la care ținem registrul de casă pe zile. Tot ce e mai vechi intră într-un
+// singur sold de pornire, pentru că plățile de dinainte nu erau legate de o zi anume.
+const REGISTRU_CASA_START = "12.10.2026";
 const PIN_CORRECT = "336699";
 const USER_PASSWORDS = { Catalin: "Kraft$888", Alexandru: "310890", Mihai: "336699" };
 
@@ -1447,6 +1450,23 @@ export default function App() {
     }
     logAction(valoare ? "Plătit din casă" : "Anulat plata din casă", "colectari", r.id,
       { furnizor: r.furn, suma: (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0) });
+  };
+
+  // Aceeași bifă, pentru cheltuieli. Cele plătite prin bancă rămân nebifate.
+  const toggleDinCasaCh = async (r, valoare) => {
+    setChRows((p) => p.map((x) => (x.id === r.id ? { ...x, din_casa: valoare } : x)));
+    const { error } = await sb.from("cheltuieli").update({ din_casa: valoare }).eq("id", r.id);
+    if (error) {
+      setChRows((p) => p.map((x) => (x.id === r.id ? { ...x, din_casa: !valoare } : x)));
+      alert(
+        /din_casa/.test(error.message)
+          ? "Lipsește coloana „din_casa” din tabelul cheltuieli.\n\nDeschide Supabase → SQL Editor și rulează o singură dată:\n\nalter table cheltuieli add column din_casa boolean not null default false;"
+          : "Eroare la salvare: " + error.message
+      );
+      return;
+    }
+    logAction(valoare ? "Plătit din casă" : "Anulat plata din casă", "cheltuieli", r.id,
+      { detalii: r.det, suma: parseSuma(r.suma) || 0 });
   };
 
   // ── Transfer catre WiseWeee (extensie Chrome) ──────────────
@@ -3762,9 +3782,50 @@ Reguli:
   const totalAdusInCasa = baniAdusiRows.reduce((s, r) => s + (parseSuma(r.suma) || 0) + (parseSuma(r.sold_anterior) || 0), 0);
   const valoareAchizitie = (r) => (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0);
   const achizitiiDinCasa = colRows.filter((r) => r.din_casa);
-  const cheltuitDinCasa = achizitiiDinCasa.reduce((s, r) => s + valoareAchizitie(r), 0);
+  const cheltuieliDinCasa = chRows.filter((r) => r.din_casa);
+  const totalAchizitiiDinCasa = achizitiiDinCasa.reduce((s, r) => s + valoareAchizitie(r), 0);
+  const totalCheltuieliDinCasa = cheltuieliDinCasa.reduce((s, r) => s + (parseSuma(r.suma) || 0), 0);
+  const cheltuitDinCasa = totalAchizitiiDinCasa + totalCheltuieliDinCasa;
   // Afișat si in headerul aplicatiei pentru vizibilitate rapida.
   const ramasInCasaTotal = totalAdusInCasa - platiVechiTotal - cheltuitDinCasa;
+
+  // Registru de casă pe zile, ținut de la REGISTRU_CASA_START încoace. Tot ce s-a
+  // întâmplat înainte intră într-un singur sold de pornire — nu reconstruim zi cu zi
+  // istoricul vechi, pentru că plățile de atunci nu erau legate de o zi anume.
+  // Registrul nu se salvează nicăieri: se recalculează din înregistrări, deci nu poate
+  // rămâne în urmă dacă se corectează ceva mai târziu.
+  const registruCasa = (() => {
+    const start = parseDateRO(REGISTRU_CASA_START);
+    const zile = new Map();
+    let soldPornire = 0;
+    const pune = (data, camp, val) => {
+      if (!val) return;
+      const d = parseDateRO(data);
+      // fără dată sau mai veche decât ziua de pornire ⇒ intră în soldul de pornire
+      if (!d || !start || d < start) { soldPornire += camp === "adus" ? val : -val; return; }
+      if (!zile.has(data)) zile.set(data, { adus: 0, platiVechi: 0, achizitii: 0, cheltuieli: 0 });
+      zile.get(data)[camp] += val;
+    };
+    baniAdusiRows.forEach((r) => {
+      pune(r.data, "adus", (parseSuma(r.suma) || 0) + (parseSuma(r.sold_anterior) || 0));
+      // plățile vechi au data lor; dacă lipsește, le punem în ziua depunerii
+      (r.decont || []).forEach((d) => pune(d.data || r.data, "platiVechi", parseSuma(d.suma) || 0));
+    });
+    achizitiiDinCasa.forEach((r) => pune(r.data, "achizitii", valoareAchizitie(r)));
+    cheltuieliDinCasa.forEach((r) => pune(r.data, "cheltuieli", parseSuma(r.suma) || 0));
+    let sold = soldPornire;
+    const zileCuMiscari = [...zile.entries()]
+      .sort((a, b) => (parseDateRO(a[0]) || 0) - (parseDateRO(b[0]) || 0))
+      .map(([data, v]) => {
+        const inceput = sold;
+        const iesit = v.platiVechi + v.achizitii + v.cheltuieli;
+        sold = inceput + v.adus - iesit;
+        return { data, inceput, ...v, iesit, ramas: sold };
+      });
+    return { soldPornire, zile: zileCuMiscari };
+  })();
+  const ziuaDeAzi = registruCasa.zile.find((z) => z.data === today())
+    || { data: today(), inceput: ramasInCasaTotal, adus: 0, platiVechi: 0, achizitii: 0, cheltuieli: 0, iesit: 0, ramas: ramasInCasaTotal };
 
   // Contracte computed
   const filtCT = sortByDateAsc(contracte.filter((r) => !ctSearch || r.companie?.toLowerCase().includes(ctSearch.toLowerCase()) || r.nr?.includes(ctSearch) || r.detalii?.toLowerCase().includes(ctSearch.toLowerCase())));
@@ -3914,6 +3975,15 @@ Reguli:
           <div onClick={() => setTab("avansuri")} title="Vezi detalii în Avansuri & Dividende" style={{ display: "flex", alignItems: "center", gap: 5, background: ramasInCasaTotal < 0 ? "rgba(198,40,40,0.35)" : "rgba(255,255,255,0.15)", borderRadius: 6, padding: "4px 10px", cursor: "pointer" }}>
             <span style={{ fontSize: 11 }}>💰 Rămas în casă:</span>
             <span style={{ fontSize: 12, fontWeight: 700 }}>{fmt(ramasInCasaTotal)} lei</span>
+          </div>
+          {/* Ziua de azi: cu cât am început și cu cât am rămas */}
+          <div onClick={() => setTab("avansuri")} title={`Astăzi ${ziuaDeAzi.data}\nÎnceput de zi: ${fmt(ziuaDeAzi.inceput)} lei\nBani aduși: ${fmt(ziuaDeAzi.adus)} lei\nAchiziții din casă: ${fmt(ziuaDeAzi.achizitii)} lei\nCheltuieli din casă: ${fmt(ziuaDeAzi.cheltuieli)} lei\nRămas: ${fmt(ziuaDeAzi.ramas)} lei`} style={{ display: "flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,0.15)", borderRadius: 6, padding: "4px 10px", cursor: "pointer" }}>
+            <span style={{ fontSize: 11 }}>📅 Azi:</span>
+            <span style={{ fontSize: 12, fontWeight: 700 }}>{fmt(ziuaDeAzi.inceput)}</span>
+            <span style={{ fontSize: 11, opacity: 0.75 }}>→</span>
+            <span style={{ fontSize: 12, fontWeight: 700 }}>{fmt(ziuaDeAzi.ramas)}</span>
+            {ziuaDeAzi.iesit > 0 && <span style={{ fontSize: 10, opacity: 0.8 }}>(−{fmt(ziuaDeAzi.iesit)})</span>}
+            {ziuaDeAzi.adus > 0 && <span style={{ fontSize: 10, opacity: 0.8 }}>(+{fmt(ziuaDeAzi.adus)})</span>}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(255,255,255,0.15)", borderRadius: 6, padding: "4px 10px" }}>
             <span style={{ fontSize: 11 }}>👤</span>
@@ -5509,6 +5579,7 @@ Reguli:
                   <col style={{ width: 75 }} />
                   <col style={{ width: 90 }} />
                   <col style={{ width: 85 }} />
+                  <col style={{ width: 68 }} />
                   <col style={{ width: 200 }} />
                   <col style={{ width: 28 }} />
                 </colgroup>
@@ -5522,11 +5593,12 @@ Reguli:
                   <th style={th({ textAlign: "center" })}>Achitat</th>
                   <th style={th({ textAlign: "center" })}>Achitat De</th>
                   <th style={th({ textAlign: "center" })} title="Bifează dacă plata este pentru o lună anterioară (nu luna curentă)">Lună precedentă</th>
+                  <th style={th({ textAlign: "center" })} title="Bifează dacă ai plătit din banii aduși în casă — se scade automat din „Rămas în casă”">Din casă</th>
                   <th style={th({})}>Note</th>
                   <th style={th({})}></th>
                 </tr></thead>
-                <tbody>{chFiltered.map((r, idx) => { const i = chRows.indexOf(r); const rowBg = idx % 2 === 0 ? "#fff" : "#f7faf8"; const achBg = r.ach === "Da" ? "#e8f5e9" : r.ach === "Parțial" ? "#fff8e1" : r.ach === "Nu" ? "#ffebee" : "#fff"; const achC = r.ach === "Da" ? G : r.ach === "Parțial" ? "#e65100" : r.ach === "Nu" ? "#c62828" : "#555"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 1}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updCH(i, "data", v)} /><AdaugatDe nume={autor("cheltuieli", r.id)} /></td><td style={td({ background: "#fffde7" })}><select style={sel({ textAlign: "center" })} value={r.gk || ""} onChange={(e) => updCH(i, "gk", e.target.value)}>{GREENKRAFT_OPT.map((o) => <option key={o}>{o}</option>)}</select></td><td style={td({ background: rowBg })}><FastInput style={inp({ textAlign: "right" })} value={r.suma || ""} onChange={(e) => updCH(i, "suma", e.target.value)} /></td><td style={td({ background: "#fffde7" })}><select style={sel({ textAlign: "center" })} value={r.cat || ""} onChange={(e) => updCH(i, "cat", e.target.value)}>{CATEGORIE_CH.map((o) => <option key={o}>{o}</option>)}</select></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><FastInput title={r.det || undefined} style={inp({ textAlign: "center" })} value={r.det || ""} onChange={(e) => updCH(i, "det", e.target.value)} /></td><td style={td({ background: achBg })}><select style={sel({ color: achC, fontWeight: 700, textAlign: "center" })} value={r.ach || ""} onChange={(e) => updCH(i, "ach", e.target.value)}><option value=""></option><option>Da</option><option>Parțial</option><option>Nu</option></select></td><td style={td({ background: "#fffde7" })}><ACStrict value={r.ach_de || ""} options={achitatOptions} onChange={(v) => updCH(i, "ach_de", v)} placeholder="—" /></td><td style={td({ textAlign: "center", background: r.luna_precedenta ? "#fff3e0" : rowBg })}><input type="checkbox" checked={!!r.luna_precedenta} onChange={(e) => updCH(i, "luna_precedenta", e.target.checked)} style={{ cursor: "pointer", width: 16, height: 16 }} /></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><FastInput title={r.note || undefined} style={inp({ textAlign: "center" })} value={r.note || ""} onChange={(e) => updCH(i, "note", e.target.value)} /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delCH(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
-                <tfoot><tr style={{ background: G, color: "#fff" }}><td></td><td colSpan={2} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(chFiltered.reduce((s, r) => s + parseSuma(r.suma), 0))}</td><td colSpan={6}></td><td></td></tr></tfoot>
+                <tbody>{chFiltered.map((r, idx) => { const i = chRows.indexOf(r); const rowBg = idx % 2 === 0 ? "#fff" : "#f7faf8"; const achBg = r.ach === "Da" ? "#e8f5e9" : r.ach === "Parțial" ? "#fff8e1" : r.ach === "Nu" ? "#ffebee" : "#fff"; const achC = r.ach === "Da" ? G : r.ach === "Parțial" ? "#e65100" : r.ach === "Nu" ? "#c62828" : "#555"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{idx + 1}</td><td style={td({ background: rowBg })}><DateInput value={r.data || ""} onChange={(v) => updCH(i, "data", v)} /><AdaugatDe nume={autor("cheltuieli", r.id)} /></td><td style={td({ background: "#fffde7" })}><select style={sel({ textAlign: "center" })} value={r.gk || ""} onChange={(e) => updCH(i, "gk", e.target.value)}>{GREENKRAFT_OPT.map((o) => <option key={o}>{o}</option>)}</select></td><td style={td({ background: rowBg })}><FastInput style={inp({ textAlign: "right" })} value={r.suma || ""} onChange={(e) => updCH(i, "suma", e.target.value)} /></td><td style={td({ background: "#fffde7" })}><select style={sel({ textAlign: "center" })} value={r.cat || ""} onChange={(e) => updCH(i, "cat", e.target.value)}>{CATEGORIE_CH.map((o) => <option key={o}>{o}</option>)}</select></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><FastInput title={r.det || undefined} style={inp({ textAlign: "center" })} value={r.det || ""} onChange={(e) => updCH(i, "det", e.target.value)} /></td><td style={td({ background: achBg })}><select style={sel({ color: achC, fontWeight: 700, textAlign: "center" })} value={r.ach || ""} onChange={(e) => updCH(i, "ach", e.target.value)}><option value=""></option><option>Da</option><option>Parțial</option><option>Nu</option></select></td><td style={td({ background: "#fffde7" })}><ACStrict value={r.ach_de || ""} options={achitatOptions} onChange={(v) => updCH(i, "ach_de", v)} placeholder="—" /></td><td style={td({ textAlign: "center", background: r.luna_precedenta ? "#fff3e0" : rowBg })}><input type="checkbox" checked={!!r.luna_precedenta} onChange={(e) => updCH(i, "luna_precedenta", e.target.checked)} style={{ cursor: "pointer", width: 16, height: 16 }} /></td><td style={td({ textAlign: "center", background: r.din_casa ? "#b2ebf2" : rowBg })} title={r.din_casa ? `Se scade din casă: ${fmt(parseSuma(r.suma) || 0)} lei` : "Bifează dacă ai plătit din banii aduși în casă"}><input type="checkbox" checked={!!r.din_casa} onChange={(e) => toggleDinCasaCh(r, e.target.checked)} style={{ cursor: "pointer", width: 16, height: 16 }} /></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><FastInput title={r.note || undefined} style={inp({ textAlign: "center" })} value={r.note || ""} onChange={(e) => updCH(i, "note", e.target.value)} /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delCH(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                <tfoot><tr style={{ background: G, color: "#fff" }}><td></td><td colSpan={2} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(chFiltered.reduce((s, r) => s + parseSuma(r.suma), 0))}</td><td colSpan={7}></td><td></td></tr></tfoot>
               </table>
             </div>
             <AddBtn onClick={addCH} label="+ Adaugă cheltuială" />
@@ -6597,12 +6669,59 @@ Reguli:
                   )}
                 </table>
               </div>
-              {achizitiiDinCasa.length > 0 && (
+              {cheltuitDinCasa > 0 && (
                 <div style={{ marginTop: 10, fontSize: 12, color: "#555" }}>
-                  Scăzute din casă: <strong>{achizitiiDinCasa.length}</strong> {achizitiiDinCasa.length === 1 ? "achiziție" : "achiziții"} bifate „Din casă", în total <strong style={{ color: "#bf360c" }}>{fmt(cheltuitDinCasa)} lei</strong>.{" "}
+                  Scăzute din casă: <strong>{achizitiiDinCasa.length}</strong> {achizitiiDinCasa.length === 1 ? "achiziție" : "achiziții"} (<strong style={{ color: "#bf360c" }}>{fmt(totalAchizitiiDinCasa)} lei</strong>){" "}
+                  și <strong>{cheltuieliDinCasa.length}</strong> {cheltuieliDinCasa.length === 1 ? "cheltuială" : "cheltuieli"} (<strong style={{ color: "#bf360c" }}>{fmt(totalCheltuieliDinCasa)} lei</strong>).{" "}
                   <span onClick={() => setTab("colectari")} style={{ color: "#1565c0", cursor: "pointer", textDecoration: "underline" }}>Vezi în Achiziții</span>
+                  {" · "}
+                  <span onClick={() => setTab("cheltuieli")} style={{ color: "#1565c0", cursor: "pointer", textDecoration: "underline" }}>în Cheltuieli</span>
                 </div>
               )}
+            </div>
+
+            {/* ── Registru de casă, zi de zi ── */}
+            <div style={{ marginTop: 26 }}>
+              <div style={{ fontWeight: 700, color: "#00838f", fontSize: 14, marginBottom: 4 }}>📅 Registru de casă — zi de zi</div>
+              <div style={{ fontSize: 11, color: "#777", marginBottom: 10 }}>
+                Ținut de la {REGISTRU_CASA_START}. Ziua începe cu soldul cu care s-a încheiat ziua anterioară. Se calculează din înregistrări, deci se îndreaptă singur dacă corectezi ceva mai târziu.
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 760 }}>
+                  <colgroup><col style={{ width: 110 }} /><col style={{ width: 120 }} /><col style={{ width: 115 }} /><col style={{ width: 125 }} /><col style={{ width: 125 }} /><col style={{ width: 125 }} /></colgroup>
+                  <thead><tr style={{ background: "#00838f" }}>
+                    <th style={th({ textAlign: "center" })}>Ziua</th>
+                    <th style={th({ textAlign: "center" })}>Început de zi</th>
+                    <th style={th({ textAlign: "center" })}>Bani aduși</th>
+                    <th style={th({ textAlign: "center" })}>Achiziții</th>
+                    <th style={th({ textAlign: "center" })}>Cheltuieli</th>
+                    <th style={th({ textAlign: "center" })}>Rămas la final</th>
+                  </tr></thead>
+                  <tbody>
+                    <tr style={{ background: "#f5f5f5" }}>
+                      <td style={td({ textAlign: "center", fontWeight: 600, color: "#777" })}>până la {REGISTRU_CASA_START}</td>
+                      <td colSpan={4} style={td({ color: "#777", fontSize: 11 })}>sold de pornire (tot ce a fost înainte)</td>
+                      <td style={td({ textAlign: "right", fontWeight: 700 })}>{fmt(registruCasa.soldPornire)}</td>
+                    </tr>
+                    {registruCasa.zile.length === 0 && (
+                      <tr><td colSpan={6} style={{ textAlign: "center", padding: 18, color: "#aaa", fontSize: 12 }}>Nicio mișcare de casă de la {REGISTRU_CASA_START} încoace.</td></tr>
+                    )}
+                    {registruCasa.zile.map((z, i) => {
+                      const esteAzi = z.data === today();
+                      return (
+                        <tr key={z.data} style={{ background: esteAzi ? "#fff8e1" : i % 2 === 0 ? "#fff" : "#e0f7fa", height: 34 }}>
+                          <td style={td({ textAlign: "center", fontWeight: 700, color: esteAzi ? "#e65100" : "#00636b" })}>{z.data}{esteAzi && " (azi)"}</td>
+                          <td style={td({ textAlign: "right", fontWeight: 600 })}>{fmt(z.inceput)}</td>
+                          <td style={td({ textAlign: "right", color: z.adus ? "#00695c" : "#bbb", fontWeight: z.adus ? 700 : 400, background: z.adus ? "#e0f2f1" : undefined })}>{z.adus ? "+" + fmt(z.adus) : "—"}</td>
+                          <td style={td({ textAlign: "right", color: z.achizitii ? "#bf360c" : "#bbb", background: z.achizitii ? "#fce4d6" : undefined })}>{z.achizitii ? "−" + fmt(z.achizitii) : "—"}</td>
+                          <td style={td({ textAlign: "right", color: (z.cheltuieli + z.platiVechi) ? "#bf360c" : "#bbb", background: (z.cheltuieli + z.platiVechi) ? "#fce4d6" : undefined })}>{(z.cheltuieli + z.platiVechi) ? "−" + fmt(z.cheltuieli + z.platiVechi) : "—"}</td>
+                          <td style={td({ textAlign: "right", fontWeight: 700, background: z.ramas < 0 ? "#ffebee" : "#e8f5e9", color: z.ramas < 0 ? "#c62828" : G })}>{fmt(z.ramas)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
