@@ -1171,6 +1171,7 @@ export default function App() {
       setAuditLog(data || []);
     })();
   }, [currentUser]);
+  const [avSubTab, setAvSubTab] = useState("avansuri"); // avansuri | casa | registru
   const [bordSubTab, setBordSubTab] = useState("editor");
   const [regPfMonth, setRegPfMonth] = useState("");
   const [regPfSearch, setRegPfSearch] = useState("");
@@ -6479,6 +6480,16 @@ Reguli:
         {/* ══ AVANSURI & DIVIDENDE ══ */}
         {tab === "avansuri" && (
           <div>
+            {/* Trei secțiuni separate — altfel pagina devine un singur sul lung */}
+            <div style={{ display: "flex", gap: 2, marginBottom: 14, borderBottom: "2px solid #e0e0e0", flexWrap: "wrap" }}>
+              {[["avansuri", "💵 Avansuri & Dividende", "#6a1b9a"], ["casa", "💰 Bani aduși în casă", "#00838f"], ["registru", "📅 Registru de casă", "#00838f"]].map(([k, l, c]) => (
+                <button key={k} onClick={() => setAvSubTab(k)} style={{ padding: "8px 18px", cursor: "pointer", border: "none", fontWeight: 700, fontSize: 12.5, marginBottom: -2, borderBottom: avSubTab === k ? `3px solid ${c}` : "3px solid transparent", background: avSubTab === k ? "#fafafa" : "transparent", color: avSubTab === k ? c : "#777" }}>
+                  {l}{k === "casa" && <span style={{ marginLeft: 6, background: ramasInCasaTotal < 0 ? "#c62828" : "#00838f", color: "#fff", borderRadius: 10, padding: "1px 7px", fontSize: 10 }}>{fmt(ramasInCasaTotal)}</span>}
+                </button>
+              ))}
+            </div>
+
+            {avSubTab === "avansuri" && (<>
             <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
               <SC label="Total Avansuri" value={fmt(totAvans) + " lei"} c="#e65100" bg="#fff3e0" />
               <SC label="Total Dividende" value={fmt(totDiv) + " lei"} c="#1565c0" bg="#e3f2fd" />
@@ -6494,7 +6505,6 @@ Reguli:
               <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
                 <button onClick={() => addAV("avans")} style={{ padding: "6px 14px", background: "#e65100", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Avans</button>
                 <button onClick={() => addAV("dividend")} style={{ padding: "6px 14px", background: "#1565c0", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Dividend</button>
-                <button onClick={addBaniAdusi} style={{ padding: "6px 14px", background: "#00838f", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Bani aduși</button>
               </div>
             </div>
             <div style={{ overflowX: "auto" }}>
@@ -6612,9 +6622,15 @@ Reguli:
               </table>
             </div>
 
+            </>)}
+
+            {avSubTab === "casa" && (<>
             {/* ── Bani aduși în casă ── */}
             <div style={{ marginTop: 26 }}>
-              <div style={{ fontWeight: 700, color: "#00838f", fontSize: 14, marginBottom: 10 }}>💵 Bani aduși în casă</div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, gap: 10, flexWrap: "wrap" }}>
+                <div style={{ fontWeight: 700, color: "#00838f", fontSize: 14 }}>💵 Bani aduși în casă</div>
+                <button onClick={addBaniAdusi} style={{ padding: "6px 14px", background: "#00838f", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Bani aduși</button>
+              </div>
               <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
                 <SC label="Total adus" value={fmt(totalAdusInCasa) + " lei"} c="#00695c" bg="#e0f2f1" />
                 {platiVechiTotal > 0 && <SC label="Plăți anterioare" value={fmt(platiVechiTotal) + " lei"} c="#6a1b9a" bg="#f3e5f5" />}
@@ -6679,7 +6695,9 @@ Reguli:
                 </div>
               )}
             </div>
+            </>)}
 
+            {avSubTab === "registru" && (<>
             {/* ── Registru de casă, zi de zi ── */}
             <div style={{ marginTop: 26 }}>
               <div style={{ fontWeight: 700, color: "#00838f", fontSize: 14, marginBottom: 4 }}>📅 Registru de casă — zi de zi</div>
@@ -6723,6 +6741,7 @@ Reguli:
                 </table>
               </div>
             </div>
+            </>)}
           </div>
         )}
 
