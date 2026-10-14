@@ -1227,6 +1227,15 @@ export default function App() {
     } catch (e) { alert("Eroare backup: " + e.message); }
     setBackupLoading(false);
   };
+  // Ctrl+K deschide căutarea de oriunde; Escape o închide.
+  useEffect(() => {
+    const t = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setCautareDeschisa(true); }
+      else if (e.key === "Escape") setCautareDeschisa(false);
+    };
+    window.addEventListener("keydown", t);
+    return () => window.removeEventListener("keydown", t);
+  }, []);
   // ── Load audit log ────────────────────────────────────────
   useEffect(() => {
     (async () => {
@@ -1422,6 +1431,9 @@ export default function App() {
   const [anexa3List, setAnexa3List] = useState([]);
   const [a3SubTab, setA3SubTab] = useState("nou");
   const [a3Filter, setA3Filter] = useState("");
+  // Căutare peste toate secțiunile. Se deschide cu butonul din antet sau cu Ctrl+K.
+  const [cautareDeschisa, setCautareDeschisa] = useState(false);
+  const [cautare, setCautare] = useState("");
   const [a3Luna, setA3Luna] = useState("");
   const [a3KgInput, setA3KgInput] = useState({});
   const [expandedA3, setExpandedA3] = useState(null); // id of expanded (editable) anexa3 row
@@ -3922,6 +3934,52 @@ Reguli:
   const ziuaDeAzi = registruCasa.zile.find((z) => z.data === today())
     || { data: today(), inceput: ramasInCasaTotal, adus: 0, platiVechi: 0, achizitii: 0, cheltuieli: 0, iesit: 0, ramas: ramasInCasaTotal };
 
+  // Rezultatele căutării globale: caut în tot ce are un nume, un număr sau un CUI.
+  // Fiecare rezultat știe în ce secțiune duce și ce filtru să pună acolo.
+  const rezultateCautare = (() => {
+    const q = cautare.trim().toLowerCase();
+    if (q.length < 2) return [];
+    const contine = (...valori) => valori.some((v) => String(v || "").toLowerCase().includes(q));
+    const out = [];
+    const adauga = (grup, titlu, detaliu, mergi) => { if (out.length < 60) out.push({ grup, titlu, detaliu, mergi }); };
+
+    ticheteList.filter((t) => contine(t.nr_tichet, t.nr_masina, t.partener, t.material, t.aviz)).slice(0, 12)
+      .forEach((t) => adauga("⚖️ Tichete cântar", `TC ${t.nr_tichet} · ${t.partener || "—"}`,
+        `${t.data || ""} · ${t.nr_masina || ""} · ${t.material || ""}`,
+        () => { setTab("cantar"); setTicSubTab("registru"); setTicFilter(String(t.nr_tichet)); }));
+
+    [...pjList, ...pfList].filter((f) => contine(f.denumire, f.cod_fiscal)).slice(0, 10)
+      .forEach((f) => adauga("🏢 Parteneri", f.denumire || "—", f.cod_fiscal || "",
+        () => { setTab("produse"); }));
+
+    colRows.filter((r) => contine(r.furn, r.nr_doc, r.produs)).slice(0, 12)
+      .forEach((r) => adauga("🚛 Achiziții", `${r.furn || "—"} · ${r.nr_doc || "fără doc."}`,
+        `${r.data || ""} · ${r.produs || ""} · ${fmt((parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0))} lei`,
+        () => { setTab("colectari"); setColMonth(""); setColSearch(r.furn || r.nr_doc || ""); }));
+
+    livRows.filter((r) => contine(r.client, r.nr, r.produs)).slice(0, 12)
+      .forEach((r) => adauga("📤 Vânzări", `${r.client || "—"} · ${r.nr || "fără nr."}`,
+        `${r.data || ""} · ${r.produs || ""}`,
+        () => { setTab("livrari"); setLivMonth(""); setLivSearch(r.client || r.nr || ""); }));
+
+    chRows.filter((r) => contine(r.det, r.cat, r.note)).slice(0, 10)
+      .forEach((r) => adauga("💸 Cheltuieli", `${r.det || r.cat || "—"} · ${fmt(parseSuma(r.suma) || 0)} lei`,
+        `${r.data || ""} · ${r.cat || ""}`,
+        () => { setTab("cheltuieli"); setChMonth(""); setChSearch(r.det || ""); }));
+
+    anexa3List.filter((a) => contine(a.numar, a.serie, a.expeditor, a.destinatar, a.delegat_auto)).slice(0, 10)
+      .forEach((a) => adauga("📜 Anexa 3", `${a.serie} ${a.numar} · ${a.destinatar || "—"}`,
+        `${a.data_incarcare || ""} · ${a.categorie || ""}`,
+        () => { setTab("pv"); setPvSubTab("anexa3"); setA3SubTab("registru"); setA3Filter(String(a.numar)); }));
+
+    registru.filter((r) => contine(r.nr, r.serie, r.det, r.cnp)).slice(0, 10)
+      .forEach((r) => adauga("📄 Borderouri", `${r.serie} ${r.nr} · ${r.det || "—"}`,
+        `${r.data || ""} · ${r.denumire || ""}`,
+        () => { setTab("borderou"); setBordSubTab("registru"); setRegPfSearch(String(r.nr)); }));
+
+    return out;
+  })();
+
   // Contracte computed
   const filtCT = sortByDateAsc(contracte.filter((r) => !ctSearch || r.companie?.toLowerCase().includes(ctSearch.toLowerCase()) || r.nr?.includes(ctSearch) || r.detalii?.toLowerCase().includes(ctSearch.toLowerCase())));
 
@@ -4080,6 +4138,9 @@ Reguli:
             {ziuaDeAzi.iesit > 0 && <span style={{ fontSize: 10, opacity: 0.8 }}>(−{fmt(ziuaDeAzi.iesit)})</span>}
             {ziuaDeAzi.adus > 0 && <span style={{ fontSize: 10, opacity: 0.8 }}>(+{fmt(ziuaDeAzi.adus)})</span>}
           </div>
+          <button onClick={() => setCautareDeschisa(true)} title="Caută în toată aplicația (Ctrl+K)" style={{ display: "flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.25)", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11 }}>
+            <span>🔍</span><span>Caută</span><span style={{ opacity: 0.6, fontSize: 10 }}>Ctrl+K</span>
+          </button>
           {/* Semn discret ca modificarile au ajuns in baza de date */}
           <SemnSalvare inCurs={salvariInCurs} la={salvatLa} />
           <div style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(255,255,255,0.15)", borderRadius: 6, padding: "4px 10px" }}>
@@ -4399,6 +4460,52 @@ Reguli:
       )}
 
       {/* Modal Editare Tichet (factura/aviz/ore) */}
+      {cautareDeschisa && (
+        <div onClick={() => setCautareDeschisa(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 99999, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "8vh 16px 16px" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 12, width: "min(96vw, 680px)", maxHeight: "78vh", display: "flex", flexDirection: "column", boxShadow: "0 12px 48px rgba(0,0,0,0.35)", overflow: "hidden" }}>
+            <div style={{ padding: 14, borderBottom: "1px solid #eee", display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 18 }}>🔍</span>
+              <input
+                autoFocus
+                value={cautare}
+                onChange={(e) => setCautare(e.target.value)}
+                placeholder="Caută tichet, furnizor, nr. auto, aviz, CUI, borderou…"
+                style={{ flex: 1, minWidth: 0, border: "none", outline: "none", fontSize: 16, padding: "4px 2px" }}
+              />
+              <button onClick={() => setCautareDeschisa(false)} style={{ background: "#f3f3f3", border: "1px solid #ddd", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 12 }}>Esc</button>
+            </div>
+            <div style={{ overflowY: "auto", padding: 8 }}>
+              {cautare.trim().length < 2 && (
+                <div style={{ padding: 28, textAlign: "center", color: "#aaa", fontSize: 13 }}>
+                  Scrie cel puțin două caractere.<br />
+                  <span style={{ fontSize: 11 }}>Caută în tichete, parteneri, achiziții, vânzări, cheltuieli, Anexa 3 și borderouri.</span>
+                </div>
+              )}
+              {cautare.trim().length >= 2 && rezultateCautare.length === 0 && (
+                <div style={{ padding: 28, textAlign: "center", color: "#aaa", fontSize: 13 }}>Nimic găsit pentru „{cautare}".</div>
+              )}
+              {[...new Set(rezultateCautare.map((r) => r.grup))].map((grup) => (
+                <div key={grup} style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#888", padding: "4px 8px", textTransform: "uppercase", letterSpacing: 0.4 }}>{grup}</div>
+                  {rezultateCautare.filter((r) => r.grup === grup).map((r, i) => (
+                    <div
+                      key={i}
+                      onClick={() => { r.mergi(); setCautareDeschisa(false); }}
+                      style={{ padding: "8px 10px", borderRadius: 7, cursor: "pointer", display: "flex", flexDirection: "column", gap: 1 }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "#f1f8f3")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                    >
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "#222" }}>{r.titlu}</div>
+                      <div style={{ fontSize: 11, color: "#888" }}>{r.detaliu}</div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {ticEdit && (
         <div onClick={() => setTicEdit(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 10, width: "min(96vw,440px)", display: "flex", flexDirection: "column", boxShadow: "0 8px 40px rgba(0,0,0,0.35)", overflow: "hidden" }}>
