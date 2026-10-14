@@ -5,6 +5,17 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Greenkraft — Tablou de Bord</title>
+    <style>
+      /* Randul de sub cursor se inchide putin la culoare. Folosim brightness ca sa
+         pastram culorile care inseamna ceva (achitat, din casa, totaluri) — doar le
+         inchidem, nu le inlocuim. */
+      tbody tr:hover > td { filter: brightness(0.955); }
+      /* Bara de derulare a tabelelor, mai discreta */
+      ::-webkit-scrollbar { width: 10px; height: 10px; }
+      ::-webkit-scrollbar-thumb { background: #c4cfc7; border-radius: 6px; }
+      ::-webkit-scrollbar-thumb:hover { background: #a8b6ab; }
+      ::-webkit-scrollbar-track { background: #f2f4f3; }
+    </style>
   </head>
   <body>
     <div id="root"></div>
