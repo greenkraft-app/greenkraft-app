@@ -1805,6 +1805,25 @@ export default function App() {
   // Extrage "HH:MM" dintr-un timestamp "DD.MM.YYYY HH:MM:SS" (sau orice text ce contine un HH:MM) —
   // folosit ca sa tina Ora intrare/iesire sincronizata cu Cantarit BRUT/TARA la, editate manual.
   const extractOra = (ts) => { const m = String(ts || "").match(/(\d{1,2}):(\d{2})/); return m ? `${m[1].padStart(2, "0")}:${m[2]}` : null; };
+  // Ultima tara cântărită pentru o mașină. Tara unui camion e aproape mereu aceeași,
+  // deci merită arătată când alegi mașina: o pui direct dacă vine gol, sau o folosești
+  // ca verificare. Căutăm după numărul de înmatriculare, în tichetele care au tara.
+  const ultimaTaraPentru = (nrAuto, exclusId) => {
+    const auto = String(nrAuto || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (!auto) return null;
+    const potrivite = ticheteList.filter(
+      (t) => String(t.id) !== String(exclusId)
+        && String(t.nr_masina || "").toUpperCase().replace(/[^A-Z0-9]/g, "") === auto
+        && t.tara != null && t.tara !== "" && parseSuma(t.tara) > 0
+    );
+    if (!potrivite.length) return null;
+    const t = potrivite.sort((a, b) =>
+      ((parseDateRO(b.data) || 0) - (parseDateRO(a.data) || 0))
+      || ((parseInt(b.nr_tichet) || 0) - (parseInt(a.nr_tichet) || 0))
+    )[0];
+    return { tara: parseSuma(t.tara), data: t.data, nr: t.nr_tichet, partener: t.partener || "" };
+  };
+
   const getNextTichetNr = () => {
     const nrs = ticheteList.map((t) => parseInt(t.nr_tichet) || 0);
     const maxNr = nrs.length ? Math.max(...nrs) : 0;
@@ -6242,6 +6261,27 @@ Reguli:
                         <FastInput style={{ flex: 1, padding: "14px", border: `2px solid ${G}`, borderRadius: 8, fontSize: 26, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="text" inputMode="decimal" value={ticNou.greutate} onChange={(e) => setTicNou((p) => ({ ...p, greutate: e.target.value }))} placeholder="0" />
                         <span style={{ alignSelf: "center", fontSize: 15, color: "#888", fontWeight: 600 }}>kg</span>
                       </div>
+                      {(() => {
+                        // ultima tara a masinii alese — pusa aici, langa cantarire
+                        const ut = ultimaTaraPentru(ticNou.nr_masina);
+                        if (!ut) return null;
+                        const eTara = ticNou.prima === "gol";
+                        return (
+                          <div style={{ background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 7, padding: "8px 10px", marginBottom: 8 }}>
+                            <div style={{ fontSize: 11, color: "#8d6e63" }}>Ultima tară pentru <strong>{ticNou.nr_masina}</strong></div>
+                            <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                              <span style={{ fontSize: 19, fontWeight: 700, color: "#e65100", fontFamily: "monospace" }}>{fmt(ut.tara)} kg</span>
+                              <span style={{ fontSize: 10, color: "#999" }}>TC {ut.nr} · {ut.data}{ut.partener ? " · " + ut.partener : ""}</span>
+                            </div>
+                            {eTara && (
+                              <button onClick={() => setTicNou((p) => ({ ...p, greutate: String(ut.tara) }))} style={{ marginTop: 6, padding: "5px 10px", background: "#e65100", color: "#fff", border: "none", borderRadius: 5, cursor: "pointer", fontSize: 11, fontWeight: 700 }}>Pune {fmt(ut.tara)} la cântărire</button>
+                            )}
+                            {!eTara && parseSuma(ticNou.greutate) > ut.tara && (
+                              <div style={{ fontSize: 11, color: "#33691e", marginTop: 4 }}>Net estimat: <strong>{fmt(parseSuma(ticNou.greutate) - ut.tara)} kg</strong></div>
+                            )}
+                          </div>
+                        );
+                      })()}
                       {scalePort && <button onClick={() => useScaleWeight((v) => setTicNou((p) => ({ ...p, greutate: v })))} style={{ padding: "10px", background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: `1px solid ${G}`, borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700, color: G, marginBottom: 8 }}>⚖️ Preia din cântar {scaleReading ? `(${fmt(scaleReading.value)} kg)` : ""}</button>}
                       {!scalePort && cantarLive?.fresh && <button onClick={() => useLiveWeight((v) => setTicNou((p) => ({ ...p, greutate: v })))} style={{ padding: "10px", background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#1565c0", marginBottom: 8 }}>📡 Preia live de la birou ({fmt(cantarLive.value)} kg)</button>}
                       <button onClick={salveazaTichet1} disabled={ticSaving} style={{ marginTop: "auto", padding: "13px", background: ticSaving ? "#9e9e9e" : `linear-gradient(135deg,#1b5e20,${G})`, color: "#fff", border: "none", borderRadius: 8, cursor: ticSaving ? "wait" : "pointer", fontSize: 14, fontWeight: 700 }}>{ticSaving ? "⏳ Se salvează..." : `💾 Deschide tichet TC #${getNextTichetNr()}`}</button>
@@ -6273,6 +6313,20 @@ Reguli:
                             <FastInput style={{ width: "100%", padding: "6px", border: "1.5px solid #ffa726", borderRadius: 6, fontSize: 15, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="text" inputMode="decimal" value={ticTaraInput[t.id] || ""} onChange={(e) => setTicTaraInput((p) => ({ ...p, [t.id]: e.target.value }))} placeholder="kg" />
                           </div>
                         </div>
+                        {(() => {
+                          // la a doua cantarire tara e cea care se trece, deci aratam ultima stiuta
+                          if (t.brut == null) return null;
+                          const ut = ultimaTaraPentru(t.nr_masina, t.id);
+                          if (!ut) return null;
+                          return (
+                            <div style={{ background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 6, padding: "5px 8px", marginBottom: 8, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                              <span style={{ fontSize: 10, color: "#8d6e63" }}>Ultima tară:</span>
+                              <strong style={{ fontSize: 13, color: "#e65100", fontFamily: "monospace" }}>{fmt(ut.tara)}</strong>
+                              <span style={{ fontSize: 9, color: "#aaa" }}>TC {ut.nr} · {ut.data}</span>
+                              <button onClick={() => setTicTaraInput((p) => ({ ...p, [t.id]: String(ut.tara) }))} title="Pune această valoare la cântărire" style={{ marginLeft: "auto", padding: "2px 8px", background: "#e65100", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", fontSize: 10, fontWeight: 700 }}>pune</button>
+                            </div>
+                          );
+                        })()}
                         <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
                           {scalePort && <button onClick={() => useScaleWeight((v) => setTicTaraInput((p) => ({ ...p, [t.id]: v })))} style={{ flex: 1, padding: "5px", background: "#e8f5e9", border: "1px solid #a5d6a7", borderRadius: 5, cursor: "pointer", fontSize: 11, color: G, fontWeight: 600 }}>⚖️ Din cântar</button>}
                           {!scalePort && cantarLive?.fresh && <button onClick={() => useLiveWeight((v) => setTicTaraInput((p) => ({ ...p, [t.id]: v })))} style={{ flex: 1, padding: "5px", background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 5, cursor: "pointer", fontSize: 11, color: "#1565c0", fontWeight: 600 }}>📡 Live birou</button>}
