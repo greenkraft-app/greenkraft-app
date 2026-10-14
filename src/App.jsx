@@ -4600,7 +4600,7 @@ Reguli:
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                     {[...taskuri].sort((a, b) => (a.done === b.done ? 0 : a.done ? 1 : -1)).map((t) => (
-                      <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 8px", background: t.done ? "#f5f5f5" : t.prioritate === "urgent" ? "#fff5f5" : "#f8fbff", border: `1px solid ${t.done ? "#e0e0e0" : t.prioritate === "urgent" ? "#ffcdd2" : "#bbdefb"}`, borderRadius: 6 }}>
+                      <div key={t.id} style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6, padding: "5px 8px", background: t.done ? "#f5f5f5" : t.prioritate === "urgent" ? "#fff5f5" : "#f8fbff", border: `1px solid ${t.done ? "#e0e0e0" : t.prioritate === "urgent" ? "#ffcdd2" : "#bbdefb"}`, borderRadius: 6 }}>
                         <input type="checkbox" checked={t.done} onChange={() => toggleTask(t.id, t.done)} style={{ cursor: "pointer", width: 16, height: 16, flexShrink: 0 }} title="Bifează ca terminat" />
                         <select value={t.prioritate || "normal"} onChange={(e) => updTask(t.id, "prioritate", e.target.value)} title="Prioritate" style={{ border: "none", outline: "none", background: "transparent", cursor: "pointer", fontSize: 13, flexShrink: 0, width: 26 }}>
                           <option value="normal">⚪</option>
@@ -4610,7 +4610,7 @@ Reguli:
                           value={t.text || ""}
                           onChange={(e) => updTask(t.id, "text", e.target.value)}
                           title={t.text || undefined}
-                          style={{ flex: 1, minWidth: 90, border: "1px solid transparent", outline: "none", background: "transparent", borderRadius: 4, padding: "3px 5px", fontSize: 13, textDecoration: t.done ? "line-through" : "none", color: t.done ? "#aaa" : "#333", textOverflow: "ellipsis" }}
+                          style={{ flex: 1, minWidth: 70, border: "1px solid transparent", outline: "none", background: "transparent", borderRadius: 4, padding: "3px 5px", fontSize: 13, textDecoration: t.done ? "line-through" : "none", color: t.done ? "#aaa" : "#333", textOverflow: "ellipsis" }}
                           onFocus={(e) => (e.target.style.border = "1px solid #90caf9")}
                           onBlur={(e) => (e.target.style.border = "1px solid transparent")}
                         />
@@ -4798,10 +4798,12 @@ Reguli:
                     <div style={{ flex: 1, minWidth: 260 }}>
                       <div style={{ background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 8, padding: 12, marginBottom: 10 }}>
                         <div style={{ fontWeight: 700, color: "#e65100", marginBottom: 8, fontSize: 12 }}>📦 Produse / Deșeuri</div>
-                        <table style={{ borderCollapse: "collapse", width: "100%" }}>
+                        <div style={{ overflowX: "auto" }}>
+                        <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 340 }}>
                           <thead><tr><th style={th({ background: "#e65100", minWidth: 170 })}>Denumire</th><th style={th({ width: 85, background: "#e65100" })}>CodSAGA</th><th style={th({ width: 96, background: "#e65100" })}>Cant.(kg)</th><th style={th({ width: 68, background: "#e65100" })}>Preț</th><th style={th({ width: 72, background: "#e65100" })}>Valoare</th><th style={th({ width: 26, background: "#e65100" })}></th></tr></thead>
                           <tbody>{b.produse.map((p, i) => { const v = parseSuma(p.cant) * parseSuma(p.pret); return (<tr key={i} style={{ background: i % 2 === 0 ? "#fff" : "#fffde7" }}><td style={td()}><ACStrict value={p.den} options={PRODUSE_DYN} placeholder="Selectează..." onChange={(v) => updP(i, "den", v)} /></td><td style={td()}><FastInput style={inp({ textAlign: "center" })} value={p.cod_art || ""} onChange={(e) => updP(i, "cod_art", e.target.value)} /></td><td style={td()}><div style={{ display: "flex", gap: 2, alignItems: "center" }}><FastInput style={inpNum({ textAlign: "right", minWidth: 34 })} type="text" inputMode="decimal" value={p.cant} onChange={(e) => updP(i, "cant", e.target.value)} />{scalePort && <button onClick={() => useScaleWeight(v => updP(i, "cant", v))} title="Citește din cantar" style={{ background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: "1px solid #ccc", borderRadius: 3, padding: "1px 3px", cursor: "pointer", fontSize: 10, flexShrink: 0 }}>⚖️</button>}</div></td><td style={td()}><FastInput style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={p.pret} onChange={(e) => updP(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", fontWeight: 600, background: "#fff8e1" })}>{v > 0 ? fmt(v) : "—"}</td><td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => setB((b) => ({ ...b, produse: b.produse.filter((_, j) => j !== i) }))} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
                         </table>
+                        </div>
                         <button onClick={() => setB((b) => ({ ...b, produse: [...b.produse, { den: "", cod: "", cod_art: "", cant: "", pret: "" }] }))} style={{ marginTop: 6, background: "#e65100", color: "#fff", border: "none", borderRadius: 4, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Adaugă produs</button>
                       </div>
                       <div style={{ background: "#f3e5f5", border: "1px solid #ce93d8", borderRadius: 8, padding: 12 }}>
@@ -4812,7 +4814,7 @@ Reguli:
                     </div>
                   </div>
                 )}
-                {previewMode && (<div ref={printRef} style={{ border: "1px solid #ccc", borderRadius: 4, padding: 8, background: "#fff" }}><BordPrint b={b} /></div>)}
+                {previewMode && (<div style={{ overflowX: "auto" }}><div ref={printRef} style={{ border: "1px solid #ccc", borderRadius: 4, padding: 8, background: "#fff", minWidth: "fit-content" }}><BordPrint b={b} /></div></div>)}
               </div>
             )}
 
@@ -5098,7 +5100,8 @@ Reguli:
                             );
                           })()}
                         </div>
-                        <table style={{ borderCollapse: "collapse", width: "100%" }}>
+                        <div style={{ overflowX: "auto" }}>
+                        <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 340 }}>
                           <thead><tr><th style={th({ background: "#e65100", minWidth: 200 })}>Denumire</th><th style={th({ width: 85, background: "#e65100" })}>CodSAGA</th><th style={th({ width: 96, background: "#e65100" })}>Cant.(kg)</th><th style={th({ width: 26, background: "#e65100" })}></th></tr></thead>
                           <tbody>{pv.materiale.map((m, i) => (
                             <tr key={i} style={{ background: i % 2 === 0 ? "#fff" : "#fffde7" }}>
@@ -5109,6 +5112,7 @@ Reguli:
                             </tr>
                           ))}</tbody>
                         </table>
+                        </div>
                         <button onClick={() => setPV((p) => ({ ...p, materiale: [...p.materiale, { den: "", cod: "", cod_art: "", cant: "" }] }))} style={{ marginTop: 6, background: "#e65100", color: "#fff", border: "none", borderRadius: 4, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Adaugă material</button>
                       </div>
                     </div>
@@ -5116,8 +5120,10 @@ Reguli:
                 )}
 
                 {pvPreview && (
-                  <div style={{ border: "1px solid #ccc", borderRadius: 4, padding: 8, background: "#fff" }}>
-                    <PVPrint pv={pv} />
+                  <div style={{ overflowX: "auto" }}>
+                    <div style={{ border: "1px solid #ccc", borderRadius: 4, padding: 8, background: "#fff", minWidth: "fit-content" }}>
+                      <PVPrint pv={pv} />
+                    </div>
                   </div>
                 )}
               </div>
@@ -5688,7 +5694,7 @@ Reguli:
                 <option value="">📂 Toate cat.</option>
                 {CATEGORIE_COL.map(c => <option key={c}>{c}</option>)}
               </select>
-              <select value={colFurn} onChange={(e) => setColFurn(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}>
+              <select value={colFurn} onChange={(e) => setColFurn(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12, maxWidth: "min(260px, 100%)" }}>
                 <option value="">🏢 Toți furnizorii</option>
                 {colFurnFilterOptions.map(f => <option key={f}>{f}</option>)}
               </select>
@@ -5781,7 +5787,7 @@ Reguli:
                 <span style={{ fontSize: 11, color: "#777" }}>până la</span>
                 <DateInput value={livDataPana} onChange={setLivDataPana} style={{ border: "1px solid #ccc", padding: "5px 6px", fontSize: 12 }} />
               </div>
-              <select value={livClient} onChange={(e) => setLivClient(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}>
+              <select value={livClient} onChange={(e) => setLivClient(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12, maxWidth: "min(260px, 100%)" }}>
                 <option value="">🏢 Toți clienții</option>
                 {clientFilterOptions.map(c => <option key={c}>{c}</option>)}
               </select>
@@ -6222,7 +6228,7 @@ Reguli:
                   </div>
                   <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
                     {/* Coloana stanga: date transport */}
-                    <div style={{ flex: "1 1 380px", background: "#fff", border: "1px solid #e0e0e0", borderRadius: 10, padding: 16 }}>
+                    <div style={{ flex: "1 1 380px", minWidth: 0, background: "#fff", border: "1px solid #e0e0e0", borderRadius: 10, padding: 16 }}>
                       <div style={{ fontWeight: 700, color: "#444", fontSize: 12, marginBottom: 12, textTransform: "uppercase", letterSpacing: 0.5 }}>Date transport</div>
                       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
                         <select style={{ ...FI, flex: 1, fontWeight: 700, color: ticNou.tip === "Intrare" ? G : "#bf360c" }} value={ticNou.tip} onChange={(e) => setTicNou((p) => ({ ...p, tip: e.target.value }))}>
@@ -6255,10 +6261,10 @@ Reguli:
                       </div>
                     </div>
                     {/* Coloana dreapta: cantarirea */}
-                    <div style={{ flex: "1 1 280px", background: "#fff", border: `1px solid ${G}`, borderRadius: 10, padding: 16, display: "flex", flexDirection: "column" }}>
+                    <div style={{ flex: "1 1 280px", minWidth: 0, background: "#fff", border: `1px solid ${G}`, borderRadius: 10, padding: 16, display: "flex", flexDirection: "column" }}>
                       <div style={{ fontWeight: 700, color: G, fontSize: 12, marginBottom: 12, textTransform: "uppercase", letterSpacing: 0.5 }}>⚖️ Cântărirea 1 — {ticNou.prima === "plin" ? "Brut (plin)" : "Tara (gol)"} <span style={{ color: "#c62828" }}>*</span></div>
                       <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-                        <FastInput style={{ flex: 1, padding: "14px", border: `2px solid ${G}`, borderRadius: 8, fontSize: 26, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="text" inputMode="decimal" value={ticNou.greutate} onChange={(e) => setTicNou((p) => ({ ...p, greutate: e.target.value }))} placeholder="0" />
+                        <FastInput style={{ flex: 1, minWidth: 0, padding: "14px", border: `2px solid ${G}`, borderRadius: 8, fontSize: 26, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="text" inputMode="decimal" value={ticNou.greutate} onChange={(e) => setTicNou((p) => ({ ...p, greutate: e.target.value }))} placeholder="0" />
                         <span style={{ alignSelf: "center", fontSize: 15, color: "#888", fontWeight: 600 }}>kg</span>
                       </div>
                       {(() => {
@@ -6531,7 +6537,7 @@ Reguli:
               <SC label="⏳ Neachitat" value={fmt(totDatNeachitat) + " lei"} c="#c62828" bg="#ffebee" />
               <SC label="✅ Achitat" value={fmt(totDatAchitat) + " lei"} c={G} bg="#e8f5e9" />
               {numeUnici.map((n) => { const tot = datRows.filter((r) => r.nume === n).reduce((s, r) => s + (parseSuma(r.suma) || 0), 0); return <SC key={n} label={n} value={fmt(tot) + " lei"} c="#e65100" bg="#fff3e0" />; })}
-              <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+              <div style={{ marginLeft: "auto", display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
                 <select value={datAchitat} onChange={(e) => setDatAchitat(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 6, padding: "5px 10px", fontSize: 12 }}>
                   <option value="">💰 Toate</option>
                   <option value="Da">✅ Achitate</option>
