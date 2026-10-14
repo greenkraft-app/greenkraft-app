@@ -795,6 +795,26 @@ if (typeof document !== "undefined") {
   document.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === "Tab") trimiteCampurile(); }, true);
 }
 
+// Arata ca o modificare s-a salvat. Dispare singur dupa cateva secunde, ca sa nu
+// stea permanent pe ecran, dar ramane destul cat sa-l vezi.
+function SemnSalvare({ inCurs, la }) {
+  const [acum, setAcum] = useState(Date.now());
+  useEffect(() => {
+    if (!la) return;
+    const t = setTimeout(() => setAcum(Date.now()), 2600);
+    setAcum(Date.now());
+    return () => clearTimeout(t);
+  }, [la]);
+  const proaspat = la && acum - la < 2500;
+  if (!inCurs && !proaspat) return null;
+  return (
+    <div title={inCurs ? "Se salvează în baza de date" : "Toate modificările sunt salvate"} style={{ display: "flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,0.15)", borderRadius: 6, padding: "4px 10px", fontSize: 11, whiteSpace: "nowrap" }}>
+      <span>{inCurs ? "⏳" : "✔"}</span>
+      <span>{inCurs ? "Se salvează…" : "Salvat"}</span>
+    </div>
+  );
+}
+
 // Tabelele mari se deseneaza pe portii: fara filtru, Achizitiile au 632 de randuri
 // si peste 5600 de campuri, iar desenarea lor dura peste doua secunde.
 const PAS_RANDURI = 100;
@@ -886,6 +906,9 @@ export default function App() {
   const avizInputRef = useRef();
   const pvPrintRef = useRef();
   const debounce = useRef({});
+  // Salvarea e tacuta si intarziata, deci fara un semn nu stii daca a prins.
+  const [salvariInCurs, setSalvariInCurs] = useState(0);
+  const [salvatLa, setSalvatLa] = useState(0);
 
   // Debounced save to Supabase
   const dbSave = (table, id, changes) => {
@@ -896,7 +919,10 @@ export default function App() {
     Object.entries(changes).forEach(([camp, val]) => editariInCurs.set(`${table}:${id}:${camp}`, val));
     clearTimeout(debounce.current[key]);
     debounce.current[key] = setTimeout(async () => {
+      setSalvariInCurs((n) => n + 1);
       const { error } = await sb.from(table).update(changes).eq("id", id);
+      setSalvariInCurs((n) => Math.max(0, n - 1));
+      if (!error) setSalvatLa(Date.now());
       Object.entries(changes).forEach(([camp, val]) => {
         const k = `${table}:${id}:${camp}`;
         // daca intre timp ai mai scris, valoarea noua e alta — o las marcata ca nesalvata
@@ -4054,6 +4080,8 @@ Reguli:
             {ziuaDeAzi.iesit > 0 && <span style={{ fontSize: 10, opacity: 0.8 }}>(−{fmt(ziuaDeAzi.iesit)})</span>}
             {ziuaDeAzi.adus > 0 && <span style={{ fontSize: 10, opacity: 0.8 }}>(+{fmt(ziuaDeAzi.adus)})</span>}
           </div>
+          {/* Semn discret ca modificarile au ajuns in baza de date */}
+          <SemnSalvare inCurs={salvariInCurs} la={salvatLa} />
           <div style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(255,255,255,0.15)", borderRadius: 6, padding: "4px 10px" }}>
             <span style={{ fontSize: 11 }}>👤</span>
             <span style={{ fontSize: 12, fontWeight: 700 }}>{currentUser || "—"}</span>
