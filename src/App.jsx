@@ -2098,11 +2098,14 @@ export default function App() {
     // Un tichet deschis are o singura cantarire — il putem corecta fara sa-l si inchidem.
     // Se inchide doar cand sunt completate ambele greutati.
     const ambele = brutV > 0 && taraV > 0;
-    if (!ambele && !brutV && !taraV) { alert("Completați cel puțin o cântărire (Brut sau Tara)!"); return; }
+    // Un tichet rezervat e doar un număr pus deoparte: trebuie să-l poți corecta
+    // (inclusiv Tip IN/OUT) fără să fii obligat să treci o cântărire.
+    const eRezervat = ticEdit.status === "gol";
+    if (!ambele && !brutV && !taraV && !eRezervat) { alert("Completați cel puțin o cântărire (Brut sau Tara)!"); return; }
     if (!ambele && ticEdit.status === "inchis") { alert("Un tichet închis are nevoie și de Brut, și de Tara!"); return; }
     if (ambele && brutV <= taraV) { alert(`Brut (${brutV} kg) trebuie să fie mai mare decât Tara (${taraV} kg)!`); return; }
     const netV = ambele ? Math.round((brutV - taraV) * 100) / 100 : null;
-    const statusNou = ambele ? "inchis" : "deschis";
+    const statusNou = ambele ? "inchis" : (brutV || taraV) ? "deschis" : "gol";
     const f = pjList.find(x => x.denumire === ticEdit.partener) || pfList.find(x => x.denumire === ticEdit.partener);
     const orig = ticheteList.find((x) => x.id === ticEdit.id);
     const eraNeinchis = orig?.status !== "inchis"; // tichet gol sau deschis, completat acum pentru prima data
@@ -2122,7 +2125,7 @@ export default function App() {
     const { error } = await sb.from("tichete_cantar").update(upd).eq("id", ticEdit.id);
     if (error) { alert("Eroare: " + error.message); return; }
     setTicheteList((p) => p.map((x) => (x.id === ticEdit.id ? { ...x, ...upd } : x)));
-    logAction("Editare", "Tichet cântar", "TC " + ticEdit.nr_tichet, ambele ? `NET recalculat: ${netV} kg` : "tichet deschis, actualizat");
+    logAction("Editare", "Tichet cântar", "TC " + ticEdit.nr_tichet, ambele ? `NET recalculat: ${netV} kg` : statusNou === "gol" ? `rezervat • ${ticEdit.tip}` : "tichet deschis, actualizat");
     // Achizitia/vanzarea se creeaza sau se actualizeaza doar cand tichetul are NET (e inchis)
     if (!ambele) { setTicEdit(null); return; }
     if (ticEdit.tip === "Intrare") {
@@ -4514,13 +4517,19 @@ Reguli:
               <button onClick={() => setTicEdit(null)} style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.4)", color: "#fff", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 16 }}>✕</button>
             </div>
             <div style={{ padding: "14px 18px", display: "flex", flexDirection: "column", gap: 10, maxHeight: "70vh", overflowY: "auto" }}>
-              {ticEdit.status === "gol" && (
+              {/* Tipul se poate schimba pe orice tichet, nu doar pe cele rezervate. */}
+              {true && (
                 <div>
                   <label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Tip</label>
                   <div style={{ display: "flex", gap: 8 }}>
                     <button onClick={() => setTicEdit((p) => ({ ...p, tip: "Intrare" }))} style={{ flex: 1, padding: "7px", border: `1.5px solid ${G}`, borderRadius: 5, background: ticEdit.tip === "Intrare" ? G : "#fff", color: ticEdit.tip === "Intrare" ? "#fff" : G, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>▼ Intrare</button>
                     <button onClick={() => setTicEdit((p) => ({ ...p, tip: "Iesire" }))} style={{ flex: 1, padding: "7px", border: "1.5px solid #bf360c", borderRadius: 5, background: ticEdit.tip === "Iesire" ? "#bf360c" : "#fff", color: ticEdit.tip === "Iesire" ? "#fff" : "#bf360c", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>▲ Ieșire</button>
                   </div>
+                  {ticEdit.status === "inchis" && (
+                    <div style={{ fontSize: 10, color: "#e65100", marginTop: 4, lineHeight: 1.3 }}>
+                      ⚠️ Tichetul e închis și are deja {ticEdit.tip === "Intrare" ? "o achiziție" : "o vânzare"} creată. Schimbarea tipului nu o mută singură — corecteaz-o în secțiunea respectivă.
+                    </div>
+                  )}
                 </div>
               )}
               <div><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Data (apare pe tichetul printat și în registru)</label><DateInput value={ticEdit.data} onChange={(v) => setTicEdit((p) => ({ ...p, data: v }))} style={{ border: "1px solid #ccc" }} /></div>
