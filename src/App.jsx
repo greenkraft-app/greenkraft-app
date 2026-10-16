@@ -8,7 +8,7 @@ const sb = createClient(
 );
 
 // ── Constants ─────────────────────────────────────────────────
-const G = "#1d6f42";
+const G = "#047857";
 const PRODUSE_LIST = [
   { den: "DESEURI DE AMBALAJE DIN CARTON-COD 15 01 01", cod: "15 01 01", cod_art: "000001" },
   { den: "DESEURI DE AMBALAJE DIN PLASTIC (AFARA DE PET)-COD 15 01 02", cod: "15 01 02", cod_art: "000002" },
@@ -211,6 +211,10 @@ const CAT_PAROLE = ["Email","Bancă","Card","Platformă","WiFi","Altele"];
 const REGISTRU_CASA_START = "12.10.2026";
 const PIN_CORRECT = "336699";
 const USER_PASSWORDS = { Catalin: "Kraft$888", Alexandru: "310890", Mihai: "336699" };
+// Login-ul ramane in localStorage pe fiecare telefon/calculator, deci nu poate fi sters de la distanta.
+// Ca sa deconectezi toti userii: schimba aceasta valoare (orice text nou) si publica aplicatia — la urmatoarea
+// deschidere/reincarcare, fiecare dispozitiv isi vede versiunea veche, sterge login-ul si cere din nou parola.
+const SESSION_VERSION = "2026-10-16-1";
 
 // ── PV constants ──────────────────────────────────────────────
 const PV_MATERIALE = [
@@ -308,11 +312,11 @@ function calcStoc(miscari = []) {
 // ── Styles ────────────────────────────────────────────────────
 // Antetul ramane lipit in susul tabelului cat timp derulezi prin randuri — altfel,
 // pe tabelele de cateva mii de pixeli, nu mai stii ce coloana citesti.
-const th = (x = {}) => ({ background: "#3a6b4a", color: "#fff", padding: "5px 6px", border: "1px solid #aaa", fontWeight: 700, fontSize: 11, whiteSpace: "nowrap", textAlign: "center", position: "sticky", top: 0, zIndex: 3, ...x });
+const th = (x = {}) => ({ background: "#1f4d42", color: "#fff", padding: "7px 8px", border: "1px solid rgba(255,255,255,0.14)", fontWeight: 600, fontSize: 11, letterSpacing: 0.2, whiteSpace: "nowrap", textAlign: "center", position: "sticky", top: 0, zIndex: 3, ...x });
 // Containerul unui tabel de date: derulare proprie, pe orizontala si pe verticala.
 // Tabelele scurte nu sunt afectate — inaltimea maxima intra in joc doar cand e depasita.
-const TBL = { overflowX: "auto", overflowY: "auto", maxHeight: "calc(100vh - 240px)" };
-const td = (x = {}) => ({ padding: "3px 5px", border: "1px solid #d0d0d0", fontSize: 12, background: "#fff", verticalAlign: "middle", ...x });
+const TBL = { overflowX: "auto", overflowY: "auto", maxHeight: "calc(100vh - 240px)", border: "1px solid #e2e8f0", borderRadius: 10 };
+const td = (x = {}) => ({ padding: "4px 6px", border: "1px solid #e8edf1", fontSize: 12, background: "#fff", verticalAlign: "middle", ...x });
 const inp = (x = {}) => ({ width: "100%", border: "none", outline: "none", fontSize: 12, background: "transparent", textAlign: "center", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap", ...x });
 // Pentru campuri numerice (cantitati, preturi): FARA ellipsis — o cifra trunchiata poate fi citita gresit
 const inpNum = (x = {}) => ({ width: "100%", border: "none", outline: "none", fontSize: 12, background: "transparent", textAlign: "right", ...x });
@@ -906,14 +910,22 @@ export default function App() {
   const avizInputRef = useRef();
   const pvPrintRef = useRef();
   const debounce = useRef({});
+  const auditFlushing = useRef(false);
+  // Valoarea de DINAINTE a unui camp, retinuta la prima modificare dintr-o serie (se scrie litera cu litera, deci
+  // salvarea are loc de mai multe ori) ca Istoricul sa arate "vechi → nou", nu doar valoarea noua.
+  const inainteDeSalvare = useRef({});
   // Salvarea e tacuta si intarziata, deci fara un semn nu stii daca a prins.
   const [salvariInCurs, setSalvariInCurs] = useState(0);
   const [salvatLa, setSalvatLa] = useState(0);
 
   // Debounced save to Supabase
-  const dbSave = (table, id, changes) => {
+  const dbSave = (table, id, changes, before = null) => {
     if (!id) return;
     const key = `${table}-${id}`;
+    if (before) Object.entries(before).forEach(([camp, val]) => {
+      const k = `${table}:${id}:${camp}`;
+      if (!(k in inainteDeSalvare.current)) inainteDeSalvare.current[k] = val ?? "";
+    });
     // Marchez campul ca nesalvat inca, ca datele venite de la server sa nu-l suprascrie
     // cat timp mai scriu in el. Se sterge dupa ce salvarea a ajuns efectiv in baza.
     Object.entries(changes).forEach(([camp, val]) => editariInCurs.set(`${table}:${id}:${camp}`, val));
@@ -928,13 +940,29 @@ export default function App() {
         // daca intre timp ai mai scris, valoarea noua e alta — o las marcata ca nesalvata
         if (editariInCurs.get(k) === val) editariInCurs.delete(k);
       });
-      if (!error) logAction("update", table, id, changes);
+      if (!error) {
+        const inainte = {};
+        Object.keys(changes).forEach((camp) => {
+          const k = `${table}:${id}:${camp}`;
+          if (k in inainteDeSalvare.current) { inainte[camp] = inainteDeSalvare.current[k]; delete inainteDeSalvare.current[k]; }
+        });
+        logAction("update", table, id, Object.keys(inainte).length ? { ...changes, _inainte: inainte } : changes);
+      }
     }, 700);
   };
 
   // ── UI state ─────────────────────────────────────────────
   const [tab, setTab] = useState("dashboard");
-  const [currentUser, setCurrentUser] = useState(() => localStorage.getItem("currentUser") || "");
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      if (localStorage.getItem("sessionVersion") !== SESSION_VERSION) {
+        localStorage.removeItem("currentUser");
+        localStorage.setItem("sessionVersion", SESSION_VERSION);
+        return "";
+      }
+    } catch (e) {}
+    return localStorage.getItem("currentUser") || "";
+  });
   // Login (nume + parolă) — parola se verifică doar o dată; dupa aceea currentUser
   // ramane in localStorage si nu mai e ceruta din nou pe acel telefon/calculator.
   const [loginPendingUser, setLoginPendingUser] = useState(null);
@@ -1171,16 +1199,40 @@ export default function App() {
     }
   };
   // ── Helper: audit log ─────────────────────────────────────
-  const logAction = async (action, entity, entityId, details = null) => {
+  // Istoricul trebuie sa nu piarda nimic: daca inserarea esueaza (retea picata, server), randul se pastreaza
+  // in localStorage si se retrimite la urmatoarea actiune / la urmatoarea deschidere a aplicatiei, cu ora originala.
+  const flushAuditQueue = async () => {
+    if (auditFlushing.current) return;
+    let q = [];
+    try { q = JSON.parse(localStorage.getItem("auditQueue") || "[]"); } catch (e) { q = []; }
+    if (!q.length) return;
+    auditFlushing.current = true;
     try {
-      await sb.from("audit_log").insert({
-        user_name: currentUser || "Anonim",
-        action, entity,
-        entity_id: String(entityId || ""),
-        details
-      });
-    } catch (e) { console.warn("Audit log failed:", e); }
+      const { error } = await sb.from("audit_log").insert(q);
+      if (!error) { try { localStorage.removeItem("auditQueue"); } catch (e) {} }
+    } catch (e) { /* ramane in coada */ } finally { auditFlushing.current = false; }
   };
+  const logAction = async (action, entity, entityId, details = null) => {
+    const row = {
+      user_name: currentUser || "Anonim",
+      action, entity,
+      entity_id: String(entityId || ""),
+      details
+    };
+    try {
+      const { error } = await sb.from("audit_log").insert(row);
+      if (error) throw error;
+      flushAuditQueue();
+    } catch (e) {
+      console.warn("Audit log failed, retinut local pentru retrimitere:", e);
+      try {
+        const q = JSON.parse(localStorage.getItem("auditQueue") || "[]");
+        q.push({ ...row, created_at: new Date().toISOString() });
+        localStorage.setItem("auditQueue", JSON.stringify(q));
+      } catch (e2) { /* localStorage indisponibil */ }
+    }
+  };
+  useEffect(() => { flushAuditQueue(); }, []);
   // ── Helper: backup all data ───────────────────────────────
   // ── Task-uri functions ──
   const addTask = async (text, scadenta = "", prioritate = "normal") => {
@@ -1236,13 +1288,52 @@ export default function App() {
     window.addEventListener("keydown", t);
     return () => window.removeEventListener("keydown", t);
   }, []);
-  // ── Load audit log ────────────────────────────────────────
+  // Ecranele lasate deschise zile intregi ruleaza versiunea veche pana se reincarca pagina. Din 2 in 2 minute si cand
+  // revii pe fila, comparam fisierul JS incarcat cu cel de pe server; daca difera, apare butonul "Versiune noua".
+  // Nu reincarcam singuri, ca sa nu pierdem ce se scrie in acel moment.
+  const [versiuneNoua, setVersiuneNoua] = useState(false);
   useEffect(() => {
+    const verifica = async () => {
+      try {
+        const curent = (Array.from(document.scripts).map((s) => s.src).join(" ").match(/\/assets\/index-[^\s/"']+\.js/) || [])[0];
+        if (!curent) return; // dev server: nu exista fisier cu hash
+        const r = await fetch("/?v=" + Date.now(), { cache: "no-store" });
+        const noua = ((await r.text()).match(/\/assets\/index-[^\s/"']+\.js/) || [])[0];
+        if (noua && noua !== curent) setVersiuneNoua(true);
+      } catch (e) { /* offline: incercam la urmatoarea verificare */ }
+    };
+    const t = setInterval(verifica, 120000);
+    const laRevenire = () => { if (document.visibilityState === "visible") verifica(); };
+    document.addEventListener("visibilitychange", laRevenire);
+    return () => { clearInterval(t); document.removeEventListener("visibilitychange", laRevenire); };
+  }, []);
+  // ── Load audit log ────────────────────────────────────────
+  // Istoricul e vizibil doar pentru Alexandru: la ceilalti useri nici nu se descarca. Implicit ultimele 1000 de randuri;
+  // "Incarca tot istoricul" aduce totul (pagini de cate 1000), ca sa se poata verifica orice modificare, oricat de veche.
+  const esteAdminIstoric = currentUser === "Alexandru";
+  const [auditComplet, setAuditComplet] = useState(false);
+  const [auditAreMai, setAuditAreMai] = useState(false);
+  const [auditUser, setAuditUser] = useState("");
+  useEffect(() => {
+    if (!esteAdminIstoric) { setAuditLog([]); setAuditAreMai(false); return; }
+    let anulat = false;
     (async () => {
-      const { data } = await sb.from("audit_log").select("*").order("created_at", { ascending: false }).limit(200);
-      setAuditLog(data || []);
+      const PAGE = 1000;
+      let all = [], from = 0, ultimaPlina = false;
+      while (!anulat) {
+        const { data, error } = await sb.from("audit_log").select("*").order("created_at", { ascending: false }).range(from, from + PAGE - 1);
+        if (error || !data) break;
+        all = all.concat(data);
+        ultimaPlina = data.length === PAGE;
+        if (!auditComplet || !ultimaPlina) break;
+        from += PAGE;
+      }
+      if (anulat) return;
+      setAuditLog(all);
+      setAuditAreMai(!auditComplet && ultimaPlina);
     })();
-  }, [currentUser]);
+    return () => { anulat = true; };
+  }, [currentUser, auditComplet]);
   const [avSubTab, setAvSubTab] = useState("avansuri"); // avansuri | casa | registru
   const [bordSubTab, setBordSubTab] = useState("editor");
   const [regPfMonth, setRegPfMonth] = useState("");
@@ -1486,14 +1577,18 @@ export default function App() {
   // ── CRUD helpers ─────────────────────────────────────────
   const mkUpd = (rows, setRows, table) => (i, f, v) => {
     setRows((p) => { const n = [...p]; n[i] = { ...n[i], [f]: v }; return n; });
-    dbSave(table, rows[i]?.id, { [f]: v });
+    dbSave(table, rows[i]?.id, { [f]: v }, { [f]: rows[i]?.[f] });
   };
   const mkDel = (setRows, table, label = "această înregistrare") => async (id) => {
     if (!confirmDel(label)) return;
+    // Randul intreg se citeste din baza inainte de stergere si ramane in Istoric — cine sterge nu poate face datele sa dispara fara urma.
+    let snapshot = null;
+    try { const { data } = await sb.from(table).select("*").eq("id", id).maybeSingle(); snapshot = data || null; } catch (e) {}
     let removed = null;
     setRows((p) => { removed = p.find((r) => r.id === id) || null; return p.filter((r) => r.id !== id); });
     await sb.from(table).delete().eq("id", id);
-    await logAction("delete", table, id, removed ? { denumire: removed.denumire, den: removed.den, nume: removed.nume, data: removed.data } : null);
+    const r = snapshot || removed;
+    await logAction("delete", table, id, r ? { denumire: r.denumire, den: r.den, nume: r.nume, data: r.data, _sters: r } : null);
   };
 
   // Cheltuieli
@@ -1707,7 +1802,7 @@ export default function App() {
   // Salariati
   const updSAL = (i, f, v) => {
     setSalRows((p) => { const n = [...p]; n[i] = { ...n[i], [f]: v }; return n; });
-    dbSave("salariati", salRows[i]?.id, { [f]: v });
+    dbSave("salariati", salRows[i]?.id, { [f]: v }, { [f]: salRows[i]?.[f] });
   };
   const delSAL = mkDel(setSalRows, "salariati", "acest salariat");
   const addSAL = async () => {
@@ -2089,7 +2184,7 @@ export default function App() {
     if (!ok) return;
     await sb.from("tichete_cantar").delete().eq("id", t.id);
     setTicheteList((p) => p.filter((x) => x.id !== t.id));
-    logAction("Ștergere", "Tichet cântar", t.serie + " " + t.nr_tichet, `${t.partener}`);
+    logAction("Ștergere", "Tichet cântar", t.serie + " " + t.nr_tichet, { partener: t.partener, _sters: t });
   };
   const salveazaTicEdit = async () => {
     const brutV = parseSuma(ticEdit.brut);
@@ -2433,7 +2528,7 @@ export default function App() {
     if (!confirmDel(ce)) return;
     await sb.from("anexa3").delete().eq("id", a3.id);
     setAnexa3List((p) => p.filter((x) => x.id !== a3.id));
-    logAction("Ștergere", "Anexa 3", a3.serie + " " + a3.numar, a3.transportator);
+    logAction("Ștergere", "Anexa 3", a3.serie + " " + a3.numar, { transportator: a3.transportator, _sters: a3 });
   };
   // Editare Anexa 3 dupa emitere — orice camp poate fi corectat ulterior
   const updA3 = mkUpd(anexa3List, setAnexa3List, "anexa3");
@@ -2634,9 +2729,10 @@ export default function App() {
 
   const delPV = async (id) => {
     if (!confirmDel("acest PV")) return;
+    const pvSters = pvList.find(x => x.id === id) || null;
     setPvList(p => p.filter(x => x.id !== id));
     await sb.from("procese_verbale").delete().eq("id", id);
-    await logAction("delete", "procese_verbale", id);
+    await logAction("delete", "procese_verbale", id, pvSters ? { _sters: pvSters } : null);
   };
 
   // ── Excel Export (Rapoarte) ───────────────────────────────
@@ -2875,7 +2971,7 @@ export default function App() {
     colectari: {
       label: "🚛 Achiziții",
       table: "colectari",
-      color: "#2e7d32",
+      color: "#059669",
       columns: [
         { excel: "Data", field: "data" },
         { excel: "Agent", field: "agent" },
@@ -4007,9 +4103,9 @@ Reguli:
   const livProdusFilterOptions = [...new Set(livRows.map(r => r.produs).filter(Boolean))].sort();
 
   // ── Render helpers ────────────────────────────────────────
-  const tabSt = (name) => ({ padding: "7px 13px", cursor: "pointer", border: "none", fontWeight: 600, fontSize: 12, borderBottom: tab === name ? `3px solid ${G}` : "3px solid transparent", background: tab === name ? "#fff" : "#e8f0eb", color: tab === name ? G : "#555", borderRadius: "6px 6px 0 0", marginRight: 2, whiteSpace: "nowrap" });
+  const tabSt = (name) => ({ padding: "7px 14px", cursor: "pointer", border: "none", fontWeight: 600, fontSize: 12, background: tab === name ? G : "transparent", color: tab === name ? "#fff" : "#475569", borderRadius: 8, marginRight: 4, whiteSpace: "nowrap", boxShadow: tab === name ? "0 2px 8px rgba(4,120,87,0.35)" : "none" });
   const subTabSt = (name) => ({ padding: "5px 13px", cursor: "pointer", border: "none", fontWeight: 600, fontSize: 12, borderBottom: bordSubTab === name ? `2px solid ${G}` : "2px solid transparent", background: bordSubTab === name ? "#f0faf4" : "transparent", color: bordSubTab === name ? G : "#666", marginRight: 3 });
-  const SC = ({ label, value, c, bg }) => (<div style={{ flex: 1, minWidth: 120, background: bg, border: `1px solid ${c}33`, borderRadius: 8, padding: "7px 12px" }}><div style={{ fontSize: 10, color: "#666", marginBottom: 1 }}>{label}</div><div style={{ fontSize: 14, fontWeight: 700, color: c }}>{value}</div></div>);
+  const SC = ({ label, value, c, bg }) => (<div style={{ flex: 1, minWidth: 120, background: bg, border: `1px solid ${c}2a`, borderRadius: 12, padding: "9px 14px", boxShadow: "0 1px 2px rgba(15,23,42,.05)" }}><div style={{ fontSize: 10, color: "#666", marginBottom: 1 }}>{label}</div><div style={{ fontSize: 14, fontWeight: 700, color: c }}>{value}</div></div>);
   const AddBtn = ({ onClick, label, color = G }) => (<button onClick={onClick} style={{ marginTop: 10, background: color, color: "#fff", border: "none", borderRadius: 6, padding: "7px 15px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>{label}</button>);
   const IBox = (label, f, ph = "") => (<div style={{ marginBottom: 7 }}><label style={LSt}>{label}</label><FastInput style={IFS} value={b[f] || ""} onChange={(e) => updB(f, e.target.value)} placeholder={ph} /></div>);
   const regCols = [{ k: "serie", l: "Serie", w: 45 }, { k: "nr", l: "Nr", w: 65 }, { k: "data", l: "Data", w: 85 }, { k: "furnizor", l: "Furnizor", w: 150 }, { k: "cnp", l: "CNP", w: 110 }, { k: "denumire", l: "Denumire Deseu", w: 180 }, { k: "cantitate", l: "Cant.(kg)", w: 75 }, { k: "pu", l: "PU", w: 50 }, { k: "valoare", l: "Valoare", w: 65 }];
@@ -4018,30 +4114,33 @@ Reguli:
   const bordGroupKeys = [...new Set(registru.map((r) => `${r.serie}__${r.nr}`))];
 
   return (
-    <div style={{ fontFamily: "Segoe UI,sans-serif", background: "#f0f4f0", minHeight: "100vh", padding: 12 }}>
+    <div style={{ fontFamily: "Inter, 'Segoe UI', system-ui, -apple-system, sans-serif", background: "linear-gradient(180deg,#eef2f6 0%,#f6f8fa 320px)", minHeight: "100vh", padding: 14, color: "#1e293b" }}>
 
-      {/* ── Polish vizual global — aliniat cu look-ul Tichete Cântar ── */}
+      {/* ── Tema moderna: font Inter, colturi rotunjite, umbre fine, focus discret ── */}
       <style>{`
+        button, input, select, textarea { font-family: inherit; }
         table tbody tr td { transition: filter .1s ease; }
-        table tbody tr:hover td { filter: brightness(0.96); }
+        table tbody tr:hover td { filter: brightness(0.965); }
         input:focus, select:focus, textarea:focus {
-          background-color: #fffde7 !important;
-          box-shadow: inset 0 0 0 1.5px #64b5f6;
-          border-radius: 3px;
+          background-color: #fff !important;
+          box-shadow: 0 0 0 2px rgba(4,120,87,0.28);
+          border-radius: 6px;
+          outline: none;
         }
-        button { transition: filter .15s ease, transform .08s ease; }
-        button:hover:not(:disabled) { filter: brightness(0.94); }
+        select, input[type="date"] { border-radius: 6px; }
+        button { transition: filter .15s ease, transform .08s ease, box-shadow .15s ease; }
+        button:hover:not(:disabled) { filter: brightness(0.95); }
         button:active:not(:disabled) { transform: translateY(1px); }
         ::-webkit-scrollbar { height: 10px; width: 10px; }
-        ::-webkit-scrollbar-track { background: #e8ede8; }
-        ::-webkit-scrollbar-thumb { background: #b8ccbc; border-radius: 5px; }
-        ::-webkit-scrollbar-thumb:hover { background: #98b89e; }
+        ::-webkit-scrollbar-track { background: #eef2f6; border-radius: 6px; }
+        ::-webkit-scrollbar-thumb { background: #c3ccd6; border-radius: 6px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a3b0bd; }
       `}</style>
 
       {/* Login Modal — appears if no user selected */}
       {!currentUser && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999999 }}>
-          <div style={{ background: "#fff", borderRadius: 12, padding: 32, maxWidth: 380, width: "90%", boxShadow: "0 10px 40px rgba(0,0,0,0.3)", textAlign: "center" }}>
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15,23,42,0.72)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999999 }}>
+          <div style={{ background: "#fff", borderRadius: 20, padding: 32, maxWidth: 380, width: "90%", boxShadow: "0 10px 40px rgba(0,0,0,0.3)", textAlign: "center" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, marginBottom: 8 }}>
               <span style={{ fontSize: 26, fontWeight: 900, color: G, letterSpacing: -0.5 }}>Green</span>
               <span style={{ fontSize: 26, fontWeight: 900, color: "#4caf50", letterSpacing: -0.5 }}>kraft</span>
@@ -4051,7 +4150,7 @@ Reguli:
                 <div style={{ fontSize: 13, color: "#666", marginBottom: 24 }}>Cine ești?</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   {["Catalin", "Alexandru", "Mihai"].map(u => (
-                    <button key={u} onClick={() => { setLoginPendingUser(u); setLoginPass(""); setLoginError(false); }} style={{ background: `linear-gradient(135deg,${G},#43a047)`, color: "#fff", border: "none", borderRadius: 8, padding: "12px 20px", cursor: "pointer", fontSize: 15, fontWeight: 700, transition: "transform .1s" }}
+                    <button key={u} onClick={() => { setLoginPendingUser(u); setLoginPass(""); setLoginError(false); }} style={{ background: `linear-gradient(135deg,${G},#10b981)`, color: "#fff", border: "none", borderRadius: 8, padding: "12px 20px", cursor: "pointer", fontSize: 15, fontWeight: 700, transition: "transform .1s" }}
                       onMouseEnter={(e) => e.currentTarget.style.transform = "scale(1.03)"}
                       onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}
                     >👤 {u}</button>
@@ -4082,7 +4181,7 @@ Reguli:
                   <button onClick={() => {
                     if (loginPass === USER_PASSWORDS[loginPendingUser]) { setCurrentUser(loginPendingUser); localStorage.setItem("currentUser", loginPendingUser); }
                     else setLoginError(true);
-                  }} style={{ flex: 1, background: `linear-gradient(135deg,${G},#43a047)`, color: "#fff", border: "none", borderRadius: 8, padding: "10px 16px", cursor: "pointer", fontSize: 14, fontWeight: 700 }}>Intră →</button>
+                  }} style={{ flex: 1, background: `linear-gradient(135deg,${G},#10b981)`, color: "#fff", border: "none", borderRadius: 8, padding: "10px 16px", cursor: "pointer", fontSize: 14, fontWeight: 700 }}>Intră →</button>
                 </div>
               </>
             )}
@@ -4115,7 +4214,7 @@ Reguli:
       </div>
 
       {/* Header */}
-      <div style={{ background: `linear-gradient(135deg,#1b5e20,${G},#2e7d32)`, color: "#fff", borderRadius: "10px 10px 0 0", padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+      <div style={{ background: `linear-gradient(135deg,#064e3b,${G},#059669)`, color: "#fff", borderRadius: "16px 16px 0 0", padding: "12px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, boxShadow: "0 4px 16px rgba(6,78,59,0.25)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
             <span style={{ fontSize: 22, fontWeight: 900, color: "#e8f5e9", letterSpacing: -0.5 }}>Green</span>
@@ -4146,6 +4245,7 @@ Reguli:
           </button>
           {/* Semn discret ca modificarile au ajuns in baza de date */}
           <SemnSalvare inCurs={salvariInCurs} la={salvatLa} />
+          {versiuneNoua && <button onClick={() => window.location.reload()} title="S-a publicat o versiune nouă a aplicației" style={{ background: "#ffeb3b", color: "#333", border: "none", borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>🔄 Versiune nouă — Reîncarcă</button>}
           <div style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(255,255,255,0.15)", borderRadius: 6, padding: "4px 10px" }}>
             <span style={{ fontSize: 11 }}>👤</span>
             <span style={{ fontSize: 12, fontWeight: 700 }}>{currentUser || "—"}</span>
@@ -4159,7 +4259,7 @@ Reguli:
       {showAutMediu && (
         <div onClick={() => setShowAutMediu(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 10, width: "min(96vw,900px)", height: "min(96vh,850px)", display: "flex", flexDirection: "column", boxShadow: "0 8px 40px rgba(0,0,0,0.4)", overflow: "hidden" }}>
-            <div style={{ background: `linear-gradient(135deg,#1b5e20,${G})`, color: "#fff", padding: "12px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+            <div style={{ background: `linear-gradient(135deg,#064e3b,${G})`, color: "#fff", padding: "12px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 15 }}>📋 Autorizație de Mediu nr. 233/22.12.2021</div>
                 <div style={{ fontSize: 11, opacity: 0.8, marginTop: 2 }}>GREEN KRAFT S.R.L. • Revizuire (3) la data de 27.11.2025</div>
@@ -4512,7 +4612,7 @@ Reguli:
       {ticEdit && (
         <div onClick={() => setTicEdit(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 10, width: "min(96vw,440px)", display: "flex", flexDirection: "column", boxShadow: "0 8px 40px rgba(0,0,0,0.35)", overflow: "hidden" }}>
-            <div style={{ background: `linear-gradient(135deg,#1b5e20,${G})`, color: "#fff", padding: "12px 18px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ background: `linear-gradient(135deg,#064e3b,${G})`, color: "#fff", padding: "12px 18px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div style={{ fontWeight: 700, fontSize: 14 }}>✏️ Editare Tichet TC #{ticEdit.nr_tichet}</div>
               <button onClick={() => setTicEdit(null)} style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.4)", color: "#fff", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 16 }}>✕</button>
             </div>
@@ -4580,13 +4680,13 @@ Reguli:
       )}
 
       {/* Tabs */}
-      <div style={{ display: "flex", background: "#e8f0eb", borderLeft: "1px solid #ccc", borderRight: "1px solid #ccc", overflowX: "auto" }}>
-        {[["dashboard","🏠 Dashboard"],["borderou","📄 Borderouri"],["pv","📋 PV & Anexa 3"],["cheltuieli","💸 Cheltuieli"],["colectari","🚛 Achiziții"],["livrari","📤 Vânzări"],["cantar","⚖️ Tichete Cântar"],["stoc","📦 Stocuri"],["produse","🛠️ Variabile"],["salariati","👷 Salariați"],["datorii","💳 Datorii"],["avansuri","💵 Avansuri & Dividende"],["contracte","📃 Contracte"],["parole","🔐 Parole"],["rapoarte","📊 Rapoarte"],["trasabilitate","🔄 Trasabilitate"],["audit","🕘 Istoric"]].map(([k, l]) => (
+      <div style={{ display: "flex", background: "#fff", padding: "8px 10px", borderLeft: "1px solid #e2e8f0", borderRight: "1px solid #e2e8f0", borderBottom: "1px solid #eef2f6", overflowX: "auto" }}>
+        {[["dashboard","🏠 Dashboard"],["borderou","📄 Borderouri"],["pv","📋 PV & Anexa 3"],["cheltuieli","💸 Cheltuieli"],["colectari","🚛 Achiziții"],["livrari","📤 Vânzări"],["cantar","⚖️ Tichete Cântar"],["stoc","📦 Stocuri"],["produse","🛠️ Variabile"],["salariati","👷 Salariați"],["datorii","💳 Datorii"],["avansuri","💵 Avansuri & Dividende"],["contracte","📃 Contracte"],["parole","🔐 Parole"],["rapoarte","📊 Rapoarte"],["trasabilitate","🔄 Trasabilitate"],["audit","🕘 Istoric"]].filter(([k]) => k !== "audit" || esteAdminIstoric).map(([k, l]) => (
           <button key={k} style={tabSt(k)} onClick={() => setTab(k)}>{l}</button>
         ))}
       </div>
 
-      <div style={{ background: "#fff", border: "1px solid #ccc", borderTop: "none", borderRadius: "0 0 8px 8px", padding: 14, boxShadow: "0 2px 8px rgba(0,0,0,.08)" }}>
+      <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderTop: "none", borderRadius: "0 0 16px 16px", padding: 16, boxShadow: "0 8px 24px rgba(15,23,42,.07)" }}>
 
         {/* ══ DASHBOARD (ACASĂ) ══ */}
         {tab === "dashboard" && (() => {
@@ -4656,7 +4756,7 @@ Reguli:
           return (
             <div>
               {/* Welcome */}
-              <div style={{ background: `linear-gradient(135deg,#1b5e20,${G},#43a047)`, color: "#fff", borderRadius: 10, padding: "16px 20px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+              <div style={{ background: `linear-gradient(135deg,#064e3b,${G},#10b981)`, color: "#fff", borderRadius: 10, padding: "16px 20px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
                 <div>
                   <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>👋 Bună{currentUser ? `, ${currentUser}` : ""}!</div>
                   <div style={{ fontSize: 12, opacity: 0.9 }}>{new Date().toLocaleDateString("ro-RO", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</div>
@@ -4684,9 +4784,9 @@ Reguli:
                   <div style={{ fontSize: 11, color: "#555", marginTop: 4 }}>📦 <strong>{fmt(pvKgMonth)} kg</strong></div>
                 </div>
                 {/* COLECTARI */}
-                <div style={{ background: "#fff", border: "2px solid #2e7d32", borderRadius: 10, padding: 14 }}>
+                <div style={{ background: "#fff", border: "2px solid #059669", borderRadius: 10, padding: 14 }}>
                   <div style={{ fontSize: 11, color: "#666", marginBottom: 6, fontWeight: 600 }}>🚛 COLECTĂRI — luna asta</div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: "#2e7d32", lineHeight: 1.2 }}>{fmt(colValMonth)} lei</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: "#059669", lineHeight: 1.2 }}>{fmt(colValMonth)} lei</div>
                   <div style={{ fontSize: 11, color: G, marginTop: 4 }}>✅ Achitat: <strong>{fmt(colValAchitat)} lei</strong></div>
                   <div style={{ fontSize: 11, color: "#c62828" }}>⏳ Neachitat: <strong>{fmt(colValNeachitat)} lei</strong></div>
                 </div>
@@ -4705,8 +4805,8 @@ Reguli:
               </div>
 
               {/* TOP 3 FURNIZORI (cantitate) */}
-              <div style={{ background: "#fff", border: "2px solid #2e7d32", borderRadius: 10, padding: 14, marginBottom: 16 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#2e7d32", marginBottom: 10 }}>🏆 Top 3 Furnizori (Cantitate) — luna asta</div>
+              <div style={{ background: "#fff", border: "2px solid #059669", borderRadius: 10, padding: 14, marginBottom: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#059669", marginBottom: 10 }}>🏆 Top 3 Furnizori (Cantitate) — luna asta</div>
                 {topFurnizoriMonth.length === 0 ? (
                   <div style={{ fontSize: 12, color: "#999", padding: "6px 0" }}>Nicio achiziție înregistrată luna asta.</div>
                 ) : (
@@ -4716,7 +4816,7 @@ Reguli:
                         <div style={{ fontSize: 18, fontWeight: 800, color: ["#ffb300", "#9e9e9e", "#a1887f"][i] }}>#{i + 1}</div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 12, fontWeight: 600, color: "#333", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={r.furn}>{r.furn}</div>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: "#2e7d32" }}>{fmt(r.cant)} kg</div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: "#059669" }}>{fmt(r.cant)} kg</div>
                         </div>
                       </div>
                     ))}
@@ -4735,7 +4835,7 @@ Reguli:
                   <div style={{ fontSize: 18, color: "#888", textAlign: "center", fontWeight: 700 }}>−</div>
                   <div style={{ background: "rgba(255,255,255,0.7)", borderRadius: 6, padding: "8px 12px" }}>
                     <div style={{ fontSize: 10, color: "#666" }}>🚛 Achiziții</div>
-                    <div style={{ fontSize: 16, fontWeight: 700, color: "#2e7d32" }}>−{fmt(colValMonth)} lei</div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: "#059669" }}>−{fmt(colValMonth)} lei</div>
                   </div>
                   <div style={{ fontSize: 18, color: "#888", textAlign: "center", fontWeight: 700 }}>−</div>
                   <div style={{ background: "rgba(255,255,255,0.7)", borderRadius: 6, padding: "8px 12px" }}>
@@ -4830,8 +4930,8 @@ Reguli:
                   )}
                 </div>
 
-                {/* Recent Activity */}
-                <div style={{ background: "#fff", border: "1px solid #e0e0e0", borderRadius: 10, padding: 14 }}>
+                {/* Recent Activity — doar pentru Alexandru */}
+                {esteAdminIstoric && <div style={{ background: "#fff", border: "1px solid #e0e0e0", borderRadius: 10, padding: 14 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: "#333", marginBottom: 10, display: "flex", justifyContent: "space-between" }}>
                     <span>🕘 Activitate recentă</span>
                     <button onClick={() => setTab("audit")} style={{ background: "none", border: "none", color: G, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Vezi tot →</button>
@@ -4858,19 +4958,37 @@ Reguli:
                       })}
                     </div>
                   )}
-                </div>
+                </div>}
               </div>
             </div>
           );
         })()}
 
-        {/* ══ AUDIT LOG (ISTORIC) ══ */}
-        {tab === "audit" && (
+        {/* ══ AUDIT LOG (ISTORIC) — doar Alexandru ══ */}
+        {tab === "audit" && esteAdminIstoric && (() => {
+          const logVizibil = auditUser ? auditLog.filter((a) => a.user_name === auditUser) : auditLog;
+          // vechi → nou pentru editari, continutul intreg pentru stergeri; restul ca pana acum
+          const detaliiText = (d) => {
+            if (d == null) return "";
+            if (typeof d !== "object") return String(d);
+            const { _inainte, _sters, ...rest } = d;
+            const parti = [];
+            if (_inainte) Object.entries(rest).forEach(([k, v]) => parti.push(`${k}: ${JSON.stringify(_inainte[k] ?? "")} → ${JSON.stringify(v)}`));
+            else if (Object.keys(rest).length) parti.push(JSON.stringify(rest));
+            if (_sters) parti.push("ȘTERS: " + JSON.stringify(_sters));
+            return parti.join(" • ");
+          };
+          return (
           <div>
-            <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
-              <SC label="Total acțiuni" value={auditLog.length + " (ultimele 200)"} c="#333" bg="#f5f5f5" />
-              <SC label="Ștergeri" value={auditLog.filter(a => a.action === "delete").length + " buc."} c="#c62828" bg="#ffebee" />
-              <SC label="Modificări" value={auditLog.filter(a => a.action === "update").length + " buc."} c="#1565c0" bg="#e3f2fd" />
+            <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
+              <SC label="Total acțiuni" value={logVizibil.length + (auditAreMai ? " (ultimele " + auditLog.length + ")" : "")} c="#333" bg="#f5f5f5" />
+              <SC label="Ștergeri" value={logVizibil.filter(a => a.action === "delete").length + " buc."} c="#c62828" bg="#ffebee" />
+              <SC label="Modificări" value={logVizibil.filter(a => a.action === "update").length + " buc."} c="#1565c0" bg="#e3f2fd" />
+              <select value={auditUser} onChange={(e) => setAuditUser(e.target.value)} style={{ padding: "6px 10px", border: "1px solid #ccc", borderRadius: 5, fontSize: 12 }}>
+                <option value="">Toți userii</option>
+                {["Catalin", "Mihai", "Alexandru"].map((u) => <option key={u} value={u}>{u} ({auditLog.filter((a) => a.user_name === u).length})</option>)}
+              </select>
+              {auditAreMai && <button onClick={() => setAuditComplet(true)} style={{ padding: "6px 12px", border: `1px solid ${G}`, borderRadius: 5, background: "#fff", color: G, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Încarcă tot istoricul</button>}
             </div>
             <div style={TBL}>
               <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 700 }}>
@@ -4882,18 +5000,18 @@ Reguli:
                   <th style={th({ background: "#455a64" })}>ID / Detalii</th>
                 </tr></thead>
                 <tbody>
-                  {auditLog.length === 0 && <tr><td colSpan={5} style={{ textAlign: "center", padding: 20, color: "#aaa" }}>Nicio activitate înregistrată.</td></tr>}
-                  {auditLog.map((a, i) => {
+                  {logVizibil.length === 0 && <tr><td colSpan={5} style={{ textAlign: "center", padding: 20, color: "#aaa" }}>Nicio activitate înregistrată.</td></tr>}
+                  {logVizibil.map((a, i) => {
                     const dt = new Date(a.created_at);
                     const dtStr = `${String(dt.getDate()).padStart(2, "0")}.${String(dt.getMonth() + 1).padStart(2, "0")}.${dt.getFullYear()} ${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}`;
                     const actColor = a.action === "delete" ? "#c62828" : a.action === "create" || a.action === "insert" ? G : a.action === "backup" ? "#6a1b9a" : "#1565c0";
                     return (
-                      <tr key={a.id || i} style={{ background: i % 2 === 0 ? "#fff" : "#f8f9fa" }}>
+                      <tr key={a.id || i} style={{ background: a.user_name === "Catalin" || a.user_name === "Mihai" ? "#fff8e1" : i % 2 === 0 ? "#fff" : "#f8f9fa" }}>
                         <td style={td({ fontFamily: "monospace", fontSize: 11 })}>{dtStr}</td>
                         <td style={td({ fontWeight: 600 })}>{a.user_name || "—"}</td>
                         <td style={td({ textAlign: "center" })}><span style={{ background: actColor, color: "#fff", padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: 700, textTransform: "uppercase" }}>{a.action}</span></td>
                         <td style={td({ fontFamily: "monospace", fontSize: 11 })}>{a.entity}</td>
-                        <td style={td({ fontSize: 11, color: "#666" })}>{a.entity_id}{a.details ? " • " + JSON.stringify(a.details).slice(0, 100) : ""}</td>
+                        <td style={td({ fontSize: 11, color: "#666", wordBreak: "break-word" })}>{a.entity_id}{a.details ? " • " + detaliiText(a.details) : ""}</td>
                       </tr>
                     );
                   })}
@@ -4901,7 +5019,8 @@ Reguli:
               </table>
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* ══ BORDEROURI ══ */}
         {tab === "borderou" && (
@@ -5054,7 +5173,7 @@ Reguli:
                               >✏️</button>
                             )}
                           </td>
-                          <td style={td({ textAlign: "center", padding: 3 })}><button onClick={async () => { if (!confirmDel("acest borderou")) return; await sb.from("registru").delete().eq("id", r.id); setRegistru(p => p.filter(x => x.id !== r.id)); await logAction("delete", "registru", r.id); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
+                          <td style={td({ textAlign: "center", padding: 3 })}><button onClick={async () => { if (!confirmDel("acest borderou")) return; await sb.from("registru").delete().eq("id", r.id); setRegistru(p => p.filter(x => x.id !== r.id)); await logAction("delete", "registru", r.id, { _sters: r }); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
                         </tr>
                       );
                     })}</tbody>
@@ -5944,7 +6063,7 @@ Reguli:
             <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
               <SC label="Total Cant." value={fmt(livFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0), 0)) + " kg"} c="#1565c0" bg="#e3f2fd" />
               <SC label="Total Valoare" value={fmt(livFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0)) + " lei"} c={G} bg="#e8f5e9" />
-              <SC label="✅ Încasat" value={fmt(livFiltered.filter((r) => r.inc === "DA").reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0)) + " lei"} c="#2e7d32" bg="#c8e6c9" />
+              <SC label="✅ Încasat" value={fmt(livFiltered.filter((r) => r.inc === "DA").reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0)) + " lei"} c="#059669" bg="#c8e6c9" />
               <SC label="Înregistrări" value={livFiltered.length + " / " + livRows.length} c="#6a1b9a" bg="#f3e5f5" />
             </div>
             <div style={{ background: "#f5f5f5", border: "1px solid #ddd", borderRadius: 8, padding: 10, marginBottom: 10, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -6463,7 +6582,7 @@ Reguli:
                       })()}
                       {scalePort && <button onClick={() => useScaleWeight((v) => setTicNou((p) => ({ ...p, greutate: v })))} style={{ padding: "10px", background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: `1px solid ${G}`, borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700, color: G, marginBottom: 8 }}>⚖️ Preia din cântar {scaleReading ? `(${fmt(scaleReading.value)} kg)` : ""}</button>}
                       {!scalePort && cantarLive?.fresh && <button onClick={() => useLiveWeight((v) => setTicNou((p) => ({ ...p, greutate: v })))} style={{ padding: "10px", background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#1565c0", marginBottom: 8 }}>📡 Preia live de la birou ({fmt(cantarLive.value)} kg)</button>}
-                      <button onClick={salveazaTichet1} disabled={ticSaving} style={{ marginTop: "auto", padding: "13px", background: ticSaving ? "#9e9e9e" : `linear-gradient(135deg,#1b5e20,${G})`, color: "#fff", border: "none", borderRadius: 8, cursor: ticSaving ? "wait" : "pointer", fontSize: 14, fontWeight: 700 }}>{ticSaving ? "⏳ Se salvează..." : `💾 Deschide tichet TC #${getNextTichetNr()}`}</button>
+                      <button onClick={salveazaTichet1} disabled={ticSaving} style={{ marginTop: "auto", padding: "13px", background: ticSaving ? "#9e9e9e" : `linear-gradient(135deg,#064e3b,${G})`, color: "#fff", border: "none", borderRadius: 8, cursor: ticSaving ? "wait" : "pointer", fontSize: 14, fontWeight: 700 }}>{ticSaving ? "⏳ Se salvează..." : `💾 Deschide tichet TC #${getNextTichetNr()}`}</button>
                       <div style={{ fontSize: 10, color: "#999", marginTop: 6, textAlign: "center" }}>A doua cântărire se face din „⏳ Deschise"</div>
                     </div>
                   </div>
@@ -7065,7 +7184,7 @@ Reguli:
                   <button onClick={() => { setPinUnlocked(false); setPinInput(""); }} style={{ padding: "5px 14px", background: "#ffebee", color: "#e53935", border: "1px solid #ef9a9a", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>🔒 Blochează</button>
                 </div>
                 <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
-                  {CAT_PAROLE.map((c) => { const cnt = parole.filter((r) => r.cat === c).length; const colors = { Email: ["#1565c0", "#e3f2fd"], Bancă: ["#2e7d32", "#e8f5e9"], Card: ["#6a1b9a", "#f3e5f5"], Platformă: ["#e65100", "#fff3e0"], WiFi: ["#0277bd", "#e1f5fe"], Altele: ["#555", "#f5f5f5"] }; const [c1, bg1] = colors[c] || ["#555", "#f5f5f5"]; return (<div key={c} onClick={() => setParolaCat(parolaCat === c ? "toate" : c)} style={{ flex: "0 0 auto", background: parolaCat === c ? c1 : bg1, border: `2px solid ${c1}`, borderRadius: 8, padding: "6px 14px", cursor: "pointer" }}><div style={{ fontSize: 10, color: parolaCat === c ? "rgba(255,255,255,0.8)" : "#666" }}>{c}</div><div style={{ fontSize: 16, fontWeight: 700, color: parolaCat === c ? "#fff" : c1 }}>{cnt}</div></div>); })}
+                  {CAT_PAROLE.map((c) => { const cnt = parole.filter((r) => r.cat === c).length; const colors = { Email: ["#1565c0", "#e3f2fd"], Bancă: ["#059669", "#e8f5e9"], Card: ["#6a1b9a", "#f3e5f5"], Platformă: ["#e65100", "#fff3e0"], WiFi: ["#0277bd", "#e1f5fe"], Altele: ["#555", "#f5f5f5"] }; const [c1, bg1] = colors[c] || ["#555", "#f5f5f5"]; return (<div key={c} onClick={() => setParolaCat(parolaCat === c ? "toate" : c)} style={{ flex: "0 0 auto", background: parolaCat === c ? c1 : bg1, border: `2px solid ${c1}`, borderRadius: 8, padding: "6px 14px", cursor: "pointer" }}><div style={{ fontSize: 10, color: parolaCat === c ? "rgba(255,255,255,0.8)" : "#666" }}>{c}</div><div style={{ fontSize: 16, fontWeight: 700, color: parolaCat === c ? "#fff" : c1 }}>{cnt}</div></div>); })}
                   <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                     <FastInput value={parolaSearch} onChange={(e) => setParolaSearch(e.target.value)} placeholder="🔍 Caută platformă, user, note..." style={{ border: "1px solid #ccc", borderRadius: 6, padding: "5px 10px", fontSize: 12, width: 220 }} />
                     {parolaSearch && <button onClick={() => setParolaSearch("")} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 16 }}>✕</button>}
@@ -7079,7 +7198,7 @@ Reguli:
                     <tbody>
                       {filtParole.length === 0 && <tr><td colSpan={7} style={{ textAlign: "center", padding: 20, color: "#aaa" }}>Niciun rezultat.</td></tr>}
                       {filtParole.map((r, i) => {
-                        const oi = parole.indexOf(r); const isEdit = parolaEdit === oi; const catColors = { Email: ["#1565c0", "#e3f2fd"], Bancă: ["#2e7d32", "#e8f5e9"], Card: ["#6a1b9a", "#f3e5f5"], Platformă: ["#e65100", "#fff3e0"], WiFi: ["#0277bd", "#e1f5fe"], Altele: ["#555", "#f5f5f5"] }; const [cc, cbg] = catColors[r.cat] || ["#555", "#f5f5f5"]; const rowBg = i % 2 === 0 ? "#fff" : "#f8f9fa"; const visible = showParole[oi];
+                        const oi = parole.indexOf(r); const isEdit = parolaEdit === oi; const catColors = { Email: ["#1565c0", "#e3f2fd"], Bancă: ["#059669", "#e8f5e9"], Card: ["#6a1b9a", "#f3e5f5"], Platformă: ["#e65100", "#fff3e0"], WiFi: ["#0277bd", "#e1f5fe"], Altele: ["#555", "#f5f5f5"] }; const [cc, cbg] = catColors[r.cat] || ["#555", "#f5f5f5"]; const rowBg = i % 2 === 0 ? "#fff" : "#f8f9fa"; const visible = showParole[oi];
                         return (<tr key={r.id || i} style={{ background: isEdit ? "#fffde7" : rowBg }}>
                           <td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td>
                           <td style={td({ background: isEdit ? "#fffde7" : rowBg, fontWeight: 600 })}>{isEdit ? <FastInput style={inp({ fontWeight: 600 })} value={r.platforma || ""} onChange={(e) => updPAR(oi, "platforma", e.target.value)} /> : <span>{r.platforma}</span>}</td>
@@ -7255,11 +7374,11 @@ Reguli:
                 </button>
               </div>
 
-              <div style={{ background: "#fff", border: "2px solid #2e7d32", borderRadius: 10, padding: 16, textAlign: "center" }}>
+              <div style={{ background: "#fff", border: "2px solid #059669", borderRadius: 10, padding: 16, textAlign: "center" }}>
                 <div style={{ fontSize: 32, marginBottom: 8 }}>🚛</div>
-                <div style={{ fontWeight: 700, color: "#2e7d32", fontSize: 14, marginBottom: 4 }}>Achiziții</div>
+                <div style={{ fontWeight: 700, color: "#059669", fontSize: 14, marginBottom: 4 }}>Achiziții</div>
                 <div style={{ fontSize: 11, color: "#666", marginBottom: 12 }}>Doar cele cu Nr. document<br/>{colRows.filter(r => r.nr_doc).length} din {colRows.length} eligibile</div>
-                <button onClick={() => exportExcel("col")} disabled={rapLoading || colRows.filter(r => r.nr_doc).length === 0} style={{ width: "100%", padding: "10px", background: rapLoading ? "#ccc" : "#2e7d32", color: "#fff", border: "none", borderRadius: 6, cursor: rapLoading ? "wait" : "pointer", fontSize: 13, fontWeight: 700 }}>
+                <button onClick={() => exportExcel("col")} disabled={rapLoading || colRows.filter(r => r.nr_doc).length === 0} style={{ width: "100%", padding: "10px", background: rapLoading ? "#ccc" : "#059669", color: "#fff", border: "none", borderRadius: 6, cursor: rapLoading ? "wait" : "pointer", fontSize: 13, fontWeight: 700 }}>
                   {rapLoading ? "⏳ Generez..." : "📥 Descarcă Excel Achiziții"}
                 </button>
               </div>
