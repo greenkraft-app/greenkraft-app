@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useTabela, numar, colatie } from "./hooks";
 import { COD_EWC, TIPURI_ANEXA, dataRo, roIso, lunaDin, numeLuna, fmtKg } from "./constante";
+import { htmlNir } from "./nir";
 
 const rot = (n) => Math.round(n * 100) / 100;
 const azi = () => new Date().toISOString().slice(0, 10);
@@ -213,6 +214,18 @@ export default function Achizitii({ sb, G, ui, currentUser, logAction, confirmDe
     setSel(new Set()); setOrgMasa("");
   };
 
+  // ── NIR: numarul se formeaza din document (NIR-<aviz>-<an>), ca in WiseWeee; nu se numeroteaza separat ──
+  const nrNir = (r) => `NIR-${r.nr_document}-${String(r.data_colectare).slice(0, 4)}`;
+  const tiparesteNir = (r) => {
+    const w = window.open("", "_blank");
+    if (!w) { alert("Browserul a blocat fereastra de tipărire. Permite pop-up-urile pentru această pagină și încearcă din nou."); return; }
+    const f = furn.rows.find((x) => norm(x.den) === norm(r.furnizor));
+    w.document.open();
+    w.document.write(htmlNir({ doc: r, linii: liniiDe[r.id] || [], furnizorCui: r.furnizor_cui || f?.cui || "", nr: nrNir(r), data: r.data_colectare, gestionar: undefined }));
+    w.document.close();
+    logAction("Tipărire", "NIR", nrNir(r), { furnizor: r.furnizor, nr_document: r.nr_document, kg: r.greutate });
+  };
+
   const exporta = () => {
     const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const cap = ["Data", "Luna", "Furnizor", "Aviz", "Nr. auto", "Cod HG856", "Echipament", "Buc", "Kg", "Organizatie", "Greutate document (kg)", "Nr. ticket", "Transportator", "Sofer", "Verificat"];
@@ -235,7 +248,7 @@ export default function Achizitii({ sb, G, ui, currentUser, logAction, confirmDe
     </div>
   );
   const toateVizibileBifate = filtrate.length > 0 && filtrate.every((r) => sel.has(r.id));
-  const colspan = 11;
+  const colspan = 12;
 
   // sugestii pentru nr. auto / sofer, dupa transportatorul ales
   const tr = edit ? transportatorGasit(edit.f.transportator) : null;
@@ -289,7 +302,7 @@ export default function Achizitii({ sb, G, ui, currentUser, logAction, confirmDe
       )}
 
       <div style={ui.TBL}>
-        <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1020 }}>
+        <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1110 }}>
           <thead>
             <tr>
               <th style={ui.th({ width: 30 })}><input type="checkbox" checked={toateVizibileBifate} onChange={(e) => setSel(e.target.checked ? new Set(filtrate.map((r) => r.id)) : new Set())} title="Selectează tot ce e afișat" /></th>
@@ -302,6 +315,7 @@ export default function Achizitii({ sb, G, ui, currentUser, logAction, confirmDe
               <th style={ui.th({ width: 100 })}>Kg</th>
               <th style={ui.th({ width: 100 })}>Org.</th>
               <th style={ui.th({ width: 50 })} title="Verificat">Verif.</th>
+              <th style={ui.th({ width: 80 })} title="Nota de Intrare-Recepție">NIR</th>
               <th style={ui.th({ width: 70 })}></th>
             </tr>
           </thead>
@@ -323,6 +337,9 @@ export default function Achizitii({ sb, G, ui, currentUser, logAction, confirmDe
                   <td style={ui.td({ textAlign: "right", fontWeight: 700 })}>{fmtKg(r.greutate)}</td>
                   <td style={ui.td({ textAlign: "center", fontSize: 11, color: r.organizatie === "NEALOCATE" ? "#92400e" : "#1e293b", background: r.organizatie === "NEALOCATE" ? "#fffbeb" : undefined })}>{r.organizatie}</td>
                   <td style={ui.td({ textAlign: "center" })}><input type="checkbox" checked={!!r.verificat} onChange={() => comutaVerificat(r)} title="Marchează ca verificat" /></td>
+                  <td style={ui.td({ textAlign: "center", padding: 2 })}>
+                    <button onClick={() => tiparesteNir(r)} title={`Tipărește ${nrNir(r)} (Nota de Intrare-Recepție)`} style={{ background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 4, cursor: "pointer", color: "#1565c0", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>🖨️ NIR</button>
+                  </td>
                   <td style={ui.td({ textAlign: "center", padding: 2, whiteSpace: "nowrap" })}>
                     <button onClick={() => deschideEditare(r)} title="Editează" style={{ background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 4, cursor: "pointer", color: "#e65100", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>✏️</button>{" "}
                     <button onClick={() => sterge(r)} title="Șterge" style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button>

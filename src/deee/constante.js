@@ -52,3 +52,12 @@ export const LUNI = ["ianuarie", "februarie", "martie", "aprilie", "mai", "iunie
 export const lunaDin = (iso) => String(iso || "").slice(0, 7);
 export const numeLuna = (cheie) => { const [a, l] = String(cheie).split("-"); return `${LUNI[(+l || 1) - 1]} ${a}`; };
 export const fmtKg = (n) => (Number(n) || 0).toLocaleString("ro-RO", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// Datele firmei, pentru documentele tiparite (NIR) — ca in NIR-ul din WiseWeee
+export const FIRMA = {
+  den: "GREEN KRAFT SRL", cui: "RO36191378",
+  adresa: "Soseaua de centura dreapta 18A, 770110 Afumati",
+  punctLucru: "Soseaua de Centura Dreapta nr. 18A, comuna Afumati, jud. Ilfov",
+  gestionar: "Alexandru I.",
+};
+export const escHtml = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
