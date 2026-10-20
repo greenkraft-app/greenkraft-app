@@ -7,6 +7,7 @@ import Transportatori from "./Transportatori";
 import Achizitii from "./Achizitii";
 import Dezmembrare from "./Dezmembrare";
 import Stocuri from "./Stocuri";
+import Vanzari from "./Vanzari";
 
 // Sectiunea ♻️ DEEE — evidenta echipamentelor electrice si electronice (achizitii, dezmembrare, stocuri, vanzari de fractii).
 // Modulele marcate "in lucru" apar in meniu ca sa se vada planul complet; se activeaza pe masura ce sunt gata.
@@ -14,7 +15,7 @@ const MODULE = [
   { k: "achizitii", l: "🚛 Achiziții", gata: true, tabel: "deee_achizitii", sql: "supabase-deee-3-achizitii.sql" },
   { k: "dezmembrare", l: "🔧 Dezmembrare", gata: true, tabel: "deee_dezmembrari", sql: "supabase-deee-4-dezmembrare-stocuri.sql" },
   { k: "stocuri", l: "📦 Stocuri", gata: true, tabel: "deee_stoc_initial", sql: "supabase-deee-4-dezmembrare-stocuri.sql" },
-  { k: "vanzari", l: "📤 Vânzări fracții", gata: false, ce: "Vânzări din stocul de fracții către clienți (aviz, kg, organizație) și procentele de reciclare/valorificare/eliminare." },
+  { k: "vanzari", l: "📤 Vânzări fracții", gata: true, tabel: "deee_vanzari", sql: "supabase-deee-5-vanzari-fractii.sql" },
   { k: "furnizori", l: "🏢 Furnizori", gata: true, tabel: "deee_furnizori", sql: "supabase-deee-2-furnizori-transportatori.sql" },
   { k: "transportatori", l: "🚚 Transportatori", gata: true, tabel: "deee_transportatori", sql: "supabase-deee-2-furnizori-transportatori.sql" },
   { k: "retete", l: "🧪 Rețete", gata: true, tabel: "deee_retete", sql: "supabase-deee-1-nomenclatoare-retete.sql" },
@@ -45,7 +46,7 @@ export default function Deee(props) {
     <div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
         <div style={{ fontSize: 17, fontWeight: 800, color: "#1e293b" }}>♻️ DEEE</div>
-        <div style={{ fontSize: 12, color: "#64748b" }}>Gestionare echipamente electrice și electronice — în construcție</div>
+        <div style={{ fontSize: 12, color: "#64748b" }}>Gestionare echipamente electrice și electronice</div>
       </div>
 
       <div style={{ display: "flex", overflowX: "auto", paddingBottom: 6, marginBottom: 14, borderBottom: "1px solid #eef2f6" }}>
@@ -73,6 +74,7 @@ export default function Deee(props) {
       {(stare === "ok" || stare === "verific") && modul.k === "achizitii" && <Achizitii {...props} />}
       {(stare === "ok" || stare === "verific") && modul.k === "dezmembrare" && <Dezmembrare {...props} />}
       {(stare === "ok" || stare === "verific") && modul.k === "stocuri" && <Stocuri {...props} />}
+      {(stare === "ok" || stare === "verific") && modul.k === "vanzari" && <Vanzari {...props} />}
       {(stare === "ok" || stare === "verific") && modul.k === "furnizori" && <Furnizori {...props} />}
       {(stare === "ok" || stare === "verific") && modul.k === "transportatori" && <Transportatori {...props} />}
 

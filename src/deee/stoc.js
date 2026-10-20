@@ -34,11 +34,12 @@ export function useStoc(sb) {
   const dzE = useTabela(sb, "deee_dezm_echipamente");
   const dzF = useTabela(sb, "deee_dezm_fractii");
   const ini = useTabela(sb, "deee_stoc_initial");
+  const van = useTabela(sb, "deee_vanzari"); // inca inexistent pana se ruleaza etapa 5 -> ramane gol, stocul merge ca pana acum
   const stoc = useMemo(
-    () => calculeazaStoc({ ach: ach.rows, achL: achL.rows, dz: dz.rows, dzE: dzE.rows, dzF: dzF.rows, ini: ini.rows }),
-    [ach.rows, achL.rows, dz.rows, dzE.rows, dzF.rows, ini.rows],
+    () => calculeazaStoc({ ach: ach.rows, achL: achL.rows, dz: dz.rows, dzE: dzE.rows, dzF: dzF.rows, ini: ini.rows, vanzari: van.rows }),
+    [ach.rows, achL.rows, dz.rows, dzE.rows, dzF.rows, ini.rows, van.rows],
   );
-  const incarcat = [ach, achL, dz, dzE, dzF, ini].every((t) => t.incarcat);
-  const reloadAll = () => Promise.all([ach, achL, dz, dzE, dzF, ini].map((t) => t.reload()));
-  return { ach, achL, dz, dzE, dzF, ini, stoc, incarcat, reloadAll };
+  const incarcat = [ach, achL, dz, dzE, dzF, ini, van].every((t) => t.incarcat);
+  const reloadAll = () => Promise.all([ach, achL, dz, dzE, dzF, ini, van].map((t) => t.reload()));
+  return { ach, achL, dz, dzE, dzF, ini, van, stoc, incarcat, reloadAll };
 }

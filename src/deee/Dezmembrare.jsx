@@ -146,6 +146,10 @@ export default function Dezmembrare({ sb, G, ui, currentUser, logAction, confirm
       const rF = edit.fr.map((l, i) => ({ ord: i, fractie: l.fractie, cod: l.cod || "", kg: numar(l.kg) }));
       const rez = (a, c) => a.map((l) => c.map((k) => l[k]).join(":")).join("|");
       const antet = { nr_operatiune: nr, data: f.data, organizatie: f.organizatie, observatii: f.observatii.trim() };
+      if (edit.id) {
+        const blocate = fractiiBlocate(s.dz.rows.find((d) => d.id === edit.id), edit.fr);
+        if (blocate.length) { setEroare(`Fracții din această operațiune au fost deja vândute — nu le poți reduce sub cât s-a vândut: ${blocate.join(", ")}.`); return; }
+      }
 
       if (!edit.id) {
         const { data, error } = await sb.from("deee_dezmembrari").insert({ ...antet, status: "Finalizat", creat_de: currentUser || "" }).select();
@@ -189,7 +193,26 @@ export default function Dezmembrare({ sb, G, ui, currentUser, logAction, confirm
     } finally { setSeSalveaza(false); }
   };
 
+  // Fractiile unei operatiuni pot fi deja vandute: stergerea / micsorarea lor ar lasa stoc negativ.
+  const fractiiBlocate = (d, noi) => {
+    const noiMap = {};
+    (noi || []).forEach((f) => { const k = cheieStoc(f.fractie, f.cod, d.organizatie); noiMap[k] = (noiMap[k] || 0) + (numar(f.kg) || 0); });
+    const vechiMap = {};
+    (frDe[d.id] || []).forEach((f) => { const k = cheieStoc(f.fractie, f.cod, d.organizatie); vechiMap[k] = (vechiMap[k] || 0) + Number(f.kg); });
+    const probleme = [];
+    Object.entries(vechiMap).forEach(([k, kgVechi]) => {
+      const r = s.stoc.fractii.find((x) => cheieStoc(x.den, x.cod, x.org) === k);
+      const dupa = (r ? r.disp : 0) - kgVechi + (noiMap[k] || 0);
+      if (dupa < -0.0005) probleme.push(`${r?.den || k.split("")[0]} (rămân ${fmtKg(dupa)} kg în stoc)`);
+    });
+    return probleme;
+  };
+
   const sterge = async (d) => {
+    const blocate = fractiiBlocate(d, []);
+    if (blocate.length) { alert(`Nu pot șterge ${d.nr_operatiune}: fracții din ea au fost deja vândute — ${blocate.join(", ")}.
+
+Șterge sau modifică întâi vânzările respective.`); return; }
     if (!confirmDel(`operațiunea ${d.nr_operatiune}`)) return;
     const snapshot = { operatiune: d, echipamente: echDe[d.id] || [], fractii: frDe[d.id] || [] };
     const { error } = await sb.from("deee_dezmembrari").delete().eq("id", d.id);

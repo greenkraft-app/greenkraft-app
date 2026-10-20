@@ -117,7 +117,7 @@ export default function Stocuri({ sb, G, ui, currentUser, logAction, confirmDel 
           </tbody>
         </table>
       </div>
-      {tab === "fractii" && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6 }}>„Vândut/Consumat” se completează după modulul Vânzări fracții.</div>}
+      {tab === "fractii" && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6 }}>„Vândut/Consumat” vine din modulul Vânzări fracții.</div>}
 
       {ajustari.length > 0 && (
         <details style={{ marginTop: 18 }}>
