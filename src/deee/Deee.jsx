@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { lipsaTabel } from "./hooks";
 import Nomenclatoare from "./Nomenclatoare";
 import Retete from "./Retete";
+import Furnizori from "./Furnizori";
+import Transportatori from "./Transportatori";
 
 // Sectiunea ♻️ DEEE — evidenta echipamentelor electrice si electronice (achizitii, dezmembrare, stocuri, vanzari de fractii).
 // Modulele marcate "in lucru" apar in meniu ca sa se vada planul complet; se activeaza pe masura ce sunt gata.
@@ -10,10 +12,10 @@ const MODULE = [
   { k: "dezmembrare", l: "🔧 Dezmembrare", gata: false, ce: "Operațiuni de dezmembrare: alegi echipamentele din stoc, aplici rețeta, iese lista de fracții; verificare total intrat = total ieșit." },
   { k: "stocuri", l: "📦 Stocuri", gata: false, ce: "Stoc de echipamente și stoc de fracții, calculate automat din achiziții, dezmembrări și vânzări." },
   { k: "vanzari", l: "📤 Vânzări fracții", gata: false, ce: "Vânzări din stocul de fracții către clienți (aviz, kg, organizație) și procentele de reciclare/valorificare/eliminare." },
-  { k: "furnizori", l: "🏢 Furnizori", gata: false, ce: "Furnizori și clienți DEEE, cu autorizație de mediu, contact și județ/localitate." },
-  { k: "transportatori", l: "🚚 Transportatori", gata: false, ce: "Transportatori cu mașinile lor (licență, expirare) și șoferii fiecărei mașini." },
-  { k: "retete", l: "🧪 Rețete", gata: true },
-  { k: "nomenclatoare", l: "🗂️ Nomenclatoare", gata: true },
+  { k: "furnizori", l: "🏢 Furnizori", gata: true, tabel: "deee_furnizori", sql: "supabase-deee-2-furnizori-transportatori.sql" },
+  { k: "transportatori", l: "🚚 Transportatori", gata: true, tabel: "deee_transportatori", sql: "supabase-deee-2-furnizori-transportatori.sql" },
+  { k: "retete", l: "🧪 Rețete", gata: true, tabel: "deee_retete", sql: "supabase-deee-1-nomenclatoare-retete.sql" },
+  { k: "nomenclatoare", l: "🗂️ Nomenclatoare", gata: true, tabel: "deee_organizatii", sql: "supabase-deee-1-nomenclatoare-retete.sql" },
 ];
 
 export default function Deee(props) {
@@ -21,16 +23,19 @@ export default function Deee(props) {
   const [sub, setSub] = useState("retete");
   const [stare, setStare] = useState("verific"); // verific | ok | lipsa | eroare
 
+  const modul = MODULE.find((m) => m.k === sub);
+
+  // verificam daca tabelele modulului deschis exista (adica daca s-a rulat fisierul .sql al etapei respective)
   useEffect(() => {
+    if (!modul.tabel) return;
     let activ = true;
-    sb.from("deee_organizatii").select("id").limit(1).then(({ error }) => {
+    setStare("verific");
+    sb.from(modul.tabel).select("id").limit(1).then(({ error }) => {
       if (!activ) return;
       setStare(!error ? "ok" : lipsaTabel(error) ? "lipsa" : "eroare");
     });
     return () => { activ = false; };
-  }, [sb]);
-
-  const modul = MODULE.find((m) => m.k === sub);
+  }, [sb, modul.tabel]);
   const subSt = (k) => ({ padding: "7px 14px", cursor: "pointer", border: "none", fontWeight: 600, fontSize: 12, borderRadius: 8, marginRight: 4, whiteSpace: "nowrap", background: sub === k ? "#ecfdf5" : "transparent", color: sub === k ? G : "#475569", boxShadow: sub === k ? `inset 0 0 0 1.5px ${G}55` : "none" });
 
   return (
@@ -52,7 +57,7 @@ export default function Deee(props) {
         <div style={{ background: "#fffbeb", border: "1px solid #fcd34d", borderRadius: 12, padding: 18, maxWidth: 680 }}>
           <div style={{ fontWeight: 700, color: "#92400e", marginBottom: 6 }}>Mai trebuie un pas: crearea tabelelor în Supabase</div>
           <div style={{ fontSize: 13, color: "#78350f", lineHeight: 1.6 }}>
-            Rulează o singură dată fișierul <b>supabase-deee-1-nomenclatoare-retete.sql</b> din proiect: Supabase → <b>SQL Editor</b> → New query → lipești conținutul → <b>Run</b>. Apoi reîncarcă această pagină.
+            Rulează o singură dată fișierul <b>{modul.sql}</b> din proiect: Supabase → <b>SQL Editor</b> → New query → lipești conținutul → <b>Run</b>. Apoi reîncarcă această pagină.
           </div>
         </div>
       )}
@@ -62,6 +67,8 @@ export default function Deee(props) {
 
       {(stare === "ok" || stare === "verific") && modul.k === "retete" && <Retete {...props} />}
       {(stare === "ok" || stare === "verific") && modul.k === "nomenclatoare" && <Nomenclatoare {...props} />}
+      {(stare === "ok" || stare === "verific") && modul.k === "furnizori" && <Furnizori {...props} />}
+      {(stare === "ok" || stare === "verific") && modul.k === "transportatori" && <Transportatori {...props} />}
 
       {!modul.gata && (
         <div style={{ background: "#fff", border: "1px dashed #cbd5e1", borderRadius: 12, padding: 22, maxWidth: 680 }}>

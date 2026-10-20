@@ -5024,7 +5024,7 @@ Reguli:
         })()}
 
         {/* ══ DEEE (echipamente electrice si electronice) ══ */}
-        {tab === "deee" && <Deee sb={sb} G={G} ui={{ th, td, TBL }} currentUser={currentUser} logAction={logAction} confirmDel={confirmDel} />}
+        {tab === "deee" && <Deee sb={sb} G={G} ui={{ th, td, TBL }} currentUser={currentUser} logAction={logAction} confirmDel={confirmDel} pfList={pfList} pjList={pjList} />}
 
         {/* ══ BORDEROURI ══ */}
         {tab === "borderou" && (
