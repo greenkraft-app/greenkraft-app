@@ -5,13 +5,15 @@ import Retete from "./Retete";
 import Furnizori from "./Furnizori";
 import Transportatori from "./Transportatori";
 import Achizitii from "./Achizitii";
+import Dezmembrare from "./Dezmembrare";
+import Stocuri from "./Stocuri";
 
 // Sectiunea ♻️ DEEE — evidenta echipamentelor electrice si electronice (achizitii, dezmembrare, stocuri, vanzari de fractii).
 // Modulele marcate "in lucru" apar in meniu ca sa se vada planul complet; se activeaza pe masura ce sunt gata.
 const MODULE = [
   { k: "achizitii", l: "🚛 Achiziții", gata: true, tabel: "deee_achizitii", sql: "supabase-deee-3-achizitii.sql" },
-  { k: "dezmembrare", l: "🔧 Dezmembrare", gata: false, ce: "Operațiuni de dezmembrare: alegi echipamentele din stoc, aplici rețeta, iese lista de fracții; verificare total intrat = total ieșit." },
-  { k: "stocuri", l: "📦 Stocuri", gata: false, ce: "Stoc de echipamente și stoc de fracții, calculate automat din achiziții, dezmembrări și vânzări." },
+  { k: "dezmembrare", l: "🔧 Dezmembrare", gata: true, tabel: "deee_dezmembrari", sql: "supabase-deee-4-dezmembrare-stocuri.sql" },
+  { k: "stocuri", l: "📦 Stocuri", gata: true, tabel: "deee_stoc_initial", sql: "supabase-deee-4-dezmembrare-stocuri.sql" },
   { k: "vanzari", l: "📤 Vânzări fracții", gata: false, ce: "Vânzări din stocul de fracții către clienți (aviz, kg, organizație) și procentele de reciclare/valorificare/eliminare." },
   { k: "furnizori", l: "🏢 Furnizori", gata: true, tabel: "deee_furnizori", sql: "supabase-deee-2-furnizori-transportatori.sql" },
   { k: "transportatori", l: "🚚 Transportatori", gata: true, tabel: "deee_transportatori", sql: "supabase-deee-2-furnizori-transportatori.sql" },
@@ -69,6 +71,8 @@ export default function Deee(props) {
       {(stare === "ok" || stare === "verific") && modul.k === "retete" && <Retete {...props} />}
       {(stare === "ok" || stare === "verific") && modul.k === "nomenclatoare" && <Nomenclatoare {...props} />}
       {(stare === "ok" || stare === "verific") && modul.k === "achizitii" && <Achizitii {...props} />}
+      {(stare === "ok" || stare === "verific") && modul.k === "dezmembrare" && <Dezmembrare {...props} />}
+      {(stare === "ok" || stare === "verific") && modul.k === "stocuri" && <Stocuri {...props} />}
       {(stare === "ok" || stare === "verific") && modul.k === "furnizori" && <Furnizori {...props} />}
       {(stare === "ok" || stare === "verific") && modul.k === "transportatori" && <Transportatori {...props} />}
 
