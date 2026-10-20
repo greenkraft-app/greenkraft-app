@@ -32,3 +32,23 @@ export function zilePanaLa(data) {
   const azi = new Date(); azi.setHours(0, 0, 0, 0);
   return Math.round((t - azi.getTime()) / 86400000);
 }
+
+// Codurile de deseu (HG 856) folosite la DEEE — cele din lista WiseWeee; se pot scrie si alte coduri.
+export const COD_EWC = ["16 02 11*", "16 02 13*", "16 02 14", "16 02 16", "20 01 21*", "20 01 23*", "20 01 35*", "20 01 36"];
+export const TIPURI_ANEXA = ["Anexa 1", "Anexa 2", "Anexa 3"];
+
+// "YYYY-MM-DD" -> "DD.MM.YYYY" ; orice altceva -> "—"
+export function dataRo(iso) {
+  const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : "—";
+}
+// "DD.MM.YYYY" (formatul tichetelor din Greenkraft) -> "YYYY-MM-DD" ; invalid -> ""
+export function roIso(dmy) {
+  const m = String(dmy || "").match(/^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})/);
+  return m ? `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}` : "";
+}
+export const LUNI = ["ianuarie", "februarie", "martie", "aprilie", "mai", "iunie", "iulie", "august", "septembrie", "octombrie", "noiembrie", "decembrie"];
+// "2026-10-20" -> "2026-10" (cheie de luna)
+export const lunaDin = (iso) => String(iso || "").slice(0, 7);
+export const numeLuna = (cheie) => { const [a, l] = String(cheie).split("-"); return `${LUNI[(+l || 1) - 1]} ${a}`; };
+export const fmtKg = (n) => (Number(n) || 0).toLocaleString("ro-RO", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
