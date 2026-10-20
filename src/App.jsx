@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, Fragment } from "react";
 import { createClient } from "@supabase/supabase-js";
+import Deee from "./deee/Deee";
 
 // ── Supabase client ───────────────────────────────────────────
 const sb = createClient(
@@ -4681,7 +4682,7 @@ Reguli:
 
       {/* Tabs */}
       <div style={{ display: "flex", background: "#fff", padding: "8px 10px", borderLeft: "1px solid #e2e8f0", borderRight: "1px solid #e2e8f0", borderBottom: "1px solid #eef2f6", overflowX: "auto" }}>
-        {[["dashboard","🏠 Dashboard"],["borderou","📄 Borderouri"],["pv","📋 PV & Anexa 3"],["cheltuieli","💸 Cheltuieli"],["colectari","🚛 Achiziții"],["livrari","📤 Vânzări"],["cantar","⚖️ Tichete Cântar"],["stoc","📦 Stocuri"],["produse","🛠️ Variabile"],["salariati","👷 Salariați"],["datorii","💳 Datorii"],["avansuri","💵 Avansuri & Dividende"],["contracte","📃 Contracte"],["parole","🔐 Parole"],["rapoarte","📊 Rapoarte"],["trasabilitate","🔄 Trasabilitate"],["audit","🕘 Istoric"]].filter(([k]) => k !== "audit" || esteAdminIstoric).map(([k, l]) => (
+        {[["dashboard","🏠 Dashboard"],["borderou","📄 Borderouri"],["pv","📋 PV & Anexa 3"],["cheltuieli","💸 Cheltuieli"],["colectari","🚛 Achiziții"],["livrari","📤 Vânzări"],["cantar","⚖️ Tichete Cântar"],["stoc","📦 Stocuri"],["produse","🛠️ Variabile"],["salariati","👷 Salariați"],["datorii","💳 Datorii"],["avansuri","💵 Avansuri & Dividende"],["contracte","📃 Contracte"],["deee","♻️ DEEE"],["parole","🔐 Parole"],["rapoarte","📊 Rapoarte"],["trasabilitate","🔄 Trasabilitate"],["audit","🕘 Istoric"]].filter(([k]) => k !== "audit" || esteAdminIstoric).map(([k, l]) => (
           <button key={k} style={tabSt(k)} onClick={() => setTab(k)}>{l}</button>
         ))}
       </div>
@@ -5021,6 +5022,9 @@ Reguli:
           </div>
           );
         })()}
+
+        {/* ══ DEEE (echipamente electrice si electronice) ══ */}
+        {tab === "deee" && <Deee sb={sb} G={G} ui={{ th, td, TBL }} currentUser={currentUser} logAction={logAction} confirmDel={confirmDel} />}
 
         {/* ══ BORDEROURI ══ */}
         {tab === "borderou" && (
