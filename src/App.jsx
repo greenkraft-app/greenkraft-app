@@ -6450,7 +6450,8 @@ Reguli:
           const goale = sortByNrTichetAsc(ticheteList.filter((t) => t.status === "gol"));
           const inchise = sortByDateAsc(ticheteList.filter((t) => t.status === "inchis"));
           const lunaOpts = [...new Set(ticheteList.map((t) => monthOf(t.data)).filter(Boolean))].sort();
-          const filtrate = sortByNrTichetAsc([...inchise, ...goale]).filter((t) => {
+          // tichetele deschise (o singura cantarire facuta) apar si ele in registru, ca sa nu lipseasca niciun numar din sir
+          const filtrate = sortByNrTichetAsc([...inchise, ...goale, ...deschise]).filter((t) => {
             if (ticAzi) { if (t.data !== today()) return false; }
             else if (ticLuna && monthOf(t.data) !== ticLuna) return false;
             if (ticFilter) {
@@ -6689,11 +6690,11 @@ Reguli:
                       <thead><tr>{["Nr.", "Data", "Ore", "Status", "Tip", "Furnizor", "Mașină", "Șofer", "Material", "Brut", "Tara", "NET (kg)", "Operator", "🖨️", "📤", "📋", "✏️", ""].map((h, i) => <th key={i} style={th({ background: G })} title={h === "📤" ? "Trimite către WiseWeee" : h === "📋" ? "Copiază într-un tichet nou" : undefined}>{h}</th>)}</tr></thead>
                       <tbody>
                         {filtrate.map((t, idx) => (
-                          <tr key={t.id} style={{ background: t.status === "gol" ? "#fff8e1" : idx % 2 === 0 ? "#fff" : "#f8fbf9" }}>
+                          <tr key={t.id} style={{ background: t.status === "gol" ? "#fff8e1" : t.status === "deschis" ? "#fffde7" : idx % 2 === 0 ? "#fff" : "#f8fbf9" }}>
                             <td style={td({ textAlign: "center", fontWeight: 700, color: G })}>{t.serie} {t.nr_tichet}</td>
                             <td style={td({ textAlign: "center" })}>{t.data}</td>
-                            <td style={td({ textAlign: "center", fontSize: 10, color: "#888" })}>{t.status === "gol" ? t.ora_intrare : `${t.ora_intrare}–${t.ora_iesire}`}</td>
-                            <td style={td({ textAlign: "center", fontWeight: 700, fontSize: 10, color: t.status === "gol" ? "#e65100" : G, background: t.status === "gol" ? "#fff3e0" : "#e8f5e9" })}>{t.status === "gol" ? "📝 Rezervat" : "✅ Închis"}</td>
+                            <td style={td({ textAlign: "center", fontSize: 10, color: "#888" })}>{t.status === "gol" || t.status === "deschis" ? t.ora_intrare : `${t.ora_intrare}–${t.ora_iesire}`}</td>
+                            <td style={td({ textAlign: "center", fontWeight: 700, fontSize: 10, color: t.status === "gol" || t.status === "deschis" ? "#e65100" : G, background: t.status === "gol" || t.status === "deschis" ? "#fff3e0" : "#e8f5e9" })}>{t.status === "gol" ? "📝 Rezervat" : t.status === "deschis" ? "⏳ Deschis" : "✅ Închis"}</td>
                             <td style={td({ textAlign: "center", fontWeight: 700, color: t.tip === "Intrare" ? G : "#bf360c", background: t.tip === "Intrare" ? "#e8f5e9" : "#fbe9e7" })}>{t.tip === "Intrare" ? "▼ IN" : "▲ OUT"}</td>
                             <td style={td({ fontWeight: 600 })}>{t.partener}</td>
                             <td style={td({ textAlign: "center", fontFamily: "monospace" })}>{t.nr_masina}</td>
@@ -6704,7 +6705,7 @@ Reguli:
                             <td style={td({ textAlign: "right", fontWeight: 700, background: "#fff8e1", color: "#e65100" })}>{fmt(t.net)}</td>
                             <td style={td({ textAlign: "center", fontSize: 10 })}>{t.operator || "—"}</td>
                             <td style={td({ textAlign: "center", padding: 2, whiteSpace: "nowrap" })}><button onClick={() => printTichet(t)} style={{ background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 4, cursor: "pointer", color: "#1565c0", fontSize: 11, fontWeight: 700, padding: "2px 8px" }} title="Printează aici">🖨️</button> <button onClick={() => trimiteLaPrint(t)} style={{ background: "#ede7f6", border: "1px solid #b39ddb", borderRadius: 4, cursor: "pointer", color: "#6a1b9a", fontSize: 11, fontWeight: 700, padding: "2px 6px" }} title="Trimite la imprimanta de la birou">📡🖨️</button></td>
-                            <td style={td({ textAlign: "center", padding: 2 })}>{t.status === "gol" ? "—" : wwSent[t.id] ? <span style={{ color: G, fontSize: 15 }} title="Trimis">✓</span> : <button onClick={() => trimiteWiseWeee({ id: t.id, furn: t.partener, nr_doc: t.aviz, produs: t.material, cant: t.net, data: t.data, tichet_id: String(t.id) })} title="Trimite spre WiseWeee" style={{ background: "#fff3e0", border: "1px solid #ffb74d", borderRadius: 4, cursor: "pointer", fontSize: 13, padding: "2px 5px" }}>📤</button>}</td>
+                            <td style={td({ textAlign: "center", padding: 2 })}>{t.status === "gol" || t.status === "deschis" ? "—" : wwSent[t.id] ? <span style={{ color: G, fontSize: 15 }} title="Trimis">✓</span> : <button onClick={() => trimiteWiseWeee({ id: t.id, furn: t.partener, nr_doc: t.aviz, produs: t.material, cant: t.net, data: t.data, tichet_id: String(t.id) })} title="Trimite spre WiseWeee" style={{ background: "#fff3e0", border: "1px solid #ffb74d", borderRadius: 4, cursor: "pointer", fontSize: 13, padding: "2px 5px" }}>📤</button>}</td>
                             <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => copiazaTichet(t)} title="Copiază într-un tichet nou" style={{ background: "#e8f5e9", border: `1px solid ${G}`, borderRadius: 4, cursor: "pointer", color: G, fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>📋</button></td>
                             <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => setTicEdit({ id: t.id, status: t.status, tip: t.tip, nr_tichet: t.nr_tichet, data: t.data || "", partener: t.partener || "", transportator: t.transportator || "", transportator_cui: t.transportator_cui || "", nr_masina: t.nr_masina || "", sofer: t.sofer || "", material: t.material || "", brut: t.brut != null ? String(t.brut) : "", tara: t.tara != null ? String(t.tara) : "", factura: t.factura || "", aviz: t.aviz || "", brut_la: t.brut_la || "", tara_la: t.tara_la || "", ora_intrare: t.ora_intrare || "", ora_iesire: t.ora_iesire || "" })} style={{ background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 4, cursor: "pointer", color: "#e65100", fontSize: 11, fontWeight: 700, padding: "2px 8px" }} title="Editează tichetul">✏️</button></td>
                             <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => delTichet(t)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
