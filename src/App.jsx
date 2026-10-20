@@ -211,7 +211,7 @@ const CAT_PAROLE = ["Email","Bancă","Card","Platformă","WiFi","Altele"];
 // singur sold de pornire, pentru că plățile de dinainte nu erau legate de o zi anume.
 const REGISTRU_CASA_START = "12.10.2026";
 const PIN_CORRECT = "336699";
-const USER_PASSWORDS = { Catalin: "Kraft$888", Alexandru: "310890", Mihai: "336699" };
+const USER_PASSWORDS = { Catalin: "Kraft$8888", Alexandru: "310890", Mihai: "336699" };
 // Login-ul ramane in localStorage pe fiecare telefon/calculator, deci nu poate fi sters de la distanta.
 // Ca sa deconectezi toti userii: schimba aceasta valoare (orice text nou) si publica aplicatia — la urmatoarea
 // deschidere/reincarcare, fiecare dispozitiv isi vede versiunea veche, sterge login-ul si cere din nou parola.
