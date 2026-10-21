@@ -4654,6 +4654,25 @@ Reguli:
                   })()}
                 </div>
               </div>
+              {/* Ultima Tara pentru furnizorul + transportatorul alesi (la aceeasi masina, daca e aleasa) — se poate prelua cu un click */}
+              {(() => {
+                if (!ticEdit.partener || !ticEdit.transportator) return null;
+                const n = (x) => String(x || "").trim().toLowerCase();
+                const perechea = ticheteList.filter((t) => t.id !== ticEdit.id && t.tara != null && t.tara !== "" && parseSuma(t.tara) > 0
+                  && n(t.partener) === n(ticEdit.partener) && n(t.transportator) === n(ticEdit.transportator));
+                const dupaNr = (a, b) => (parseInt(b.nr_tichet) || 0) - (parseInt(a.nr_tichet) || 0);
+                const aceeasiMasina = ticEdit.nr_masina ? perechea.filter((t) => n(t.nr_masina) === n(ticEdit.nr_masina)).sort(dupaNr)[0] : null;
+                const ultima = aceeasiMasina || [...perechea].sort(dupaNr)[0];
+                if (!ultima) return <div style={{ fontSize: 11, color: "#999" }}>Nu există o Tară anterioară pentru acest furnizor și transportator.</div>;
+                return (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#fff8e1", border: "1px solid #ffe082", borderRadius: 6, padding: "6px 10px", fontSize: 11, flexWrap: "wrap" }}>
+                    <span style={{ color: "#555" }}>Ultima Tară:</span>
+                    <strong style={{ fontFamily: "monospace", fontSize: 14, color: "#e65100" }}>{fmt(parseSuma(ultima.tara))} kg</strong>
+                    <span style={{ color: "#888" }}>TC #{ultima.nr_tichet} • {ultima.data}{ultima.nr_masina ? ` • ${ultima.nr_masina}` : ""}{aceeasiMasina ? " (aceeași mașină)" : ""}</span>
+                    <button onClick={() => setTicEdit((p) => ({ ...p, tara: String(ultima.tara) }))} style={{ marginLeft: "auto", background: "#fff", border: "1px solid #ffa726", color: "#e65100", borderRadius: 5, padding: "3px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>Folosește</button>
+                  </div>
+                );
+              })()}
               <div style={{ display: "flex", gap: 8 }}>
                 <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Factura</label><FastInput style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, boxSizing: "border-box" }} value={ticEdit.factura} onChange={(e) => setTicEdit((p) => ({ ...p, factura: e.target.value }))} /></div>
                 <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Aviz</label><FastInput style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, boxSizing: "border-box" }} value={ticEdit.aviz} onChange={(e) => setTicEdit((p) => ({ ...p, aviz: e.target.value }))} /></div>
