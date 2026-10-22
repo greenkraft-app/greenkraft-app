@@ -1515,6 +1515,8 @@ export default function App() {
   const [ticFilter, setTicFilter] = useState("");
   const [ticLuna, setTicLuna] = useState("");
   const [ticAzi, setTicAzi] = useState(false);
+  const [ticDe, setTicDe] = useState(""); // interval de zile in Registru (DD.MM.YYYY); aceeasi zi in ambele = o singura zi
+  const [ticPana, setTicPana] = useState("");
   const [ticTaraInput, setTicTaraInput] = useState({}); // { [id]: valoare }
   const [ticNou, setTicNou] = useState({ tip: "Intrare", prima: "plin", partener: "", partener_cui: "", client: "GREEN KRAFT SRL", transportator: "", transportator_cui: "", nr_masina: "", sofer: "", material: "", greutate: "", factura: "", aviz: "", obs: "" });
   const [ticEdit, setTicEdit] = useState(null); // { id, nr_tichet, factura, aviz, brut_la, tara_la, ora_intrare, ora_iesire }
@@ -6489,6 +6491,12 @@ Reguli:
           const filtrate = sortByNrTichetAsc([...inchise, ...goale, ...deschise]).filter((t) => {
             if (ticAzi) { if (t.data !== today()) return false; }
             else if (ticLuna && monthOf(t.data) !== ticLuna) return false;
+            if (ticDe || ticPana) {
+              // daca "de la" e dupa "pana la", le luam invers in loc sa nu afisam nimic
+              const d1 = parseDateRO(ticDe), d2 = parseDateRO(ticPana);
+              const [de, pana] = d1 && d2 && d1 > d2 ? [ticPana, ticDe] : [ticDe, ticPana];
+              if (!inDateRange(t.data, de, pana)) return false;
+            }
             if (ticFilter) {
               const q = ticFilter.toLowerCase();
               if (!(t.partener?.toLowerCase().includes(q) || t.nr_masina?.toLowerCase().includes(q) || t.material?.toLowerCase().includes(q) || String(t.nr_tichet).includes(q))) return false;
@@ -6708,13 +6716,20 @@ Reguli:
               {ticSubTab === "registru" && (
                 <div>
                   <div style={{ display: "flex", gap: 10, marginBottom: 10, alignItems: "center", flexWrap: "wrap" }}>
-                    <select style={{ padding: "6px 10px", border: "1px solid #ccc", borderRadius: 5, fontSize: 12 }} value={ticLuna} onChange={(e) => { setTicLuna(e.target.value); setTicAzi(false); }}>
+                    <select style={{ padding: "6px 10px", border: "1px solid #ccc", borderRadius: 5, fontSize: 12 }} value={ticLuna} onChange={(e) => { setTicLuna(e.target.value); setTicAzi(false); setTicDe(""); setTicPana(""); }}>
                       <option value="">Toate lunile</option>
                       {lunaOpts.map((l) => <option key={l} value={l}>{l}</option>)}
                     </select>
-                    <button onClick={() => { setTicAzi((v) => !v); setTicLuna(""); }} style={{ padding: "6px 12px", border: `1px solid ${ticAzi ? G : "#ccc"}`, borderRadius: 5, background: ticAzi ? G : "#fff", color: ticAzi ? "#fff" : "#555", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>📅 Azi</button>
+                    <button onClick={() => { setTicAzi((v) => !v); setTicLuna(""); setTicDe(""); setTicPana(""); }} style={{ padding: "6px 12px", border: `1px solid ${ticAzi ? G : "#ccc"}`, borderRadius: 5, background: ticAzi ? G : "#fff", color: ticAzi ? "#fff" : "#555", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>📅 Azi</button>
+                    {/* Perioada: alegi "de la" si "pana la"; daca alegi doar "de la", se pune aceeasi zi si la "pana la" (o singura zi) */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "#666" }}>
+                      <span>de la</span>
+                      <div style={{ width: 128 }}><DateInput value={ticDe} onChange={(v) => { setTicDe(v); if (v && !ticPana) setTicPana(v); setTicLuna(""); setTicAzi(false); }} style={{ border: "1px solid #ccc", padding: "5px 6px", fontSize: 12 }} /></div>
+                      <span>până la</span>
+                      <div style={{ width: 128 }}><DateInput value={ticPana} onChange={(v) => { setTicPana(v); if (v && !ticDe) setTicDe(v); setTicLuna(""); setTicAzi(false); }} style={{ border: "1px solid #ccc", padding: "5px 6px", fontSize: 12 }} /></div>
+                    </div>
                     <FastInput style={{ padding: "6px 10px", border: "1px solid #ccc", borderRadius: 5, fontSize: 12, width: 220 }} value={ticFilter} onChange={(e) => setTicFilter(e.target.value)} placeholder="🔍 Caută furnizor / mașină / material..." />
-                    {(ticLuna || ticAzi || ticFilter) && <button onClick={() => { setTicLuna(""); setTicAzi(false); setTicFilter(""); }} style={{ padding: "5px 10px", border: "1px solid #ccc", borderRadius: 5, background: "#fff", cursor: "pointer", fontSize: 11 }}>↺ Reset</button>}
+                    {(ticLuna || ticAzi || ticFilter || ticDe || ticPana) && <button onClick={() => { setTicLuna(""); setTicAzi(false); setTicFilter(""); setTicDe(""); setTicPana(""); }} style={{ padding: "5px 10px", border: "1px solid #ccc", borderRadius: 5, background: "#fff", cursor: "pointer", fontSize: 11 }}>↺ Reset</button>}
                     <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
                       <SC label="Tichete" value={String(filtrate.length)} c={G} bg="#e8f5e9" />
                       <SC label="Total NET" value={fmt(totNet) + " kg"} c="#e65100" bg="#fff3e0" />
@@ -6746,7 +6761,7 @@ Reguli:
                             <td style={td({ textAlign: "center", padding: 2 })}><button onClick={() => delTichet(t)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
                           </tr>
                         ))}
-                        {filtrate.length === 0 && <tr><td colSpan={18} style={{ padding: 20, textAlign: "center", color: "#999", fontSize: 12 }}>Niciun tichet {ticLuna || ticAzi || ticFilter ? "pentru filtrele alese" : "încă"}.</td></tr>}
+                        {filtrate.length === 0 && <tr><td colSpan={18} style={{ padding: 20, textAlign: "center", color: "#999", fontSize: 12 }}>Niciun tichet {ticLuna || ticAzi || ticFilter || ticDe || ticPana ? "pentru filtrele alese" : "încă"}.</td></tr>}
                       </tbody>
                     </table>
                   </div>
