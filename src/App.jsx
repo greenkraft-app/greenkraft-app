@@ -4649,7 +4649,19 @@ Reguli:
                   nr_masina: ultim.nr_masina || p.nr_masina, sofer: ultim.sofer || p.sofer, material: ultim.material || p.material,
                 };
               })} /></div></div>
-              <div><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Transportator</label><div style={{ border: "1px solid #ccc", borderRadius: 5, padding: "2px 4px" }}><ACStrict value={ticEdit.transportator} options={[...new Set(["GREEN KRAFT SRL", ...pfList.map(f => f.denumire), ...pjList.map(f => f.denumire)].filter(Boolean))]} placeholder="noi / PF / PJ" strict onChange={(v) => { const f = pjList.find(x => x.denumire === v) || pfList.find(x => x.denumire === v); const cui = v.toUpperCase().includes("GREEN KRAFT") ? "36191378" : (f?.cod_fiscal || ""); setTicEdit((p) => ({ ...p, transportator: v, transportator_cui: cui })); }} /></div></div>
+              <div><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Transportator</label><div style={{ border: "1px solid #ccc", borderRadius: 5, padding: "2px 4px" }}><ACStrict value={ticEdit.transportator} options={[...new Set(["GREEN KRAFT SRL", ...pfList.map(f => f.denumire), ...pjList.map(f => f.denumire)].filter(Boolean))]} placeholder="noi / PF / PJ" strict onChange={(v) => { const f = pjList.find(x => x.denumire === v) || pfList.find(x => x.denumire === v); const cui = v.toUpperCase().includes("GREEN KRAFT") ? "36191378" : (f?.cod_fiscal || ""); setTicEdit((p) => {
+                if (p.transportator === v) return p;
+                const baza = { ...p, transportator: v, transportator_cui: cui };
+                // Transportator schimbat: aducem masina si soferul din ultimul tichet al perechii furnizor + transportator;
+                // daca perechea n-are istoric, din ultimul tichet al transportatorului (la orice furnizor).
+                const lc = (x) => String(x || "").trim().toLowerCase();
+                const dupaNr = (a, b) => (parseInt(b.nr_tichet) || 0) - (parseInt(a.nr_tichet) || 0);
+                const alteTichete = ticheteList.filter((t) => t.id !== p.id && t.nr_masina && lc(t.transportator) === lc(v));
+                const pereche = lc(p.partener) ? alteTichete.filter((t) => lc(t.partener) === lc(p.partener)).sort(dupaNr)[0] : null;
+                const ultim = pereche || [...alteTichete].sort(dupaNr)[0];
+                if (!ultim) return baza;
+                return { ...baza, nr_masina: ultim.nr_masina, sofer: ultim.sofer || p.sofer, material: p.material || ultim.material || "" };
+              }); }} /></div></div>
               <div style={{ display: "flex", gap: 8 }}>
                 <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Mașină</label><div style={{ border: "1px solid #ccc", borderRadius: 5, padding: "2px 4px" }}><ACStrict value={ticEdit.nr_masina} options={[...new Set([...TIC_MASINI, ...ticheteList.map(t => t.nr_masina)].filter(Boolean))].sort()} placeholder="IF55KFT" onChange={(v) => setTicEdit((p) => ({ ...p, nr_masina: v.toUpperCase() }))} /></div></div>
                 <div style={{ flex: 1.4 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Șofer</label><div style={{ border: "1px solid #ccc", borderRadius: 5, padding: "2px 4px" }}><ACStrict value={ticEdit.sofer} options={[...new Set([...TIC_DELEGATI, ...delegatiList.map(d => (d.nume || "").toUpperCase()), ...ticheteList.map(t => (t.sofer || "").toUpperCase())].filter(Boolean))].sort()} placeholder="alege sau scrie nou" onChange={(v) => setTicEdit((p) => ({ ...p, sofer: v }))} /></div></div>
