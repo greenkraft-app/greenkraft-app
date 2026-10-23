@@ -7080,8 +7080,8 @@ Reguli:
                 {platiVechiTotal > 0 && <> Cele <strong>{fmt(platiVechiTotal)} lei</strong> de la „Plăți anterioare" sunt plățile introduse manual înainte de bifă — rămân scăzute, dar nu se mai modifică. Nu bifa achiziții plătite deja atunci, că s-ar scădea de două ori.</>}
               </div>
               <div style={TBL}>
-                <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 760 }}>
-                  <colgroup><col style={{ width: 28 }} /><col style={{ width: 110 }} /><col style={{ width: 170 }} /><col style={{ width: 120 }} /><col style={{ width: 120 }} /><col style={{ width: 130 }} /><col style={{ width: 30 }} /></colgroup>
+                <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 980 }}>
+                  <colgroup><col style={{ width: 28 }} /><col style={{ width: 110 }} /><col style={{ width: 170 }} /><col style={{ width: 120 }} /><col style={{ width: 120 }} /><col style={{ width: 130 }} /><col style={{ width: 230 }} /><col style={{ width: 30 }} /></colgroup>
                   <thead><tr style={{ background: "#00838f" }}>
                     <th style={th({ background: "#00636b" })}></th>
                     <th style={th({ textAlign: "center" })}>Data</th>
@@ -7089,10 +7089,11 @@ Reguli:
                     <th style={th({ textAlign: "center" })}>Sumă adusă</th>
                     <th style={th({ textAlign: "center" })} title="Câți bani mai erau în casă în ziua respectivă">Sold anterior</th>
                     <th style={th({ textAlign: "center" })}>Total disponibil</th>
+                    <th style={th({ textAlign: "center" })}>Observații</th>
                     <th style={th({})}></th>
                   </tr></thead>
                   <tbody>
-                    {baniAdusiRows.length === 0 && <tr><td colSpan={7} style={{ textAlign: "center", padding: 20, color: "#aaa" }}>Nicio înregistrare.</td></tr>}
+                    {baniAdusiRows.length === 0 && <tr><td colSpan={8} style={{ textAlign: "center", padding: 20, color: "#aaa" }}>Nicio înregistrare.</td></tr>}
                     {baniAdusiRows.map((r, i) => {
                       const oi = avRows.indexOf(r);
                       const suma = parseSuma(r.suma) || 0;
@@ -7107,6 +7108,7 @@ Reguli:
                           <td style={td({ background: "#e0f2f1", textAlign: "right", fontWeight: 700, color: "#00695c" })}><FastInput style={inp({ textAlign: "right", fontWeight: 700, color: "#00695c" })} value={r.suma || ""} onChange={(e) => updAV(oi, "suma", e.target.value)} placeholder="0" /></td>
                           <td style={td({ background: "#fff8e1", textAlign: "right" })}><FastInput style={inp({ textAlign: "right" })} value={r.sold_anterior ?? ""} onChange={(e) => updAV(oi, "sold_anterior", e.target.value === "" ? null : e.target.value)} placeholder="0" /></td>
                           <td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 700 })}>{fmt(totalDisp)}</td>
+                          <td style={td({ background: rowBg })}><FastInput style={inp({ textAlign: "left" })} value={r.det || ""} onChange={(e) => updAV(oi, "det", e.target.value)} placeholder="Observații" title={r.det || ""} /></td>
                           <td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delBaniAdusi(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 14 }}>✕</button></td>
                         </tr>
                       );
@@ -7118,7 +7120,7 @@ Reguli:
                       <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700, fontSize: 13 }}>{fmt(baniAdusiRows.reduce((s, r) => s + (parseSuma(r.suma) || 0), 0))}</td>
                       <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700, fontSize: 13 }}>{fmt(baniAdusiRows.reduce((s, r) => s + (parseSuma(r.sold_anterior) || 0), 0))}</td>
                       <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700, fontSize: 13 }}>{fmt(totalAdusInCasa)}</td>
-                      <td></td>
+                      <td></td><td></td>
                     </tr></tfoot>
                   )}
                 </table>
