@@ -117,8 +117,8 @@ export default function Nomenclatoare(props) {
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-start" }}>
         <Nomenclator {...props} titlu="Organizații" descriere="Organizațiile către care se raportează (CNREE, RLG, NEALOCATE…)." tabel="deee_organizatii"
           campuri={[{ k: "den", label: "Denumire" }]} />
-        <Nomenclator {...props} titlu="Fracții" descriere="Fracțiile rezultate din dezmembrare, cu codul EWC (aceeași fracție poate avea mai multe coduri)." tabel="deee_fractii"
-          campuri={[{ k: "den", label: "Denumire", flex: 2 }, { k: "cod", label: "Cod EWC", flex: 1, min: 70 }]} />
+        <Nomenclator {...props} titlu="Fracții" descriere="Fracțiile rezultate din dezmembrare, cu codul EWC (aceeași fracție poate avea mai multe coduri). „Denumire contabilitate” apare în procesul-verbal; dacă o lași goală se generează „FRACȚIE EWC cod”." tabel="deee_fractii"
+          campuri={[{ k: "den", label: "Denumire", flex: 2 }, { k: "cod", label: "Cod EWC", flex: 1, min: 70 }, { k: "den_contabilitate", label: "Denumire contabilitate", flex: 2 }]} />
       </div>
       <div style={{ marginTop: 14 }}><Echipamente {...props} /></div>
     </div>

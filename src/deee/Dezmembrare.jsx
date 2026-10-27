@@ -2,6 +2,8 @@ import { useState, useMemo } from "react";
 import { useTabela, numar, colatie } from "./hooks";
 import { useStoc, cheieStoc } from "./stoc";
 import { dataRo, fmtKg } from "./constante";
+import { etichetaReteta, tipulRetetei } from "./Retete";
+import { htmlPv } from "./pv";
 
 const r3 = (n) => Math.round((Number(n) || 0) * 1000) / 1000;
 const azi = () => new Date().toISOString().slice(0, 10);
@@ -89,12 +91,13 @@ export default function Dezmembrare({ sb, G, ui, currentUser, logAction, confirm
 
   // Rețeta activa a fiecarui echipament → fractiile; kg-urile aceleiasi fractii se aduna. Restul de rotunjire intra in cea mai mare.
   const aplicaReteta = () => {
-    const activa = (den) => retete.rows.find((r) => r.echipament === den && r.activ);
-    const acc = new Map(); const faraReteta = []; let acoperit = 0;
+    // intai rețeta activa a companiei, apoi cea globala (ca in WiseWeee, unde rețetele globale se pot folosi direct)
+    const activa = (den) => { const a = retete.rows.filter((r) => r.echipament === den && r.activ); return a.find((r) => tipulRetetei(r) === "Companie") || a[0]; };
+    const acc = new Map(); const faraReteta = []; const folosite = []; let acoperit = 0;
     edit.ech.forEach((l) => {
       const kg = numar(l.kg) || 0; const r = activa(l.echipament);
       if (!r || !(liniiReteta[r.id] || []).length) { if (kg > 0) faraReteta.push(l.echipament); return; }
-      acoperit += kg;
+      acoperit += kg; if (!folosite.includes(etichetaReteta(r))) folosite.push(etichetaReteta(r));
       (liniiReteta[r.id] || []).forEach((rl) => { const k = rl.fractie + "\u0001" + rl.cod; acc.set(k, (acc.get(k) || 0) + (kg * Number(rl.procent)) / 100); });
     });
     const rez = [...acc.entries()].map(([k, kg]) => { const [fractie, cod] = k.split("\u0001"); return { fractie, cod, kg: r3(kg) }; });
@@ -103,7 +106,7 @@ export default function Dezmembrare({ sb, G, ui, currentUser, logAction, confirm
       if (Math.abs(rest) > 0) { const mare = rez.reduce((a, b) => (b.kg > a.kg ? b : a)); mare.kg = r3(mare.kg + rest); }
     }
     setEdit((p) => ({ ...p, fr: rez.map((f) => ({ ...f, kg: String(f.kg) })) }));
-    setInfo(faraReteta.length ? `⚠️ Fără rețetă activă: ${[...new Set(faraReteta)].join(", ")}. Adaugă fracțiile lor manual (sau creează rețeta în Rețete).` : "✓ Rețeta a fost aplicată.");
+    setInfo(faraReteta.length ? `⚠️ Fără rețetă activă: ${[...new Set(faraReteta)].join(", ")}. Adaugă fracțiile lor manual (sau creează rețeta în Rețete).` : `✓ Rețeta a fost aplicată: ${folosite.join(", ")}.`);
   };
 
   const valideazaPas1 = () => {
@@ -221,6 +224,32 @@ export default function Dezmembrare({ sb, G, ui, currentUser, logAction, confirm
     await s.reloadAll();
   };
 
+  // Proces-verbal de tratare (tiparire) si export Excel (CSV) cu sectiunile INPUT / OUTPUT, ca in WiseWeee
+  const tiparestePv = (d) => {
+    const w = window.open("", "_blank");
+    if (!w) { alert("Browserul a blocat fereastra de tipărire. Permite pop-up-urile pentru această pagină și încearcă din nou."); return; }
+    w.document.open();
+    w.document.write(htmlPv({ op: d, ech: echDe[d.id] || [], fr: frDe[d.id] || [], nomenclator: frac.rows }));
+    w.document.close();
+    logAction("Tipărire", "PV tratare", d.nr_operatiune, { organizatie: d.organizatie, kg: kgOperatie(d) });
+  };
+  const exporta = () => {
+    const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const nr = (n) => String(n).replace(".", ",");
+    const linii = [["Sectiune", "Nr. operatiune", "Data", "Organizatie", "Cod", "Denumire", "Kg", "Buc", "% din total"].map(esc).join(";")];
+    lista.forEach((d) => {
+      const ls = echDe[d.id] || [], fs = frDe[d.id] || [];
+      const totF = fs.reduce((x, f) => x + Number(f.kg), 0);
+      ls.forEach((l) => linii.push(["--- INPUT – ECHIPAMENTE ---", d.nr_operatiune, dataRo(d.data), d.organizatie, l.cod_ewc, l.echipament, nr(l.kg), l.buc, ""].map(esc).join(";")));
+      fs.forEach((f) => linii.push(["--- OUTPUT – FRACȚII DIN DEZMEMBRARE ---", d.nr_operatiune, dataRo(d.data), d.organizatie, f.cod, f.fractie, nr(f.kg), "", totF > 0 ? nr(((Number(f.kg) / totF) * 100).toFixed(2)) : ""].map(esc).join(";")));
+      linii.push(["TOTAL INPUT / TOTAL OUTPUT", d.nr_operatiune, dataRo(d.data), d.organizatie, "", "", `${nr(kgOperatie(d))} / ${nr(r3(totF))}`, bucOperatie(d), ""].map(esc).join(";"));
+    });
+    const blob = new Blob(["﻿" + linii.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = `dezmembrari-deee-${azi()}.csv`; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  };
+
   const inputSt = { padding: "6px 8px", border: "1px solid #d5dbe1", borderRadius: 6, fontSize: 12, boxSizing: "border-box", width: "100%" };
   const card = (t, v, c) => (
     <div style={{ flex: "1 1 150px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "9px 14px", boxShadow: "0 1px 2px rgba(15,23,42,.05)" }}>
@@ -242,7 +271,8 @@ export default function Dezmembrare({ sb, G, ui, currentUser, logAction, confirm
         <input style={{ ...inputSt, width: 220 }} placeholder="🔍 Nr. operațiune sau observații..." value={q} onChange={(e) => setQ(e.target.value)} />
         <select style={{ ...inputSt, width: 150 }} value={fOrg} onChange={(e) => setFOrg(e.target.value)}><option value="">Organizația</option>{organizatii.map((o) => <option key={o} value={o}>{o}</option>)}</select>
         <select style={{ ...inputSt, width: 220 }} value={fEch} onChange={(e) => setFEch(e.target.value)}><option value="">Echipament</option>{echipamenteInOperatii.map((o) => <option key={o} value={o}>{o}</option>)}</select>
-        <div style={{ marginLeft: "auto" }}>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+          <button onClick={exporta} disabled={!lista.length} style={{ background: "#fff", color: G, border: `1px solid ${G}`, borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>⬇️ Export Excel (CSV)</button>
           <button onClick={deschideNou} style={{ background: G, color: "#fff", border: "none", borderRadius: 8, padding: "8px 16px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>+ Operațiune nouă</button>
         </div>
       </div>
@@ -253,7 +283,7 @@ export default function Dezmembrare({ sb, G, ui, currentUser, logAction, confirm
             <th style={ui.th({ width: 90 })}>Data</th><th style={ui.th({ width: 100 })}>Nr. operațiune</th>
             <th style={ui.th({ textAlign: "left" })}>Echipamente</th><th style={ui.th({ width: 100 })}>Organizație</th>
             <th style={ui.th({ width: 150 })}>Total cantitate</th><th style={ui.th({ width: 80 })}>Status</th>
-            <th style={ui.th({ textAlign: "left", width: 160 })}>Observații</th><th style={ui.th({ width: 70 })}></th>
+            <th style={ui.th({ textAlign: "left", width: 160 })}>Observații</th><th style={ui.th({ width: 120 })}></th>
           </tr></thead>
           <tbody>
             {!s.incarcat && <tr><td colSpan={8} style={ui.td({ textAlign: "center", padding: 18, color: "#94a3b8" })}>Se încarcă…</td></tr>}
@@ -270,6 +300,7 @@ export default function Dezmembrare({ sb, G, ui, currentUser, logAction, confirm
                   <td style={ui.td({ textAlign: "center" })}><span style={{ background: "#e8f5e9", color: "#047857", borderRadius: 4, padding: "1px 7px", fontSize: 10, fontWeight: 700 }}>{d.status}</span></td>
                   <td style={ui.td({ fontSize: 11, color: "#64748b" })}>{d.observatii || "—"}</td>
                   <td style={ui.td({ textAlign: "center", padding: 2, whiteSpace: "nowrap" })}>
+                    <button onClick={() => tiparestePv(d)} title="Tipărește procesul-verbal de tratare" style={{ background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 4, cursor: "pointer", color: "#1565c0", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>🖨️ PV</button>{" "}
                     <button onClick={() => deschideEditare(d)} title="Editează" style={{ background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 4, cursor: "pointer", color: "#e65100", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>✏️</button>{" "}
                     <button onClick={() => sterge(d)} title="Șterge" style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button>
                   </td>

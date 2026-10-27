@@ -4,7 +4,11 @@ import { useTabela, numar, colatie } from "./hooks";
 const rotunjit = (n) => Math.round(n * 1000) / 1000;
 
 // Retete de dezmembrare: pentru fiecare echipament, in ce fractii (si ce procent) se imparte.
+// Doua feluri, ca in WiseWeee: "Companie" (ale voastre, editabile) si "Global" (de referinta, doar se copiaza in Companie).
 // O modificare creeaza o VERSIUNE NOUA; cea veche ramane in istoric, ca dezmembrarile deja facute sa nu se schimbe.
+export const tipulRetetei = (r) => r.tip || "Companie";
+export const etichetaReteta = (r) => `${r.echipament} ${r.versiune}${tipulRetetei(r) === "Companie" ? " (GK)" : ""}`;
+
 export default function Retete({ sb, G, ui, currentUser, logAction, confirmDel }) {
   const retete = useTabela(sb, "deee_retete");
   const linii = useTabela(sb, "deee_retete_linii");
@@ -12,6 +16,8 @@ export default function Retete({ sb, G, ui, currentUser, logAction, confirmDel }
   const frac = useTabela(sb, "deee_fractii");
   const [arataVechi, setArataVechi] = useState(false);
   const [filtru, setFiltru] = useState("");
+  const [fTip, setFTip] = useState("");
+  const [deschis, setDeschis] = useState(null);
   const [edit, setEdit] = useState(null); // { id|null, echipament, ref_kg, versiune, linii:[{fractie,cod,procent}] }
   const [eroare, setEroare] = useState("");
   const [seSalveaza, setSeSalveaza] = useState(false);
@@ -25,9 +31,9 @@ export default function Retete({ sb, G, ui, currentUser, logAction, confirmDel }
 
   const q = filtru.trim().toLowerCase();
   const afisate = useMemo(() => retete.rows
-    .filter((r) => (arataVechi || r.activ) && (!q || r.echipament.toLowerCase().includes(q)))
-    .sort((a, b) => colatie(a.echipament, b.echipament) || b.versiune - a.versiune),
-  [retete.rows, arataVechi, q]);
+    .filter((r) => (arataVechi || r.activ) && (!fTip || tipulRetetei(r) === fTip) && (!q || r.echipament.toLowerCase().includes(q)))
+    .sort((a, b) => colatie(a.echipament, b.echipament) || (tipulRetetei(a) === "Companie" ? 0 : 1) - (tipulRetetei(b) === "Companie" ? 0 : 1) || b.versiune - a.versiune),
+  [retete.rows, arataVechi, fTip, q]);
 
   const total = (ls) => rotunjit(ls.reduce((s, l) => s + (numar(l.procent) || 0), 0));
 
@@ -69,11 +75,11 @@ export default function Retete({ sb, G, ui, currentUser, logAction, confirmDel }
     if (err) { setEroare(err); return; }
     setSeSalveaza(true); setEroare("");
     try {
-      const existente = retete.rows.filter((r) => r.echipament === edit.echipament);
-      if (!edit.id && existente.length) { setEroare("Există deja o rețetă pentru acest echipament. Deschide-o și salveaz-o ca versiune nouă."); return; }
+      const existente = retete.rows.filter((r) => r.echipament === edit.echipament && tipulRetetei(r) === "Companie");
+      if (!edit.id && existente.length) { setEroare("Există deja o rețetă a companiei pentru acest echipament. Deschide-o și salveaz-o ca versiune nouă."); return; }
       const versiune = existente.length ? Math.max(...existente.map((r) => r.versiune)) + 1 : 1;
       const refKg = edit.ref_kg === "" ? null : numar(edit.ref_kg);
-      const { data, error } = await sb.from("deee_retete").insert({ echipament: edit.echipament, versiune, ref_kg: refKg, activ: true, creat_de: currentUser || "" }).select();
+      const { data, error } = await sb.from("deee_retete").insert({ echipament: edit.echipament, versiune, tip: "Companie", ref_kg: refKg, activ: true, creat_de: currentUser || "" }).select();
       if (error) { setEroare("Eroare la salvare: " + error.message); return; }
       const nou = data[0];
       const randuri = edit.linii.map((l, i) => ({ reteta_id: nou.id, ord: i, fractie: l.fractie, cod: l.cod || "", procent: numar(l.procent) }));
@@ -92,14 +98,35 @@ export default function Retete({ sb, G, ui, currentUser, logAction, confirmDel }
     } finally { setSeSalveaza(false); }
   };
 
+  // O reteta globala se copiaza in compania voastra (versiune noua a echipamentului), de unde se poate modifica.
+  const copiaza = async (r) => {
+    const existente = retete.rows.filter((x) => x.echipament === r.echipament && tipulRetetei(x) === "Companie");
+    const versiune = existente.length ? Math.max(...existente.map((x) => x.versiune)) + 1 : 1;
+    const devineActiva = existente.some((x) => x.activ);
+    if (!window.confirm(`Copiez „${etichetaReteta(r)}” în rețetele companiei, ca versiunea ${versiune} (GK)?${devineActiva ? " Ea va deveni rețeta activă a echipamentului." : ""}`)) return;
+    setSeSalveaza(true);
+    try {
+      const { data, error } = await sb.from("deee_retete").insert({ echipament: r.echipament, versiune, tip: "Companie", ref_kg: r.ref_kg, activ: true, creat_de: currentUser || "" }).select();
+      if (error) { alert("Eroare la copiere: " + error.message); return; }
+      const nou = data[0];
+      const randuri = (liniiPeReteta[r.id] || []).map((l, i) => ({ reteta_id: nou.id, ord: i, fractie: l.fractie, cod: l.cod, procent: l.procent }));
+      const { error: eL } = await sb.from("deee_retete_linii").insert(randuri);
+      if (eL) { await sb.from("deee_retete").delete().eq("id", nou.id); alert("Eroare la copierea fracțiilor: " + eL.message); return; }
+      const vechi = existente.filter((x) => x.activ).map((x) => x.id);
+      if (vechi.length) await sb.from("deee_retete").update({ activ: false }).in("id", vechi);
+      logAction("add", "deee_retete", nou.id, { echipament: r.echipament, versiune, fractii: randuri.length, copiata_din: `Global v${r.versiune}` });
+      await Promise.all([retete.reload(), linii.reload()]);
+    } finally { setSeSalveaza(false); }
+  };
+
   const sterge = async (r) => {
-    if (!confirmDel(`rețeta „${r.echipament}” v${r.versiune}`)) return;
+    if (!confirmDel(`rețeta „${etichetaReteta(r)}”`)) return;
     const snapshot = { reteta: r, linii: liniiPeReteta[r.id] || [] };
     const { error } = await sb.from("deee_retete").delete().eq("id", r.id);
     if (error) { alert("Eroare: " + error.message); return; }
     logAction("delete", "deee_retete", r.id, { echipament: r.echipament, versiune: r.versiune, _sters: snapshot });
-    // daca s-a sters versiunea activa, cea mai recenta ramasa redevine activa
-    const ramase = retete.rows.filter((x) => x.echipament === r.echipament && x.id !== r.id);
+    // daca s-a sters versiunea activa, cea mai recenta ramasa (de acelasi tip) redevine activa
+    const ramase = retete.rows.filter((x) => x.echipament === r.echipament && tipulRetetei(x) === tipulRetetei(r) && x.id !== r.id);
     if (r.activ && ramase.length && !ramase.some((x) => x.activ)) {
       const ultima = ramase.sort((a, b) => b.versiune - a.versiune)[0];
       await sb.from("deee_retete").update({ activ: true }).eq("id", ultima.id);
@@ -112,11 +139,15 @@ export default function Retete({ sb, G, ui, currentUser, logAction, confirmDel }
   const fractiiActive = frac.rows.filter((f) => f.activ).sort((a, b) => colatie(a.den, b.den) || colatie(a.cod, b.cod));
   const totalEdit = edit ? total(edit.linii) : 0;
   const totalOk = Math.abs(totalEdit - 100) <= 0.05;
+  const NCOL = 9;
 
   return (
     <div>
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
         <input style={{ ...inputSt, width: 240 }} placeholder="🔍 Caută echipament..." value={filtru} onChange={(e) => setFiltru(e.target.value)} />
+        <select style={{ ...inputSt, width: 140 }} value={fTip} onChange={(e) => setFTip(e.target.value)}>
+          <option value="">Toate tipurile</option><option value="Companie">Companie</option><option value="Global">Global</option>
+        </select>
         <label style={{ fontSize: 12, color: "#475569", display: "flex", gap: 5, alignItems: "center", cursor: "pointer" }}>
           <input type="checkbox" checked={arataVechi} onChange={(e) => setArataVechi(e.target.checked)} /> Arată și versiunile vechi
         </label>
@@ -124,40 +155,74 @@ export default function Retete({ sb, G, ui, currentUser, logAction, confirmDel }
           <button onClick={deschideNoua} style={{ background: G, color: "#fff", border: "none", borderRadius: 8, padding: "8px 16px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>+ Rețetă nouă</button>
         </div>
       </div>
+      <div style={{ fontSize: 11, color: "#64748b", marginBottom: 8 }}>
+        Rețetele <b>Global</b> sunt de referință (din WiseWeee); apasă „📋 Copiază” ca să o faci a companiei și s-o poți modifica. La dezmembrare se folosește întâi rețeta activă a companiei, apoi cea globală.
+      </div>
 
       <div style={ui.TBL}>
-        <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 640 }}>
+        <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 760 }}>
           <thead>
             <tr>
+              <th style={ui.th({ width: 28 })}></th>
               <th style={ui.th({ textAlign: "left" })}>Echipament</th>
-              <th style={ui.th({ width: 70 })}>Versiune</th>
-              <th style={ui.th({ width: 80 })}>Fracții</th>
+              <th style={ui.th({ width: 80 })}>Tip</th>
+              <th style={ui.th({ width: 80 })}>Versiune</th>
+              <th style={ui.th({ width: 70 })}>Fracții</th>
               <th style={ui.th({ width: 80 })}>Total %</th>
-              <th style={ui.th({ width: 90 })}>Ref. kg</th>
+              <th style={ui.th({ width: 80 })}>Ref. kg</th>
               <th style={ui.th({ width: 130 })}>Creată</th>
-              <th style={ui.th({ width: 80 })}></th>
+              <th style={ui.th({ width: 90 })}></th>
             </tr>
           </thead>
           <tbody>
-            {!retete.incarcat && <tr><td colSpan={7} style={ui.td({ textAlign: "center", padding: 18, color: "#94a3b8" })}>Se încarcă…</td></tr>}
-            {retete.incarcat && afisate.length === 0 && <tr><td colSpan={7} style={ui.td({ textAlign: "center", padding: 18, color: "#94a3b8" })}>Nicio rețetă. Apasă „+ Rețetă nouă”.</td></tr>}
+            {!retete.incarcat && <tr><td colSpan={NCOL} style={ui.td({ textAlign: "center", padding: 18, color: "#94a3b8" })}>Se încarcă…</td></tr>}
+            {retete.incarcat && afisate.length === 0 && <tr><td colSpan={NCOL} style={ui.td({ textAlign: "center", padding: 18, color: "#94a3b8" })}>Nicio rețetă. Apasă „+ Rețetă nouă”.</td></tr>}
             {afisate.map((r) => {
               const ls = liniiPeReteta[r.id] || [];
               const t = total(ls);
-              return (
+              const comp = tipulRetetei(r) === "Companie";
+              const desch = deschis === r.id;
+              return [
                 <tr key={r.id} style={{ opacity: r.activ ? 1 : 0.55 }}>
-                  <td style={ui.td({ fontWeight: 600 })}>{r.echipament}</td>
+                  <td style={ui.td({ textAlign: "center", padding: 2 })}><button onClick={() => setDeschis(desch ? null : r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#475569", fontSize: 12 }} title="Arată fracțiile">{desch ? "▾" : "▸"}</button></td>
+                  <td style={ui.td({ fontWeight: 600 })}>{etichetaReteta(r)}</td>
+                  <td style={ui.td({ textAlign: "center" })}><span style={{ background: comp ? "#e8f5e9" : "#eef2ff", color: comp ? "#047857" : "#4338ca", borderRadius: 4, padding: "1px 7px", fontSize: 10, fontWeight: 700 }}>{tipulRetetei(r)}</span></td>
                   <td style={ui.td({ textAlign: "center" })}>v{r.versiune}{r.activ ? "" : " (veche)"}</td>
                   <td style={ui.td({ textAlign: "center" })}>{ls.length}</td>
                   <td style={ui.td({ textAlign: "center", fontWeight: 700, color: Math.abs(t - 100) <= 0.05 ? G : "#c62828" })}>{t}%</td>
                   <td style={ui.td({ textAlign: "right" })}>{r.ref_kg ?? "—"}</td>
                   <td style={ui.td({ textAlign: "center", fontSize: 11, color: "#64748b" })}>{new Date(r.created_at).toLocaleDateString("ro-RO")}{r.creat_de ? ` • ${r.creat_de}` : ""}</td>
                   <td style={ui.td({ textAlign: "center", padding: 2, whiteSpace: "nowrap" })}>
-                    <button onClick={() => deschideEditare(r)} title="Editează (se salvează ca versiune nouă)" style={{ background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 4, cursor: "pointer", color: "#e65100", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>✏️</button>{" "}
-                    <button onClick={() => sterge(r)} title="Șterge versiunea" style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button>
+                    {comp ? (
+                      <>
+                        <button onClick={() => deschideEditare(r)} title="Editează (se salvează ca versiune nouă)" style={{ background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 4, cursor: "pointer", color: "#e65100", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>✏️</button>{" "}
+                        <button onClick={() => sterge(r)} title="Șterge versiunea" style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button>
+                      </>
+                    ) : (
+                      <button disabled={seSalveaza} onClick={() => copiaza(r)} title="Copiază în rețetele companiei (de acolo o poți modifica)" style={{ background: "#eef2ff", border: "1px solid #a5b4fc", borderRadius: 4, cursor: "pointer", color: "#4338ca", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>📋 Copiază</button>
+                    )}
                   </td>
-                </tr>
-              );
+                </tr>,
+                desch && (
+                  <tr key={r.id + "-fr"}>
+                    <td colSpan={NCOL} style={ui.td({ background: "#f8fafc", padding: "8px 14px" })}>
+                      <table style={{ borderCollapse: "collapse", width: "100%", maxWidth: 520 }}>
+                        <thead><tr><th style={ui.th({ width: 80 })}>Cod</th><th style={ui.th({ textAlign: "left" })}>Denumire</th><th style={ui.th({ width: 80 })}>Procent</th><th style={ui.th({ width: 80 })}>Ref. kg</th></tr></thead>
+                        <tbody>
+                          {ls.map((l) => (
+                            <tr key={l.id}>
+                              <td style={ui.td({ textAlign: "center", fontSize: 11 })}>{l.cod}</td>
+                              <td style={ui.td({ fontSize: 12 })}>{l.fractie}</td>
+                              <td style={ui.td({ textAlign: "right", fontSize: 12 })}>{Number(l.procent).toLocaleString("ro-RO", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}%</td>
+                              <td style={ui.td({ textAlign: "right", fontSize: 11, color: "#64748b" })}>{r.ref_kg ?? "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </td>
+                  </tr>
+                ),
+              ];
             })}
           </tbody>
         </table>
