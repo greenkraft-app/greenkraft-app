@@ -60,7 +60,7 @@ export default function Deee(props) {
     if (!modul.tabel) { setStare("ok"); return; }
     let activ = true;
     setStare("verific");
-    sb.from(modul.tabel).select("id").limit(1).then(({ error }) => {
+    sb.from(modul.tabel).select("*").limit(1).then(({ error }) => {
       if (!activ) return;
       setStare(!error ? "ok" : lipsaTabel(error) ? "lipsa" : "eroare");
     });
