@@ -7,9 +7,11 @@ export const cheieStoc = (den, cod, org) => [den, cod, org].map((x) => String(x 
 // Stocul se CALCULEAZA, nu se introduce:
 //   echipamente: + achizitii (pe echipament / cod HG856 / organizatie) + stoc initial  − dezmembrari
 //   fractii:     + fractiile rezultate din dezmembrari + stoc initial                   − vanzari (etapa urmatoare)
-export function calculeazaStoc({ ach, achL, dz, dzE, dzF, ini, vanzari = [] }) {
+//   dezmembrarea fractiilor (df): fractiile de intrare se scad din stocul de fractii, cele rezultate se adauga
+export function calculeazaStoc({ ach, achL, dz, dzE, dzF, ini, vanzari = [], df = [], dfI = [], dfO = [] }) {
   const achId = Object.fromEntries(ach.map((a) => [a.id, a]));
   const dzId = Object.fromEntries(dz.map((d) => [d.id, d]));
+  const dfId = Object.fromEntries(df.map((d) => [d.id, d]));
   const E = new Map(), F = new Map();
   const ia = (M, den, cod, org) => {
     const k = cheieStoc(den, cod, org);
@@ -21,6 +23,8 @@ export function calculeazaStoc({ ach, achL, dz, dzE, dzF, ini, vanzari = [] }) {
   ini.forEach((i) => { const r = ia(i.tip === "echipament" ? E : F, i.den, i.cod, i.organizatie); r.total += Number(i.kg) || 0; r.buc += i.buc || 0; });
   dzE.forEach((l) => { const d = dzId[l.dezm_id]; if (!d) return; const r = ia(E, l.echipament, l.cod_ewc, d.organizatie); r.scos += Number(l.kg) || 0; r.bucScos += l.buc || 0; });
   dzF.forEach((l) => { const d = dzId[l.dezm_id]; if (!d) return; const r = ia(F, l.fractie, l.cod, d.organizatie); r.total += Number(l.kg) || 0; });
+  dfI.forEach((l) => { const d = dfId[l.dezm_id]; if (!d) return; const r = ia(F, l.fractie, l.cod, d.organizatie); r.scos += Number(l.kg) || 0; });
+  dfO.forEach((l) => { const d = dfId[l.dezm_id]; if (!d) return; const r = ia(F, l.fractie, l.cod, d.organizatie); r.total += Number(l.kg) || 0; });
   vanzari.forEach((v) => { const r = ia(F, v.fractie, v.cod, v.organizatie); r.scos += Number(v.kg) || 0; });
   const fin = (M) => [...M.values()].map((r) => ({ ...r, total: r3(r.total), scos: r3(r.scos), disp: r3(r.total - r.scos), bucDisp: r.buc - r.bucScos }));
   return { echipamente: fin(E), fractii: fin(F) };
@@ -50,11 +54,17 @@ export function useStoc(sb) {
   const dzF = useTabela(sb, "deee_dezm_fractii");
   const ini = useTabela(sb, "deee_stoc_initial");
   const van = useTabela(sb, "deee_vanzari"); // inca inexistent pana se ruleaza etapa 5 -> ramane gol, stocul merge ca pana acum
-  const stoc = useMemo(
-    () => calculeazaStoc({ ach: ach.rows, achL: achL.rows, dz: dz.rows, dzE: dzE.rows, dzF: dzF.rows, ini: ini.rows, vanzari: van.rows }),
-    [ach.rows, achL.rows, dz.rows, dzE.rows, dzF.rows, ini.rows, van.rows],
+  const df = useTabela(sb, "deee_dezm_fr"); // dezmembrari de fractii: tabelele apar dupa etapa 12; pana atunci raman goale
+  const dfI = useTabela(sb, "deee_dezm_fr_intrari");
+  const dfO = useTabela(sb, "deee_dezm_fr_iesiri");
+  // toate datele din care se calculeaza stocul, ca sa se poata simula modificari: calculeazaStoc({ ...baza, vanzari: noi })
+  const baza = useMemo(
+    () => ({ ach: ach.rows, achL: achL.rows, dz: dz.rows, dzE: dzE.rows, dzF: dzF.rows, ini: ini.rows, vanzari: van.rows, df: df.rows, dfI: dfI.rows, dfO: dfO.rows }),
+    [ach.rows, achL.rows, dz.rows, dzE.rows, dzF.rows, ini.rows, van.rows, df.rows, dfI.rows, dfO.rows],
   );
-  const incarcat = [ach, achL, dz, dzE, dzF, ini, van].every((t) => t.incarcat);
-  const reloadAll = () => Promise.all([ach, achL, dz, dzE, dzF, ini, van].map((t) => t.reload()));
-  return { ach, achL, dz, dzE, dzF, ini, van, stoc, incarcat, reloadAll };
+  const stoc = useMemo(() => calculeazaStoc(baza), [baza]);
+  const tabele = [ach, achL, dz, dzE, dzF, ini, van, df, dfI, dfO];
+  const incarcat = tabele.every((t) => t.incarcat);
+  const reloadAll = () => Promise.all(tabele.map((t) => t.reload()));
+  return { ach, achL, dz, dzE, dzF, ini, van, df, dfI, dfO, baza, stoc, incarcat, reloadAll };
 }

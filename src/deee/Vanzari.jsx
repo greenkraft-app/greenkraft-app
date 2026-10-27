@@ -172,7 +172,7 @@ export default function Vanzari({ sb, G, ui, currentUser, logAction, confirmDel 
     const ids = [...sel].filter((id) => rows.some((r) => r.id === id));
     if (!ids.length || !orgMasa) return;
     const noi = rows.map((r) => (ids.includes(r.id) ? { ...r, organizatie: orgMasa } : r));
-    const probleme = problemeStoc(s.stoc, calculeazaStoc({ ach: s.ach.rows, achL: s.achL.rows, dz: s.dz.rows, dzE: s.dzE.rows, dzF: s.dzF.rows, ini: s.ini.rows, vanzari: noi }));
+    const probleme = problemeStoc(s.stoc, calculeazaStoc({ ...s.baza, vanzari: noi }));
     if (probleme.length) { alert(`Nu pot aloca la ${orgMasa}: stocul nu ajunge.\n\n${probleme.slice(0, 8).join("\n")}${probleme.length > 8 ? `\n… și încă ${probleme.length - 8}` : ""}`); return; }
     const inainte = Object.fromEntries(ids.map((id) => [id, rows.find((r) => r.id === id)?.organizatie]));
     const { error } = await sb.from("deee_vanzari").update({ organizatie: orgMasa }).in("id", ids);

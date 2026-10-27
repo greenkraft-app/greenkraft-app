@@ -6,23 +6,29 @@ import Furnizori from "./Furnizori";
 import Transportatori from "./Transportatori";
 import Achizitii from "./Achizitii";
 import Dezmembrare from "./Dezmembrare";
+import DezmFractii from "./DezmFractii";
 import Stocuri from "./Stocuri";
 import Vanzari from "./Vanzari";
 import RateRR from "./RateRR";
 import Rapoarte from "./Rapoarte";
+import Registre from "./Registre";
+import CompanieMea, { aplicaFirma } from "./CompanieMea";
 
 // Sectiunea ♻️ DEEE — evidenta echipamentelor electrice si electronice (achizitii, dezmembrare, stocuri, vanzari de fractii).
 // Modulele marcate "in lucru" apar in meniu ca sa se vada planul complet; se activeaza pe masura ce sunt gata.
 const MODULE = [
   { k: "achizitii", l: "🚛 Achiziții", gata: true, tabel: "deee_achizitii", sql: "supabase-deee-3-achizitii.sql" },
   { k: "dezmembrare", l: "🔧 Dezmembrare", gata: true, tabel: "deee_dezmembrari", sql: "supabase-deee-4-dezmembrare-stocuri.sql" },
+  { k: "dezmfr", l: "🔩 Dezm. fracții", gata: true, tabel: "deee_dezm_fr", sql: "supabase-deee-12-dezmembrare-fractii.sql" },
   { k: "stocuri", l: "📦 Stocuri", gata: true, tabel: "deee_stoc_initial", sql: "supabase-deee-4-dezmembrare-stocuri.sql" },
   { k: "vanzari", l: "📤 Vânzări fracții", gata: true, tabel: "deee_vanzari", sql: "supabase-deee-5-vanzari-fractii.sql" },
   { k: "rate", l: "📈 Rate R&R", gata: true, tabel: "deee_categorii", sql: "supabase-deee-6-nomenclator-complet.sql" },
   { k: "rapoarte", l: "📑 Rapoarte", gata: true, tabel: "deee_dezmembrari", sql: "supabase-deee-4-dezmembrare-stocuri.sql" },
+  { k: "registre", l: "📒 Registre", gata: true, tabel: "deee_registre", sql: "supabase-deee-11-registre.sql" },
   { k: "furnizori", l: "🏢 Furnizori", gata: true, tabel: "deee_furnizori", sql: "supabase-deee-2-furnizori-transportatori.sql" },
   { k: "transportatori", l: "🚚 Transportatori", gata: true, tabel: "deee_transportatori", sql: "supabase-deee-2-furnizori-transportatori.sql" },
   { k: "retete", l: "🧪 Rețete", gata: true, tabel: "deee_retete", sql: "supabase-deee-1-nomenclatoare-retete.sql" },
+  { k: "companie", l: "🏭 Compania mea", gata: true },
   { k: "nomenclatoare", l: "🗂️ Nomenclatoare", gata: true, tabel: "deee_organizatii", sql: "supabase-deee-1-nomenclatoare-retete.sql" },
 ];
 
@@ -33,9 +39,12 @@ export default function Deee(props) {
 
   const modul = MODULE.find((m) => m.k === sub);
 
+  // datele companiei (din "Compania mea") se aplica pe documentele tiparite de la prima deschidere a sectiunii DEEE
+  useEffect(() => { sb.from("deee_companie").select("*").eq("id", 1).then(({ data }) => aplicaFirma(data?.[0])); }, [sb]);
+
   // verificam daca tabelele modulului deschis exista (adica daca s-a rulat fisierul .sql al etapei respective)
   useEffect(() => {
-    if (!modul.tabel) return;
+    if (!modul.tabel) { setStare("ok"); return; }
     let activ = true;
     setStare("verific");
     sb.from(modul.tabel).select("id").limit(1).then(({ error }) => {
@@ -77,10 +86,13 @@ export default function Deee(props) {
       {(stare === "ok" || stare === "verific") && modul.k === "nomenclatoare" && <Nomenclatoare {...props} />}
       {(stare === "ok" || stare === "verific") && modul.k === "achizitii" && <Achizitii {...props} />}
       {(stare === "ok" || stare === "verific") && modul.k === "dezmembrare" && <Dezmembrare {...props} />}
+      {(stare === "ok" || stare === "verific") && modul.k === "dezmfr" && <DezmFractii {...props} />}
       {(stare === "ok" || stare === "verific") && modul.k === "stocuri" && <Stocuri {...props} />}
       {(stare === "ok" || stare === "verific") && modul.k === "vanzari" && <Vanzari {...props} />}
       {(stare === "ok" || stare === "verific") && modul.k === "rate" && <RateRR {...props} />}
       {(stare === "ok" || stare === "verific") && modul.k === "rapoarte" && <Rapoarte {...props} />}
+      {modul.k === "companie" && <CompanieMea {...props} />}
+      {(stare === "ok" || stare === "verific") && modul.k === "registre" && <Registre {...props} />}
       {(stare === "ok" || stare === "verific") && modul.k === "furnizori" && <Furnizori {...props} />}
       {(stare === "ok" || stare === "verific") && modul.k === "transportatori" && <Transportatori {...props} />}
 

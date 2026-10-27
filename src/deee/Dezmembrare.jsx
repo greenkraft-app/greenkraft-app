@@ -232,7 +232,7 @@ export default function Dezmembrare({ sb, G, ui, currentUser, logAction, confirm
     const ids = [...sel].filter((id) => s.dz.rows.some((d) => d.id === id));
     if (!ids.length || !orgMasa) return;
     const dzNoi = s.dz.rows.map((d) => (ids.includes(d.id) ? { ...d, organizatie: orgMasa } : d));
-    const probleme = problemeStoc(s.stoc, calculeazaStoc({ ach: s.ach.rows, achL: s.achL.rows, dz: dzNoi, dzE: s.dzE.rows, dzF: s.dzF.rows, ini: s.ini.rows, vanzari: s.van.rows }));
+    const probleme = problemeStoc(s.stoc, calculeazaStoc({ ...s.baza, dz: dzNoi }));
     if (probleme.length) { alert(`Nu pot aloca la ${orgMasa}: stocul nu ajunge.\n\n${probleme.slice(0, 8).join("\n")}${probleme.length > 8 ? `\n… și încă ${probleme.length - 8}` : ""}`); return; }
     const inainte = Object.fromEntries(ids.map((id) => [id, s.dz.rows.find((d) => d.id === id)?.organizatie]));
     const { error } = await sb.from("deee_dezmembrari").update({ organizatie: orgMasa }).in("id", ids);

@@ -28,12 +28,14 @@ export default function Stocuri({ sb, G, ui, currentUser, logAction, confirmDel 
     if (!de && !pana) return s.stoc;
     const ok = (d) => !d || ((!de || String(d) >= de) && (!pana || String(d) <= pana));
     const ach = s.ach.rows.filter((a) => ok(a.data_colectare)), dz = s.dz.rows.filter((d) => ok(d.data));
-    const idA = new Set(ach.map((a) => a.id)), idD = new Set(dz.map((d) => d.id));
+    const df = s.df.rows.filter((d) => ok(d.data));
+    const idA = new Set(ach.map((a) => a.id)), idD = new Set(dz.map((d) => d.id)), idF = new Set(df.map((d) => d.id));
     return calculeazaStoc({
       ach, achL: s.achL.rows.filter((l) => idA.has(l.achizitie_id)), dz, dzE: s.dzE.rows.filter((l) => idD.has(l.dezm_id)), dzF: s.dzF.rows.filter((l) => idD.has(l.dezm_id)),
       ini: s.ini.rows.filter((i) => ok(i.data)), vanzari: s.van.rows.filter((v) => ok(v.data)),
+      df, dfI: s.dfI.rows.filter((l) => idF.has(l.dezm_id)), dfO: s.dfO.rows.filter((l) => idF.has(l.dezm_id)),
     });
-  }, [s.stoc, s.ach.rows, s.achL.rows, s.dz.rows, s.dzE.rows, s.dzF.rows, s.ini.rows, s.van.rows, de, pana]);
+  }, [s.stoc, s.ach.rows, s.achL.rows, s.dz.rows, s.dzE.rows, s.dzF.rows, s.ini.rows, s.van.rows, s.df.rows, s.dfI.rows, s.dfO.rows, de, pana]);
   const negative = useMemo(() => [...stoc.echipamente.map((r) => ({ ...r, tip: "Echipament" })), ...stoc.fractii.map((r) => ({ ...r, tip: "Fracție" }))].filter((r) => r.disp < -0.0005), [stoc]);
   const dispPeOrg = useMemo(() => { const m = {}; (tab === "echipamente" ? stoc.echipamente : stoc.fractii).forEach((r) => { m[r.org] = (m[r.org] || 0) + r.disp; }); return Object.entries(m).filter(([, v]) => Math.abs(v) > 0.0005).sort((a, b) => b[1] - a[1]); }, [stoc, tab]);
   const randuri = (tab === "echipamente" ? stoc.echipamente : stoc.fractii)
