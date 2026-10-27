@@ -44,7 +44,7 @@ export default function Deee(props) {
   const [stare, setStare] = useState("verific"); // verific | ok | lipsa | eroare
 
   // permisiuni pe sectiuni (fara randuri salvate sau fara tabel => acces complet, ca pana acum); sectiunea Permisiuni doar pentru administrator
-  const perm = useTabela(sb, "deee_permisiuni");
+  const perm = useTabela(sb, "deee_permisiuni", "updated_at"); // tabelul nu are created_at
   const esteAdmin = currentUser === ADMIN;
   const vizibile = MODULE.filter((m) => (m.adminOnly ? esteAdmin : nivelDe(perm.rows, currentUser, m.k) !== "fara"));
   const modul = vizibile.find((m) => m.k === sub) || vizibile[0] || MODULE[0];
