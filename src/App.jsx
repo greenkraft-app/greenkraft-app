@@ -1039,6 +1039,15 @@ export default function App() {
     return null;
   };
 
+  // Publica greutatea in Supabase (pentru telefoanele care nu au cantarul conectat). Deduplicat: aceeasi valoare cel mult o data la 10s.
+  const publicaCantar = (r) => {
+    if (!r) return;
+    const key = `${r.value}|${r.stable}`;
+    const now = Date.now();
+    if (lastPushRef.current.key === key && now - lastPushRef.current.t < 10000) return;
+    lastPushRef.current = { key, t: now };
+    sb.from("cantar_live").upsert({ id: 1, value: r.value, stable: !!r.stable, updated_at: new Date().toISOString() }).then(() => {});
+  };
   const startScaleReader = async (port) => {
     const decoder = new TextDecoder();
     let buffer = "";
@@ -1060,6 +1069,9 @@ export default function App() {
               // Actualizam state-ul DOAR cand valoarea/stabilitatea se schimba efectiv,
               // altfel cantarul (care transmite continuu) redeseneaza aplicatia de mai
               // multe ori pe secunda si blocheaza lucrul in celelalte sectiuni.
+              // Publicam si direct din fluxul cantarului, nu doar din cronometrul de mai jos: cand fereastra de pe PC e minimizata,
+              // browserul incetineste cronometrele (la ~1/minut), iar telefonul vedea greutatea ca "veche". Max. o data la 1,5s.
+              if (parsed && Date.now() - lastPushRef.current.t >= 1500) publicaCantar(parsed);
               if (parsed && (!lastReadingRef.current || lastReadingRef.current.value !== parsed.value || lastReadingRef.current.stable !== parsed.stable || lastReadingRef.current.overload !== parsed.overload)) {
                 lastReadingRef.current = parsed;
                 if (raw) setScaleRawLine(raw);
@@ -1149,14 +1161,8 @@ export default function App() {
   useEffect(() => {
     if (!scalePort) return;
     const iv = setInterval(() => {
-      const r = scaleReadingRef.current;
-      if (!r) return;
-      const key = `${r.value}|${r.stable}`;
-      const now = Date.now();
       // publicam la schimbare de valoare, dar minim o data la 10s (heartbeat ca sa ramana "fresh")
-      if (lastPushRef.current.key === key && now - lastPushRef.current.t < 10000) return;
-      lastPushRef.current = { key, t: now };
-      sb.from("cantar_live").upsert({ id: 1, value: r.value, stable: !!r.stable, updated_at: new Date().toISOString() }).then(() => {});
+      publicaCantar(scaleReadingRef.current);
     }, 1500);
     return () => clearInterval(iv);
   }, [scalePort]);
@@ -1168,23 +1174,31 @@ export default function App() {
     return () => clearInterval(iv);
   }, [tab]);
 
+  // "Proaspat" = am primit o actualizare in ultimele 30s. Ora de pe PC si ora telefonului pot diferi cu zeci de secunde, deci
+  // nu ne bazam doar pe diferenta dintre ceasuri: notam si CAND am vazut noi ultima schimbare a lui updated_at (ceasul propriu).
+  const liveVazutRef = useRef({ ua: null, t: 0, schimbata: false });
   const cantarLive = (() => {
     const r = cantarLiveRows[0];
     if (!r || !r.updated_at) return null;
-    const age = Date.now() - new Date(r.updated_at).getTime();
-    return { value: r.value, stable: r.stable, age, fresh: age < 30000 };
+    const v = liveVazutRef.current;
+    if (v.ua !== r.updated_at) liveVazutRef.current = { ua: r.updated_at, t: Date.now(), schimbata: v.ua !== null };
+    const dupaCeas = Date.now() - new Date(r.updated_at).getTime();
+    const dupaPrimire = Date.now() - liveVazutRef.current.t;
+    const fresh = dupaCeas < 30000 || (liveVazutRef.current.schimbata && dupaPrimire < 30000);
+    return { value: r.value, stable: r.stable, age: liveVazutRef.current.schimbata ? Math.min(dupaCeas, dupaPrimire) : dupaCeas, fresh };
   })();
 
   const useLiveWeight = (callback) => {
-    const r = cantarLiveRows[0];
-    if (!r || !r.updated_at) { alert("Nu există date de la cântar."); return; }
-    const age = Date.now() - new Date(r.updated_at).getTime();
-    if (age > 30000) { alert(`Datele de la cântar sunt vechi (${Math.round(age / 1000)}s). Verifică dacă aplicația e deschisă pe calculatorul cu cântarul.`); return; }
-    if (!r.stable) {
-      if (!window.confirm(`Cântărire instabilă (${r.value} kg). Folosești această valoare?`)) return;
+    if (!cantarLive) { alert("Nu există date de la cântar."); return; }
+    if (!cantarLive.fresh) { alert(`Datele de la cântar sunt vechi (${Math.round(cantarLive.age / 1000)}s). Verifică dacă aplicația e deschisă pe calculatorul cu cântarul și că fereastra nu e închisă.`); return; }
+    if (!cantarLive.stable) {
+      if (!window.confirm(`Cântărire instabilă (${cantarLive.value} kg). Folosești această valoare?`)) return;
     }
-    callback(r.value);
+    callback(cantarLive.value);
   };
+  // Un camp (FastInput) cu cursorul in el nu primeste valori de la un buton; pe telefon, apasarea unui buton nu-l scoate singura din
+  // camp (ca pe calculator). Iesim noi din camp inainte de a pune valoarea, altfel greutatea din cantar nu apare / se pierde.
+  const aplicaLaCamp = (fn) => { try { document.activeElement?.blur?.(); } catch (e) {} fn(); };
   // ── Helper: confirmation dialog for deletes ──────────────
   const confirmDel = (what) => window.confirm(`⚠️ Sigur vrei să ștergi ${what}?\n\nAcțiunea NU poate fi anulată.`);
   // ── Helper: caută o firmă după CUI la ANAF și completează un câmp ──
@@ -1694,7 +1708,7 @@ export default function App() {
   const updLIV = mkUpd(livRows, setLivRows, "livrari");
   const delLIV = mkDel(setLivRows, "livrari", "această vânzare");
   const addLIV = async () => {
-    const row = { data: today(), nr: "", client: "", produs: "", cant: 0, pret: 0, fact: "", inc: "", det: "" };
+    const row = { data: today(), nr: "", client: "", produs: "", cant: 0, pret: 0, fact: "NU", inc: "NU", det: "RECEPTIE" }; // valori implicite la o vanzare noua
     const { data } = await sb.from("livrari").insert(row).select();
     if (data && data.length) { setLivRows((p) => [...p, data[0]]); logAction("add", "livrari", data[0].id); }
   };
@@ -4695,7 +4709,7 @@ Reguli:
                     <span style={{ color: "#555" }}>Ultima Tară:</span>
                     <strong style={{ fontFamily: "monospace", fontSize: 14, color: "#e65100" }}>{fmt(parseSuma(ultima.tara))} kg</strong>
                     <span style={{ color: "#888" }}>TC #{ultima.nr_tichet} • {ultima.data}{ultima.nr_masina ? ` • ${ultima.nr_masina}` : ""}{aceeasiMasina ? " (aceeași mașină)" : ""}</span>
-                    <button onClick={() => setTicEdit((p) => ({ ...p, tara: String(ultima.tara) }))} style={{ marginLeft: "auto", background: "#fff", border: "1px solid #ffa726", color: "#e65100", borderRadius: 5, padding: "3px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>Folosește</button>
+                    <button onClick={() => aplicaLaCamp(() => setTicEdit((p) => ({ ...p, tara: String(ultima.tara) })))} style={{ marginLeft: "auto", background: "#fff", border: "1px solid #ffa726", color: "#e65100", borderRadius: 5, padding: "3px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>Folosește</button>
                   </div>
                 );
               })()}
@@ -6637,7 +6651,7 @@ Reguli:
                         );
                       })()}
                       {scalePort && <button onClick={() => useScaleWeight((v) => setTicNou((p) => ({ ...p, greutate: v })))} style={{ padding: "10px", background: scaleReading?.stable ? "#e8f5e9" : "#fff8e1", border: `1px solid ${G}`, borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700, color: G, marginBottom: 8 }}>⚖️ Preia din cântar {scaleReading ? `(${fmt(scaleReading.value)} kg)` : ""}</button>}
-                      {!scalePort && cantarLive?.fresh && <button onClick={() => useLiveWeight((v) => setTicNou((p) => ({ ...p, greutate: v })))} style={{ padding: "10px", background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#1565c0", marginBottom: 8 }}>📡 Preia live de la birou ({fmt(cantarLive.value)} kg)</button>}
+                      {!scalePort && cantarLive && <button onClick={() => aplicaLaCamp(() => useLiveWeight((v) => setTicNou((p) => ({ ...p, greutate: v }))))} style={{ padding: "10px", background: cantarLive.fresh ? "#e3f2fd" : "#eceff1", border: `1px solid ${cantarLive.fresh ? "#90caf9" : "#cfd8dc"}`, borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700, color: cantarLive.fresh ? "#1565c0" : "#78909c", marginBottom: 8 }}>{cantarLive.fresh ? `📡 Preia live de la birou (${fmt(cantarLive.value)} kg)` : "📡 Live de la birou — fără semnal"}</button>}
                       <button onClick={salveazaTichet1} disabled={ticSaving} style={{ marginTop: "auto", padding: "13px", background: ticSaving ? "#9e9e9e" : `linear-gradient(135deg,#064e3b,${G})`, color: "#fff", border: "none", borderRadius: 8, cursor: ticSaving ? "wait" : "pointer", fontSize: 14, fontWeight: 700 }}>{ticSaving ? "⏳ Se salvează..." : `💾 Deschide tichet TC #${getNextTichetNr()}`}</button>
                       <div style={{ fontSize: 10, color: "#999", marginTop: 6, textAlign: "center" }}>A doua cântărire se face din „⏳ Deschise"</div>
                     </div>
@@ -6677,13 +6691,13 @@ Reguli:
                               <span style={{ fontSize: 10, color: "#8d6e63" }}>Ultima tară:</span>
                               <strong style={{ fontSize: 13, color: "#e65100", fontFamily: "monospace" }}>{fmt(ut.tara)}</strong>
                               <span style={{ fontSize: 9, color: "#aaa" }}>TC {ut.nr} · {ut.data}</span>
-                              <button onClick={() => setTicTaraInput((p) => ({ ...p, [t.id]: String(ut.tara) }))} title="Pune această valoare la cântărire" style={{ marginLeft: "auto", padding: "2px 8px", background: "#e65100", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", fontSize: 10, fontWeight: 700 }}>pune</button>
+                              <button onClick={() => aplicaLaCamp(() => setTicTaraInput((p) => ({ ...p, [t.id]: String(ut.tara) })))} title="Pune această valoare la cântărire" style={{ marginLeft: "auto", padding: "2px 8px", background: "#e65100", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", fontSize: 10, fontWeight: 700 }}>pune</button>
                             </div>
                           );
                         })()}
                         <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
-                          {scalePort && <button onClick={() => useScaleWeight((v) => setTicTaraInput((p) => ({ ...p, [t.id]: v })))} style={{ flex: 1, padding: "5px", background: "#e8f5e9", border: "1px solid #a5d6a7", borderRadius: 5, cursor: "pointer", fontSize: 11, color: G, fontWeight: 600 }}>⚖️ Din cântar</button>}
-                          {!scalePort && cantarLive?.fresh && <button onClick={() => useLiveWeight((v) => setTicTaraInput((p) => ({ ...p, [t.id]: v })))} style={{ flex: 1, padding: "5px", background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 5, cursor: "pointer", fontSize: 11, color: "#1565c0", fontWeight: 600 }}>📡 Live birou</button>}
+                          {scalePort && <button onClick={() => aplicaLaCamp(() => useScaleWeight((v) => setTicTaraInput((p) => ({ ...p, [t.id]: v }))))} style={{ flex: 1, padding: "5px", background: "#e8f5e9", border: "1px solid #a5d6a7", borderRadius: 5, cursor: "pointer", fontSize: 11, color: G, fontWeight: 600 }}>⚖️ Din cântar</button>}
+                          {!scalePort && cantarLive && <button onClick={() => aplicaLaCamp(() => useLiveWeight((v) => setTicTaraInput((p) => ({ ...p, [t.id]: v }))))} title={cantarLive.fresh ? "Preia greutatea de la cântarul din birou" : "Fără semnal de la cântar — apasă pentru detalii"} style={{ flex: 1, padding: "5px", background: cantarLive.fresh ? "#e3f2fd" : "#eceff1", border: `1px solid ${cantarLive.fresh ? "#90caf9" : "#cfd8dc"}`, borderRadius: 5, cursor: "pointer", fontSize: 11, color: cantarLive.fresh ? "#1565c0" : "#78909c", fontWeight: 600 }}>{cantarLive.fresh ? "📡 Live birou" : "📡 Live birou (fără semnal)"}</button>}
                         </div>
                         {(() => {
                           const v2 = parseSuma(ticTaraInput[t.id]);
