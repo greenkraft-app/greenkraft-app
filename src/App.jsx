@@ -6017,7 +6017,7 @@ Reguli:
             if (colAchitat && r.ach !== colAchitat) return false;
             if (colFurn && r.furn !== colFurn) return false;
             if (colProdus.length && !colProdus.includes(r.produs)) return false;
-            if (colSearch) { const q = colSearch.toLowerCase(); if (!(r.furn?.toLowerCase().includes(q) || r.produs?.toLowerCase().includes(q) || r.ach_de?.toLowerCase().includes(q))) return false; }
+            if (colSearch) { const q = colSearch.toLowerCase(); if (!(r.furn?.toLowerCase().includes(q) || r.produs?.toLowerCase().includes(q) || r.ach_de?.toLowerCase().includes(q) || r.det?.toLowerCase().includes(q) || r.nr_doc?.toLowerCase().includes(q))) return false; }
             return true;
           }));
           const colMonthOpts = [...new Set(colRows.map(r => monthOf(r.data)).filter(Boolean))].sort();
@@ -6032,7 +6032,7 @@ Reguli:
               <SC label="✓ Eligibile Raport (Nr. doc.)" value={String(colRows.filter(r => r.nr_doc).length)} c={G} bg="#e8f5e9" />
             </div>
             <div style={{ background: "#f5f5f5", border: "1px solid #ddd", borderRadius: 8, padding: 10, marginBottom: 10, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-              <FastInput value={colSearch} onChange={(e) => setColSearch(e.target.value)} placeholder="🔍 Caută furnizor, produs, achitat de..." style={{ flex: 1, minWidth: 180, border: "1px solid #ccc", borderRadius: 5, padding: "5px 10px", fontSize: 12 }} />
+              <FastInput value={colSearch} onChange={(e) => setColSearch(e.target.value)} placeholder="🔍 Caută furnizor, produs, achitat de, detalii, nr. doc..." style={{ flex: 1, minWidth: 180, border: "1px solid #ccc", borderRadius: 5, padding: "5px 10px", fontSize: 12 }} />
               <select value={colMonth} onChange={(e) => setColMonth(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}>
                 <option value="">📅 Toate lunile</option>
                 {colMonthOpts.map(m => <option key={m}>{m}</option>)}
