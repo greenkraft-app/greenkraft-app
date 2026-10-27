@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTabela, lipsaTabel, colatie } from "./hooks";
+import Echipamente from "./Echipamente";
 
 // Panou generic pentru o lista simpla (organizatii, echipamente, fractii): adaugare, redenumire pe loc,
 // activ/inactiv si stergere. Fiecare modificare ajunge in Istoric, cu valoarea veche.
@@ -116,11 +117,10 @@ export default function Nomenclatoare(props) {
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-start" }}>
         <Nomenclator {...props} titlu="Organizații" descriere="Organizațiile către care se raportează (CNREE, RLG, NEALOCATE…)." tabel="deee_organizatii"
           campuri={[{ k: "den", label: "Denumire" }]} />
-        <Nomenclator {...props} titlu="Echipamente" descriere="Tipurile de echipamente primite și dezmembrate." tabel="deee_echipamente"
-          campuri={[{ k: "den", label: "Denumire" }]} />
         <Nomenclator {...props} titlu="Fracții" descriere="Fracțiile rezultate din dezmembrare, cu codul EWC (aceeași fracție poate avea mai multe coduri)." tabel="deee_fractii"
           campuri={[{ k: "den", label: "Denumire", flex: 2 }, { k: "cod", label: "Cod EWC", flex: 1, min: 70 }]} />
       </div>
+      <div style={{ marginTop: 14 }}><Echipamente {...props} /></div>
     </div>
   );
 }
