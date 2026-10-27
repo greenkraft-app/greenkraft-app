@@ -66,7 +66,7 @@ export default function RateRR({ sb, G, ui, logAction }) {
       </div>
       <div style={{ fontSize: 11, color: "#64748b", marginBottom: 10 }}>
         {doarVanzari
-          ? "Doar vânzări: rata se calculează numai pe fracțiile vândute (baza = cantitatea vândută), cu procentele R/D ale vânzărilor."
+          ? "Doar vânzări: input-ul rămâne cel al echipamentelor dezmembrate, iar output-ul și ratele se calculează numai din fracțiile vândute care au procente R/D (sau clasificare implicită)."
           : "Total: baza e cantitatea de echipamente dezmembrate; fracțiile vândute folosesc procentele R/D ale vânzării, cele nevândute clasificarea implicită."}
       </div>
 
@@ -81,7 +81,7 @@ export default function RateRR({ sb, G, ui, logAction }) {
         <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 900 }}>
           <thead><tr>
             <th style={ui.th({ textAlign: "left" })}>Categorie</th><th style={ui.th({ width: 100 })}>Input (kg)</th><th style={ui.th({ width: 100 })}>Output (kg)</th>
-            <th style={ui.th({ width: 90 })}>Pierderi (kg)</th><th style={ui.th({ width: 85 })}>Rata reciclare</th><th style={ui.th({ width: 65 })}>Țintă</th>
+            <th style={ui.th({ width: 80 })} title="(Input − Output) / Input">Pierderi</th><th style={ui.th({ width: 85 })}>Rata reciclare</th><th style={ui.th({ width: 65 })}>Țintă</th>
             <th style={ui.th({ width: 85 })}>Rata recuperare</th><th style={ui.th({ width: 65 })}>Țintă</th><th style={ui.th({ width: 80 })}>Status</th>
           </tr></thead>
           <tbody>
@@ -94,7 +94,7 @@ export default function RateRR({ sb, G, ui, logAction }) {
                   <td style={ui.td({ fontWeight: 600 })}>{r.cat === FARA_CAT ? "Fără categorie" : `${r.cat} ${denCat[r.cat] || ""}`}{r.cat === FARA_CAT && <span style={{ fontSize: 10, color: "#92400e" }}> — alege categoria în Nomenclatoare → Echipamente</span>}</td>
                   <td style={ui.td({ textAlign: "right" })}>{fmtKg(r.input)}</td>
                   <td style={ui.td({ textAlign: "right" })}>{fmtKg(r.output)}</td>
-                  <td style={ui.td({ textAlign: "right", color: "#92400e" })}>{fmtKg(r.pierderi)}</td>
+                  <td style={ui.td({ textAlign: "right", color: "#92400e" })}>{pct(r.pierderiPct)}</td>
                   <td style={ui.td({ textAlign: "right", fontWeight: 700 })}>{pct(r.rataR)} {stare(r.okR)}</td>
                   <td style={ui.td({ textAlign: "right", color: "#64748b" })}>{r.tintaR === null ? "—" : pct(r.tintaR)}</td>
                   <td style={ui.td({ textAlign: "right", fontWeight: 700 })}>{pct(r.rataV)} {stare(r.okV)}</td>

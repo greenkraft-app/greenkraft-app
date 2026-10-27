@@ -3,7 +3,8 @@
 //   Output       = fractiile rezultate (kg); fiecare fractie e repartizata pe categorii proportional cu cat input a avut fiecare categorie
 //                  in operatiunile din care provine
 //   Reciclat     = partea de fractii clasificata "reciclare"; Valorificat = "valorificare"; Eliminat = "eliminare" (inclusiv pierderile)
-//   Rata reciclare = reciclat / input;  Rata recuperare = (reciclat + valorificat) / input
+//   Rata reciclare = reciclat / input;  Rata recuperare = (reciclat + valorificat) / input;  Pierderi % = (input - output) / input
+// Modul "Doar vanzari" (ca in WiseWeee): input-ul ramane cel al echipamentelor dezmembrate, iar output = doar fractiile vandute care au clasificare.
 // Clasificarea unei fractii: pentru ce s-a vandut, procentele R/D ale vanzarii (daca sunt completate), altfel clasificarea implicita
 // a fractiei; pentru ce n-a fost vandut, clasificarea implicita.
 export const FARA_CAT = "—";
@@ -11,12 +12,13 @@ const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const aSet = (v) => v !== null && v !== undefined && v !== "";
 const cheie = (den, cod) => `${String(den || "").trim()}\u0001${String(cod || "").trim()}`;
 
-export const clasificareFractie = (f) =>
-  f && (aSet(f.rd_reciclare) || aSet(f.rd_valorificare) || aSet(f.rd_eliminare))
-    ? { r: Number(f.rd_reciclare) || 0, v: Number(f.rd_valorificare) || 0, e: Number(f.rd_eliminare) || 0 } : null;
-const clasificareVanzare = (v) =>
-  aSet(v.proc_reciclare) || aSet(v.proc_valorificare) || aSet(v.proc_eliminare)
-    ? { r: Number(v.proc_reciclare) || 0, v: Number(v.proc_valorificare) || 0, e: Number(v.proc_eliminare) || 0 } : null;
+// Procente 0 / 0 / 0 inseamna "necompletat" (ca in WiseWeee, unde vanzarile cu procente 0 sunt numarate ca fara procente R/D).
+const clasif = (r, v, e) => {
+  const x = { r: Number(r) || 0, v: Number(v) || 0, e: Number(e) || 0 };
+  return x.r + x.v + x.e > 0 ? x : null;
+};
+export const clasificareFractie = (f) => (f && (aSet(f.rd_reciclare) || aSet(f.rd_valorificare) || aSet(f.rd_eliminare)) ? clasif(f.rd_reciclare, f.rd_valorificare, f.rd_eliminare) : null);
+const clasificareVanzare = (v) => (aSet(v.proc_reciclare) || aSet(v.proc_valorificare) || aSet(v.proc_eliminare) ? clasif(v.proc_reciclare, v.proc_valorificare, v.proc_eliminare) : null);
 
 export function calculeazaRate({ dz, dzE, dzF, van, ech, fractii, categorii, an = "", org = "", doarVanzari = false }) {
   const catDe = Object.fromEntries(ech.map((e) => [e.den, e.categorie || FARA_CAT]));
@@ -68,17 +70,15 @@ export function calculeazaRate({ dz, dzE, dzF, van, ech, fractii, categorii, an 
     if (!doarVanzari) {
       if (clas) { R += (nerestKg * clas.r) / 100; V += (nerestKg * clas.v) / 100; E += (nerestKg * clas.e) / 100; } else nec += nerestKg;
     }
-    const baza = doarVanzari ? vandutKg : p.total;
+    const iesire = doarVanzari ? R + V + E : p.total;       // output: toate fractiile obtinute, sau doar cele vandute si clasificate
     if (nec > 0.0005) faraClasificare.set(k, { den: p.den, cod: p.cod, kg: nec });
-    if (baza <= 0) return;
+    if (iesire <= 0 && R + V + E <= 0) return;
     p.perCat.forEach((ckg, c) => {
       const sh = p.total > 0 ? ckg / p.total : 0; const r = cat(c);
-      r.output += baza * sh; r.R += R * sh; r.V += V * sh; r.E += E * sh; r.nec += nec * sh;
+      r.output += iesire * sh; r.R += R * sh; r.V += V * sh; r.E += E * sh; r.nec += nec * sh;
     });
   });
-  // input-ul categoriilor; in modul "doar vanzari" baza ratei e cantitatea vanduta, deci input = output
-  inputCat.forEach((kg, c) => { cat(c).input = doarVanzari ? 0 : kg; });
-  if (doarVanzari) rez.forEach((r) => { r.input = r.output; });
+  inputCat.forEach((kg, c) => { cat(c).input = kg; });
   vandut.forEach((s) => { vanzariFaraProcente += s.faraProc; });
 
   const tinta = Object.fromEntries(categorii.map((c) => [c.cat, c]));
@@ -92,7 +92,7 @@ export function calculeazaRate({ dz, dzE, dzF, van, ech, fractii, categorii, an 
       const tR = t ? Number(t.tinta_reciclare) : null, tV = t ? Number(t.tinta_valorificare) : null;
       return {
         ...r, input: r2(r.input), output: r2(r.output), R: r2(r.R), V: r2(r.V), E: r2(r.E), nec: r2(r.nec),
-        pierderi: r2(Math.max(r.input - r.output, 0) + r.E), rataR, rataV, tintaR: tR, tintaV: tV,
+        pierderiPct: r.input > 0 ? Math.max(((r.input - r.output) / r.input) * 100, 0) : 0, rataR, rataV, tintaR: tR, tintaV: tV,
         okR: tR === null ? null : rataR + 0.005 >= tR, okV: tV === null ? null : rataV + 0.005 >= tV,
       };
     });
