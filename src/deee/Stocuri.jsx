@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useTabela, numar, colatie } from "./hooks";
-import { useStoc } from "./stoc";
+import { useStoc, calculeazaStoc } from "./stoc";
 import { COD_EWC, dataRo, fmtKg } from "./constante";
 
 const azi = () => new Date().toISOString().slice(0, 10);
@@ -16,12 +16,27 @@ export default function Stocuri({ sb, G, ui, currentUser, logAction, confirmDel 
   const [fOrg, setFOrg] = useState("");
   const [q, setQ] = useState("");
   const [ascunde, setAscunde] = useState(false);
+  const [de, setDe] = useState("");
+  const [pana, setPana] = useState("");
   const [edit, setEdit] = useState(null);
   const [eroare, setEroare] = useState("");
   const [seSalveaza, setSeSalveaza] = useState(false);
 
   const organizatii = useMemo(() => org.rows.filter((o) => o.activ).map((o) => o.den).sort(colatie), [org.rows]);
-  const randuri = (tab === "echipamente" ? s.stoc.echipamente : s.stoc.fractii)
+  // Perioada (De la – Pana la) limiteaza miscarile numarate in stoc: achizitii, dezmembrari, vanzari; stocul initial fara data intra mereu.
+  const stoc = useMemo(() => {
+    if (!de && !pana) return s.stoc;
+    const ok = (d) => !d || ((!de || String(d) >= de) && (!pana || String(d) <= pana));
+    const ach = s.ach.rows.filter((a) => ok(a.data_colectare)), dz = s.dz.rows.filter((d) => ok(d.data));
+    const idA = new Set(ach.map((a) => a.id)), idD = new Set(dz.map((d) => d.id));
+    return calculeazaStoc({
+      ach, achL: s.achL.rows.filter((l) => idA.has(l.achizitie_id)), dz, dzE: s.dzE.rows.filter((l) => idD.has(l.dezm_id)), dzF: s.dzF.rows.filter((l) => idD.has(l.dezm_id)),
+      ini: s.ini.rows.filter((i) => ok(i.data)), vanzari: s.van.rows.filter((v) => ok(v.data)),
+    });
+  }, [s.stoc, s.ach.rows, s.achL.rows, s.dz.rows, s.dzE.rows, s.dzF.rows, s.ini.rows, s.van.rows, de, pana]);
+  const negative = useMemo(() => [...stoc.echipamente.map((r) => ({ ...r, tip: "Echipament" })), ...stoc.fractii.map((r) => ({ ...r, tip: "Fracție" }))].filter((r) => r.disp < -0.0005), [stoc]);
+  const dispPeOrg = useMemo(() => { const m = {}; (tab === "echipamente" ? stoc.echipamente : stoc.fractii).forEach((r) => { m[r.org] = (m[r.org] || 0) + r.disp; }); return Object.entries(m).filter(([, v]) => Math.abs(v) > 0.0005).sort((a, b) => b[1] - a[1]); }, [stoc, tab]);
+  const randuri = (tab === "echipamente" ? stoc.echipamente : stoc.fractii)
     .filter((r) => (!fOrg || r.org === fOrg) && (!q || `${r.den} ${r.cod}`.toLowerCase().includes(q.trim().toLowerCase())) && (!ascunde || Math.abs(r.disp) > 0.0005))
     .sort((a, b) => colatie(a.den, b.den) || colatie(a.cod, b.cod) || colatie(a.org, b.org));
 
@@ -56,6 +71,18 @@ export default function Stocuri({ sb, G, ui, currentUser, logAction, confirmDel 
     logAction("delete", "deee_stoc_initial", r.id, { den: r.den, kg: r.kg, _sters: r });
   };
 
+  const exporta = () => {
+    const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const nr = (n) => String(n).replace(".", ",");
+    const cap = [tab === "echipamente" ? "Echipament" : "Fractie", "Cod EWC", "Organizatie", "Total (kg)", `${eticScos} (kg)`, "Disponibil (kg)", ...(tab === "echipamente" ? ["Buc disponibile"] : [])];
+    const linii = [cap.map(esc).join(";")];
+    randuri.forEach((r) => linii.push([r.den, r.cod, r.org, nr(r.total), nr(r.scos), nr(r.disp), ...(tab === "echipamente" ? [r.bucDisp] : [])].map(esc).join(";")));
+    const blob = new Blob(["﻿" + linii.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = `stoc-${tab}-${azi()}.csv`; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  };
+
   const inputSt = { padding: "6px 8px", border: "1px solid #d5dbe1", borderRadius: 6, fontSize: 12, boxSizing: "border-box", width: "100%" };
   const card = (t, v, c) => (
     <div style={{ flex: "1 1 150px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "9px 14px", boxShadow: "0 1px 2px rgba(15,23,42,.05)" }}>
@@ -72,17 +99,35 @@ export default function Stocuri({ sb, G, ui, currentUser, logAction, confirmDel 
         {card(eticScos + " (kg)", fmtKg(sumar.scos), "#1565c0")}
         {card("Disponibil (kg)", fmtKg(sumar.disp), sumar.disp < -0.0005 ? "#c62828" : "#047857")}
         {tab === "echipamente" && card("Bucăți disponibile", sumar.buc.toLocaleString("ro-RO"), "#6a1b9a")}
+        {dispPeOrg.length > 0 && (
+          <div style={{ flex: "2 1 260px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "9px 14px" }}>
+            <div style={{ fontSize: 10, color: "#64748b", marginBottom: 3 }}>Disponibil pe organizație (kg)</div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 12, fontWeight: 700 }}>
+              {dispPeOrg.map(([o, kg]) => <span key={o}>{o}: <span style={{ color: kg < 0 ? "#c62828" : "#047857" }}>{fmtKg(kg)}</span></span>)}
+            </div>
+          </div>
+        )}
       </div>
+      {(de || pana) && <div style={{ fontSize: 11, color: "#92400e", marginBottom: 8 }}>Perioadă aleasă: se numără doar mișcările din interval ({de ? dataRo(de) : "început"} – {pana ? dataRo(pana) : "azi"}); stocul inițial fără dată intră mereu.</div>}
+      {negative.length > 0 && (
+        <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10, padding: "8px 12px", marginBottom: 10, fontSize: 12, color: "#991b1b" }}>
+          ⚠️ {negative.length} {negative.length === 1 ? "combinație are" : "combinații au"} stoc negativ (s-a dezmembrat sau vândut mai mult decât există): {negative.slice(0, 4).map((r) => `${r.tip} ${r.den}${r.cod ? ` (${r.cod})` : ""} – ${r.org}`).join("; ")}{negative.length > 4 ? "…" : ""}
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
-        <button style={subSt("echipamente")} onClick={() => setTab("echipamente")}>Echipamente ({s.stoc.echipamente.length})</button>
-        <button style={subSt("fractii")} onClick={() => setTab("fractii")}>Fracții ({s.stoc.fractii.length})</button>
+        <button style={subSt("echipamente")} onClick={() => setTab("echipamente")}>Echipamente ({stoc.echipamente.length})</button>
+        <button style={subSt("fractii")} onClick={() => setTab("fractii")}>Fracții ({stoc.fractii.length})</button>
         <input style={{ ...inputSt, width: 220, marginLeft: 8 }} placeholder="🔍 Caută..." value={q} onChange={(e) => setQ(e.target.value)} />
         <select style={{ ...inputSt, width: 150 }} value={fOrg} onChange={(e) => setFOrg(e.target.value)}>
           <option value="">Toate organizațiile</option>{organizatii.map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
+        <label style={{ fontSize: 11, color: "#64748b", display: "flex", gap: 4, alignItems: "center" }}>De la <input type="date" style={{ ...inputSt, width: 140 }} value={de} onChange={(e) => setDe(e.target.value)} /></label>
+        <label style={{ fontSize: 11, color: "#64748b", display: "flex", gap: 4, alignItems: "center" }}>Până la <input type="date" style={{ ...inputSt, width: 140 }} value={pana} onChange={(e) => setPana(e.target.value)} /></label>
+        {(de || pana) && <button onClick={() => { setDe(""); setPana(""); }} style={{ padding: "5px 10px", border: "1px solid #ccc", borderRadius: 6, background: "#fff", cursor: "pointer", fontSize: 11 }}>↺ Resetează</button>}
         <label style={{ fontSize: 12, display: "flex", gap: 5, alignItems: "center", cursor: "pointer", color: "#475569" }}><input type="checkbox" checked={ascunde} onChange={(e) => setAscunde(e.target.checked)} /> Ascunde stocul epuizat</label>
-        <div style={{ marginLeft: "auto" }}>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+          <button onClick={exporta} disabled={!randuri.length} style={{ background: "#fff", color: G, border: `1px solid ${G}`, borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>⬇️ Export Excel (CSV)</button>
           <button onClick={deschide} style={{ background: "#fff", color: G, border: `1px solid ${G}`, borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>+ Stoc inițial / ajustare</button>
         </div>
       </div>

@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useTabela, numar, colatie } from "./hooks";
-import { useStoc, cheieStoc } from "./stoc";
+import { useStoc, cheieStoc, calculeazaStoc, problemeStoc } from "./stoc";
 import { dataRo, fmtKg } from "./constante";
 import { etichetaReteta, tipulRetetei } from "./Retete";
 import { htmlPv } from "./pv";
@@ -24,6 +24,8 @@ export default function Dezmembrare({ sb, G, ui, currentUser, logAction, confirm
   const [edit, setEdit] = useState(null); // { id|null, pas, f, ech:[{echipament,cod,kg,buc}], fr:[{fractie,cod,kg}] }
   const [eroare, setEroare] = useState("");
   const [info, setInfo] = useState("");
+  const [sel, setSel] = useState(() => new Set());
+  const [orgMasa, setOrgMasa] = useState("");
   const [seSalveaza, setSeSalveaza] = useState(false);
 
   const organizatii = useMemo(() => org.rows.filter((o) => o.activ).map((o) => o.den).sort(colatie), [org.rows]);
@@ -224,6 +226,23 @@ export default function Dezmembrare({ sb, G, ui, currentUser, logAction, confirm
     await s.reloadAll();
   };
 
+  // Alocare in masa: operatiunile bifate trec la alta organizatie (consuma echipamente din stocul ei si ii aduc fractiile),
+  // doar daca dupa mutare niciun stoc nu ajunge negativ.
+  const alocaLa = async () => {
+    const ids = [...sel].filter((id) => s.dz.rows.some((d) => d.id === id));
+    if (!ids.length || !orgMasa) return;
+    const dzNoi = s.dz.rows.map((d) => (ids.includes(d.id) ? { ...d, organizatie: orgMasa } : d));
+    const probleme = problemeStoc(s.stoc, calculeazaStoc({ ach: s.ach.rows, achL: s.achL.rows, dz: dzNoi, dzE: s.dzE.rows, dzF: s.dzF.rows, ini: s.ini.rows, vanzari: s.van.rows }));
+    if (probleme.length) { alert(`Nu pot aloca la ${orgMasa}: stocul nu ajunge.\n\n${probleme.slice(0, 8).join("\n")}${probleme.length > 8 ? `\n… și încă ${probleme.length - 8}` : ""}`); return; }
+    const inainte = Object.fromEntries(ids.map((id) => [id, s.dz.rows.find((d) => d.id === id)?.organizatie]));
+    const { error } = await sb.from("deee_dezmembrari").update({ organizatie: orgMasa }).in("id", ids);
+    if (error) { alert("Eroare: " + error.message); return; }
+    s.dz.setRows((p) => p.map((d) => (ids.includes(d.id) ? { ...d, organizatie: orgMasa } : d)));
+    logAction("update", "deee_dezmembrari", "", { organizatie: orgMasa, operatiuni: ids.length, ids, _inainte: { organizatie: inainte } });
+    setSel(new Set()); setOrgMasa("");
+  };
+  const toateBifate = lista.length > 0 && lista.every((d) => sel.has(d.id));
+
   // Proces-verbal de tratare (tiparire) si export Excel (CSV) cu sectiunile INPUT / OUTPUT, ca in WiseWeee
   const tiparestePv = (d) => {
     const w = window.open("", "_blank");
@@ -277,21 +296,35 @@ export default function Dezmembrare({ sb, G, ui, currentUser, logAction, confirm
         </div>
       </div>
 
+      {sel.size > 0 && (
+        <div style={{ display: "flex", gap: 8, alignItems: "center", background: "#ecfdf5", border: `1px solid ${G}55`, borderRadius: 10, padding: "8px 12px", marginBottom: 10, flexWrap: "wrap" }}>
+          <b style={{ fontSize: 12 }}>{sel.size} operațiuni selectate</b>
+          <select style={{ ...inputSt, width: 170 }} value={orgMasa} onChange={(e) => setOrgMasa(e.target.value)}>
+            <option value="">Alocă la organizația…</option>{organizatii.map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+          <button disabled={!orgMasa} onClick={alocaLa} style={{ background: orgMasa ? G : "#9ca3af", color: "#fff", border: "none", borderRadius: 6, padding: "6px 14px", cursor: orgMasa ? "pointer" : "default", fontSize: 12, fontWeight: 700 }}>Alocă</button>
+          <button onClick={() => setSel(new Set())} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 12 }}>Deselectează</button>
+          <span style={{ fontSize: 10, color: "#64748b" }}>Operațiunea consumă echipamentele din stocul organizației alese, deci acesta trebuie să le aibă.</span>
+        </div>
+      )}
+
       <div style={ui.TBL}>
-        <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 860 }}>
+        <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 900 }}>
           <thead><tr>
+            <th style={ui.th({ width: 30 })}><input type="checkbox" checked={toateBifate} onChange={(e) => setSel(e.target.checked ? new Set(lista.map((d) => d.id)) : new Set())} title="Selectează tot ce e afișat" /></th>
             <th style={ui.th({ width: 90 })}>Data</th><th style={ui.th({ width: 100 })}>Nr. operațiune</th>
             <th style={ui.th({ textAlign: "left" })}>Echipamente</th><th style={ui.th({ width: 100 })}>Organizație</th>
             <th style={ui.th({ width: 150 })}>Total cantitate</th><th style={ui.th({ width: 80 })}>Status</th>
             <th style={ui.th({ textAlign: "left", width: 160 })}>Observații</th><th style={ui.th({ width: 120 })}></th>
           </tr></thead>
           <tbody>
-            {!s.incarcat && <tr><td colSpan={8} style={ui.td({ textAlign: "center", padding: 18, color: "#94a3b8" })}>Se încarcă…</td></tr>}
-            {s.incarcat && lista.length === 0 && <tr><td colSpan={8} style={ui.td({ textAlign: "center", padding: 18, color: "#94a3b8" })}>{s.dz.rows.length ? "Nicio operațiune pentru filtrele alese." : "Nicio operațiune încă. Înainte de prima, verifică stocul în „Stocuri”."}</td></tr>}
+            {!s.incarcat && <tr><td colSpan={9} style={ui.td({ textAlign: "center", padding: 18, color: "#94a3b8" })}>Se încarcă…</td></tr>}
+            {s.incarcat && lista.length === 0 && <tr><td colSpan={9} style={ui.td({ textAlign: "center", padding: 18, color: "#94a3b8" })}>{s.dz.rows.length ? "Nicio operațiune pentru filtrele alese." : "Nicio operațiune încă. Înainte de prima, verifică stocul în „Stocuri”."}</td></tr>}
             {lista.map((d) => {
               const ls = echDe[d.id] || [];
               return (
-                <tr key={d.id}>
+                <tr key={d.id} style={{ background: sel.has(d.id) ? "#ecfdf5" : undefined }}>
+                  <td style={ui.td({ textAlign: "center" })}><input type="checkbox" checked={sel.has(d.id)} onChange={() => setSel((p) => { const n = new Set(p); n.has(d.id) ? n.delete(d.id) : n.add(d.id); return n; })} /></td>
                   <td style={ui.td({ textAlign: "center", fontSize: 11 })}>{dataRo(d.data)}</td>
                   <td style={ui.td({ textAlign: "center", fontWeight: 700, color: G })}>{d.nr_operatiune}</td>
                   <td style={ui.td({ fontSize: 11 })}>{ls.map((l) => <div key={l.id}>{l.echipament} — {fmtKg(l.kg)} kg, {l.buc} buc</div>)}</td>

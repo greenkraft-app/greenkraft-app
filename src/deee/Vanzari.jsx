@@ -1,12 +1,15 @@
 import { useState, useMemo } from "react";
 import { useTabela, numar, colatie } from "./hooks";
-import { useStoc, cheieStoc } from "./stoc";
+import { useStoc, cheieStoc, calculeazaStoc, problemeStoc } from "./stoc";
 import { dataRo, fmtKg } from "./constante";
 
 const r3 = (n) => Math.round((Number(n) || 0) * 1000) / 1000;
 const azi = () => new Date().toISOString().slice(0, 10);
 const norm = (s) => String(s || "").trim().toLowerCase();
 const aSet = (v) => v !== null && v !== undefined && v !== "";
+const rot2 = (n) => Math.round(n * 100) / 100;
+const rot4 = (n) => Math.round(n * 10000) / 10000;
+const fmtLei = (n) => (n === null || n === undefined || n === "" ? "—" : Number(n).toLocaleString("ro-RO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 const textProc = (r) => (aSet(r.proc_reciclare) || aSet(r.proc_valorificare) || aSet(r.proc_eliminare)
   ? `R ${Number(r.proc_reciclare) || 0} / V ${Number(r.proc_valorificare) || 0} / E ${Number(r.proc_eliminare) || 0}` : "—");
 
@@ -22,6 +25,10 @@ export default function Vanzari({ sb, G, ui, currentUser, logAction, confirmDel 
   const [eroare, setEroare] = useState("");
   const [seSalveaza, setSeSalveaza] = useState(false);
   const [pr, setPr] = useState(null); // dialog procente R/D
+  const [sel, setSel] = useState(() => new Set());
+  const [orgMasa, setOrgMasa] = useState("");
+  const org = useTabela(sb, "deee_organizatii");
+  const organizatiiActive = useMemo(() => org.rows.filter((o) => o.activ).map((o) => o.den).sort(colatie), [org.rows]);
 
   const rows = s.van.rows;
   const ani = useMemo(() => [...new Set(rows.map((r) => String(r.data).slice(0, 4)))].sort().reverse(), [rows]);
@@ -36,6 +43,7 @@ export default function Vanzari({ sb, G, ui, currentUser, logAction, confirmDel 
       .sort((a, b) => String(b.data).localeCompare(String(a.data)) || String(b.created_at).localeCompare(String(a.created_at)));
   }, [rows, fAn, fClient, fOrg, q]);
   const totKg = r3(filtrate.reduce((x, r) => x + Number(r.kg), 0));
+  const totLei = rot2(filtrate.reduce((x, r) => x + (Number(r.valoare) || 0), 0));
   const pePeOrg = useMemo(() => { const m = {}; filtrate.forEach((r) => { m[r.organizatie] = r3((m[r.organizatie] || 0) + Number(r.kg)); }); return Object.entries(m).sort((a, b) => b[1] - a[1]); }, [filtrate]);
 
   // ── stoc de fractii disponibil (la editare se adauga inapoi ce vinde deja randul editat) ──
@@ -53,13 +61,17 @@ export default function Vanzari({ sb, G, ui, currentUser, logAction, confirmDel 
 
   const deschideNou = (pastreaza) => {
     setEroare("");
-    setEdit({ id: null, f: { data: pastreaza?.data || azi(), client: pastreaza?.client || "", nr_aviz: pastreaza?.nr_aviz || "", optiune: "", kg: "", observatii: "" } });
+    setEdit({ id: null, f: { data: pastreaza?.data || azi(), client: pastreaza?.client || "", nr_aviz: pastreaza?.nr_aviz || "", optiune: "", kg: "", pret: "", valoare: "", observatii: "" } });
   };
   const deschideEditare = (r) => {
     setEroare("");
-    setEdit({ id: r.id, f: { data: r.data, client: r.client, nr_aviz: r.nr_aviz || "", optiune: cheieStoc(r.fractie, r.cod, r.organizatie), kg: String(r.kg), observatii: r.observatii || "" } });
+    setEdit({ id: r.id, f: { data: r.data, client: r.client, nr_aviz: r.nr_aviz || "", optiune: cheieStoc(r.fractie, r.cod, r.organizatie), kg: String(r.kg), pret: aSet(r.pret_kg) ? String(r.pret_kg) : "", valoare: aSet(r.valoare) ? String(r.valoare) : "", observatii: r.observatii || "" } });
   };
   const setF = (patch) => setEdit((p) => ({ ...p, f: { ...p.f, ...patch } }));
+  // pret/kg si valoarea se calculeaza una din alta: valoare = kg x pret; la editarea valorii se recalculeaza pretul
+  const schimbaKg = (v) => { const kg = numar(v), pret = numar(edit.f.pret); setF({ kg: v, ...(kg > 0 && pret >= 0 ? { valoare: String(rot2(kg * pret)) } : {}) }); };
+  const schimbaPret = (v) => { const kg = numar(edit.f.kg), pret = numar(v); setF({ pret: v, ...(kg > 0 && pret >= 0 ? { valoare: String(rot2(kg * pret)) } : v === "" ? { valoare: "" } : {}) }); };
+  const schimbaValoare = (v) => { const kg = numar(edit.f.kg), val = numar(v); setF({ valoare: v, ...(kg > 0 && val >= 0 ? { pret: String(rot4(val / kg)) } : v === "" ? { pret: "" } : {}) }); };
 
   const valideaza = () => {
     const f = edit.f;
@@ -69,6 +81,8 @@ export default function Vanzari({ sb, G, ui, currentUser, logAction, confirmDel 
     const kg = numar(f.kg);
     if (!(kg > 0)) return "Greutatea trebuie să fie mai mare ca 0.";
     if (kg > optiuneAleasa.max + 0.0005) return `În stoc sunt doar ${fmtKg(optiuneAleasa.max)} kg de ${optiuneAleasa.den} (${optiuneAleasa.org}).`;
+    if (f.pret !== "" && !(numar(f.pret) >= 0)) return "Prețul pe kg trebuie să fie un număr (0 sau mai mare).";
+    if (f.valoare !== "" && !(numar(f.valoare) >= 0)) return "Valoarea trebuie să fie un număr (0 sau mai mare).";
     return "";
   };
 
@@ -78,6 +92,12 @@ export default function Vanzari({ sb, G, ui, currentUser, logAction, confirmDel 
     try {
       const f = edit.f; const o = optiuneAleasa; const cg = clientGasit(f.client);
       const payload = { data: f.data, client: cg ? cg.den : f.client.trim(), client_cui: cg ? cg.cui : "", nr_aviz: f.nr_aviz.trim(), fractie: o.den, cod: o.cod, organizatie: o.org, kg: numar(f.kg), observatii: f.observatii.trim() };
+      // coloanele de pret exista doar dupa ce s-a rulat supabase-deee-9-pret-vanzari.sql: fara pret, nu le trimitem deloc
+      const vechiRand = edit.id ? rows.find((r) => r.id === edit.id) : null;
+      if (f.pret !== "" || f.valoare !== "" || aSet(vechiRand?.pret_kg) || aSet(vechiRand?.valoare)) {
+        payload.pret_kg = f.pret === "" ? null : numar(f.pret);
+        payload.valoare = f.valoare === "" ? null : numar(f.valoare);
+      }
       if (!edit.id) {
         const { data, error } = await sb.from("deee_vanzari").insert({ ...payload, creat_de: currentUser || "" }).select();
         if (error) { setEroare("Eroare: " + error.message); return; }
@@ -147,11 +167,28 @@ export default function Vanzari({ sb, G, ui, currentUser, logAction, confirmDel 
     setPr(null);
   };
 
+  // ── Alocare in masa: vanzarile bifate trec la alta organizatie (consuma din stocul ei), doar daca stocul ei acopera ──
+  const alocaLa = async () => {
+    const ids = [...sel].filter((id) => rows.some((r) => r.id === id));
+    if (!ids.length || !orgMasa) return;
+    const noi = rows.map((r) => (ids.includes(r.id) ? { ...r, organizatie: orgMasa } : r));
+    const probleme = problemeStoc(s.stoc, calculeazaStoc({ ach: s.ach.rows, achL: s.achL.rows, dz: s.dz.rows, dzE: s.dzE.rows, dzF: s.dzF.rows, ini: s.ini.rows, vanzari: noi }));
+    if (probleme.length) { alert(`Nu pot aloca la ${orgMasa}: stocul nu ajunge.\n\n${probleme.slice(0, 8).join("\n")}${probleme.length > 8 ? `\n… și încă ${probleme.length - 8}` : ""}`); return; }
+    const inainte = Object.fromEntries(ids.map((id) => [id, rows.find((r) => r.id === id)?.organizatie]));
+    const { error } = await sb.from("deee_vanzari").update({ organizatie: orgMasa }).in("id", ids);
+    if (error) { alert("Eroare: " + error.message); return; }
+    s.van.setRows((p) => p.map((r) => (ids.includes(r.id) ? { ...r, organizatie: orgMasa } : r)));
+    logAction("update", "deee_vanzari", "", { organizatie: orgMasa, vanzari: ids.length, ids, _inainte: { organizatie: inainte } });
+    setSel(new Set()); setOrgMasa("");
+  };
+  const toateBifate = filtrate.length > 0 && filtrate.every((r) => sel.has(r.id));
+
   const exporta = () => {
     const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const cap = ["Data", "Client", "CUI client", "Nr. aviz", "Cod fractie", "Fractie", "Organizatie", "Kg", "Reciclare %", "Valorificare %", "Eliminare %", "Cod R/D", "Observatii"];
+    const cap = ["Data", "Client", "CUI client", "Nr. aviz", "Cod fractie", "Fractie", "Organizatie", "Kg", "Pret/kg (lei)", "Valoare (lei)", "Reciclare %", "Valorificare %", "Eliminare %", "Cod R/D", "Observatii"];
     const linii = [cap.map(esc).join(";")];
-    filtrate.forEach((r) => linii.push([dataRo(r.data), r.client, r.client_cui, r.nr_aviz, r.cod, r.fractie, r.organizatie, String(r.kg).replace(".", ","), r.proc_reciclare ?? "", r.proc_valorificare ?? "", r.proc_eliminare ?? "", r.cod_rd, r.observatii].map(esc).join(";")));
+    const lei = (v) => (aSet(v) ? String(v).replace(".", ",") : "");
+    filtrate.forEach((r) => linii.push([dataRo(r.data), r.client, r.client_cui, r.nr_aviz, r.cod, r.fractie, r.organizatie, String(r.kg).replace(".", ","), lei(r.pret_kg), lei(r.valoare), r.proc_reciclare ?? "", r.proc_valorificare ?? "", r.proc_eliminare ?? "", r.cod_rd, r.observatii].map(esc).join(";")));
     const blob = new Blob(["﻿" + linii.join("\r\n")], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `vanzari-fractii-${azi()}.csv`; a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
@@ -172,6 +209,7 @@ export default function Vanzari({ sb, G, ui, currentUser, logAction, confirmDel 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
         {card("Vânzări", filtrate.length, "#1e293b")}
         {card("Total cantitate (kg)", fmtKg(totKg), "#047857")}
+        {card("Total valoare (lei)", fmtLei(totLei), "#b45309")}
         {card("Clienți unici", new Set(filtrate.map((r) => r.client)).size, "#1565c0")}
         <div style={{ flex: "2 1 260px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: "9px 14px" }}>
           <div style={{ fontSize: 10, color: "#64748b", marginBottom: 3 }}>Pe organizație</div>
@@ -194,18 +232,32 @@ export default function Vanzari({ sb, G, ui, currentUser, logAction, confirmDel 
         </div>
       </div>
 
+      {sel.size > 0 && (
+        <div style={{ display: "flex", gap: 8, alignItems: "center", background: "#ecfdf5", border: `1px solid ${G}55`, borderRadius: 10, padding: "8px 12px", marginBottom: 10, flexWrap: "wrap" }}>
+          <b style={{ fontSize: 12 }}>{sel.size} vânzări selectate</b>
+          <select style={{ ...inputSt, width: 170 }} value={orgMasa} onChange={(e) => setOrgMasa(e.target.value)}>
+            <option value="">Alocă la organizația…</option>{organizatiiActive.map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+          <button disabled={!orgMasa} onClick={alocaLa} style={{ background: orgMasa ? G : "#9ca3af", color: "#fff", border: "none", borderRadius: 6, padding: "6px 14px", cursor: orgMasa ? "pointer" : "default", fontSize: 12, fontWeight: 700 }}>Alocă</button>
+          <button onClick={() => setSel(new Set())} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 12 }}>Deselectează</button>
+          <span style={{ fontSize: 10, color: "#64748b" }}>Vânzarea trece la stocul organizației alese, dacă acesta are fracția în cantitate suficientă.</span>
+        </div>
+      )}
+
       <div style={ui.TBL}>
-        <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 900 }}>
+        <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1020 }}>
           <thead><tr>
+            <th style={ui.th({ width: 30 })}><input type="checkbox" checked={toateBifate} onChange={(e) => setSel(e.target.checked ? new Set(filtrate.map((r) => r.id)) : new Set())} title="Selectează tot ce e afișat" /></th>
             <th style={ui.th({ width: 90 })}>Data</th><th style={ui.th({ textAlign: "left" })}>Client</th><th style={ui.th({ width: 110 })}>Nr. aviz</th>
             <th style={ui.th({ width: 80 })}>Cod</th><th style={ui.th({ textAlign: "left", width: 190 })}>Fracție</th><th style={ui.th({ width: 100 })}>Organizație</th>
-            <th style={ui.th({ width: 110 })}>Kg</th><th style={ui.th({ width: 130 })} title="Reciclare / Valorificare / Eliminare">R / V / E %</th><th style={ui.th({ width: 70 })}></th>
+            <th style={ui.th({ width: 110 })}>Kg</th><th style={ui.th({ width: 100 })} title="Valoarea vânzării (kg × preț)">Valoare lei</th><th style={ui.th({ width: 130 })} title="Reciclare / Valorificare / Eliminare">R / V / E %</th><th style={ui.th({ width: 70 })}></th>
           </tr></thead>
           <tbody>
-            {!s.incarcat && <tr><td colSpan={9} style={ui.td({ textAlign: "center", padding: 18, color: "#94a3b8" })}>Se încarcă…</td></tr>}
-            {s.incarcat && filtrate.length === 0 && <tr><td colSpan={9} style={ui.td({ textAlign: "center", padding: 18, color: "#94a3b8" })}>{rows.length ? "Nicio vânzare pentru filtrele alese." : "Nicio vânzare încă. Fracțiile apar în stoc după o dezmembrare."}</td></tr>}
+            {!s.incarcat && <tr><td colSpan={11} style={ui.td({ textAlign: "center", padding: 18, color: "#94a3b8" })}>Se încarcă…</td></tr>}
+            {s.incarcat && filtrate.length === 0 && <tr><td colSpan={11} style={ui.td({ textAlign: "center", padding: 18, color: "#94a3b8" })}>{rows.length ? "Nicio vânzare pentru filtrele alese." : "Nicio vânzare încă. Fracțiile apar în stoc după o dezmembrare."}</td></tr>}
             {filtrate.map((r) => (
-              <tr key={r.id}>
+              <tr key={r.id} style={{ background: sel.has(r.id) ? "#ecfdf5" : undefined }}>
+                <td style={ui.td({ textAlign: "center" })}><input type="checkbox" checked={sel.has(r.id)} onChange={() => setSel((p) => { const n = new Set(p); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; })} /></td>
                 <td style={ui.td({ textAlign: "center", fontSize: 11 })}>{dataRo(r.data)}</td>
                 <td style={ui.td({ fontWeight: 600 })}>{r.client}</td>
                 <td style={ui.td({ textAlign: "center", fontFamily: "monospace", fontSize: 11 })}>{r.nr_aviz || "—"}</td>
@@ -213,6 +265,7 @@ export default function Vanzari({ sb, G, ui, currentUser, logAction, confirmDel 
                 <td style={ui.td()}>{r.fractie}</td>
                 <td style={ui.td({ textAlign: "center", fontSize: 11 })}>{r.organizatie}</td>
                 <td style={ui.td({ textAlign: "right", fontWeight: 700 })}>{fmtKg(r.kg)}</td>
+                <td style={ui.td({ textAlign: "right", fontSize: 11, color: aSet(r.valoare) ? "#92400e" : "#94a3b8" })} title={aSet(r.pret_kg) ? `${r.pret_kg} lei/kg` : ""}>{fmtLei(r.valoare)}</td>
                 <td style={ui.td({ textAlign: "center", fontSize: 10, color: textProc(r) === "—" ? "#94a3b8" : "#334155" })}>{textProc(r)}</td>
                 <td style={ui.td({ textAlign: "center", padding: 2, whiteSpace: "nowrap" })}>
                   <button onClick={() => deschideEditare(r)} title="Editează" style={{ background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 4, cursor: "pointer", color: "#e65100", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>✏️</button>{" "}
@@ -246,9 +299,11 @@ export default function Vanzari({ sb, G, ui, currentUser, logAction, confirmDel 
                 </select>
                 {optiuni.length === 0 && <div style={{ fontSize: 11, color: "#92400e", marginTop: 3 }}>Nu există fracții în stoc. Fracțiile apar după o dezmembrare (sau „Stoc inițial” în Stocuri).</div>}
               </div>
-              <div style={{ flex: "1 1 180px" }}>{lab("Greutate (kg)", true)}<input style={{ ...inputSt, textAlign: "right", fontWeight: 700 }} inputMode="decimal" value={edit.f.kg} onChange={(e) => setF({ kg: e.target.value })} />
+              <div style={{ flex: "1 1 180px" }}>{lab("Greutate (kg)", true)}<input style={{ ...inputSt, textAlign: "right", fontWeight: 700 }} inputMode="decimal" value={edit.f.kg} onChange={(e) => schimbaKg(e.target.value)} />
                 {optiuneAleasa && <button onClick={() => setF({ kg: String(optiuneAleasa.max) })} style={{ background: "none", border: "none", color: G, cursor: "pointer", fontSize: 11, padding: 0, marginTop: 2 }}>toată cantitatea ({fmtKg(optiuneAleasa.max)} kg)</button>}
               </div>
+              <div style={{ flex: "1 1 130px" }}>{lab("Preț / kg (lei)")}<input style={{ ...inputSt, textAlign: "right" }} inputMode="decimal" value={edit.f.pret} onChange={(e) => schimbaPret(e.target.value)} placeholder="opțional" /></div>
+              <div style={{ flex: "1 1 130px" }}>{lab("Valoare (lei)")}<input style={{ ...inputSt, textAlign: "right" }} inputMode="decimal" value={edit.f.valoare} onChange={(e) => schimbaValoare(e.target.value)} placeholder="kg × preț" /></div>
               <div style={{ flex: "2 1 260px" }}>{lab("Observații")}<input style={inputSt} value={edit.f.observatii} onChange={(e) => setF({ observatii: e.target.value })} /></div>
               {eroare && <div style={{ flex: "1 1 100%", color: "#c62828", fontSize: 12, fontWeight: 600 }}>⚠️ {eroare}</div>}
             </div>

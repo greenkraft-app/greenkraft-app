@@ -26,6 +26,21 @@ export function calculeazaStoc({ ach, achL, dz, dzE, dzF, ini, vanzari = [] }) {
   return { echipamente: fin(E), fractii: fin(F) };
 }
 
+// Dupa o modificare simulata (ex. mutarea unor vanzari / dezmembrari la alta organizatie): ce stocuri ar ajunge negative
+// (sau ar scadea si mai mult sub zero) fata de situatia de dinainte. Lista goala = modificarea e permisa.
+export function problemeStoc(inainte, dupa) {
+  const negative = (st) => {
+    const m = new Map();
+    st.echipamente.forEach((r) => { if (r.disp < -0.0005) m.set("E" + cheieStoc(r.den, r.cod, r.org), { tip: "Echipament", r }); });
+    st.fractii.forEach((r) => { if (r.disp < -0.0005) m.set("F" + cheieStoc(r.den, r.cod, r.org), { tip: "Fracție", r }); });
+    return m;
+  };
+  const a = negative(inainte);
+  return [...negative(dupa).entries()]
+    .filter(([k, v]) => !a.has(k) || v.r.disp < a.get(k).r.disp - 0.0005)
+    .map(([, v]) => `${v.tip} ${v.r.den}${v.r.cod ? ` (${v.r.cod})` : ""} la ${v.r.org}: ${v.r.disp.toLocaleString("ro-RO", { maximumFractionDigits: 2 })} kg`);
+}
+
 // Incarca tabelele din care se calculeaza stocul si il tine la zi.
 export function useStoc(sb) {
   const ach = useTabela(sb, "deee_achizitii");
