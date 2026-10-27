@@ -12,12 +12,14 @@ import Vanzari from "./Vanzari";
 import RateRR from "./RateRR";
 import Rapoarte from "./Rapoarte";
 import Registre from "./Registre";
+import DocumentePoze from "./DocumentePoze";
 import CompanieMea, { aplicaFirma } from "./CompanieMea";
 
 // Sectiunea ♻️ DEEE — evidenta echipamentelor electrice si electronice (achizitii, dezmembrare, stocuri, vanzari de fractii).
 // Modulele marcate "in lucru" apar in meniu ca sa se vada planul complet; se activeaza pe masura ce sunt gata.
 const MODULE = [
   { k: "achizitii", l: "🚛 Achiziții", gata: true, tabel: "deee_achizitii", sql: "supabase-deee-3-achizitii.sql" },
+  { k: "documente", l: "📎 Documente / Poze", gata: true, tabel: "deee_fisiere", sql: "supabase-deee-14-fisiere.sql" },
   { k: "dezmembrare", l: "🔧 Dezmembrare", gata: true, tabel: "deee_dezmembrari", sql: "supabase-deee-4-dezmembrare-stocuri.sql" },
   { k: "dezmfr", l: "🔩 Dezm. fracții", gata: true, tabel: "deee_dezm_fr", sql: "supabase-deee-12-dezmembrare-fractii.sql" },
   { k: "stocuri", l: "📦 Stocuri", gata: true, tabel: "deee_stoc_initial", sql: "supabase-deee-4-dezmembrare-stocuri.sql" },
@@ -85,6 +87,7 @@ export default function Deee(props) {
       {(stare === "ok" || stare === "verific") && modul.k === "retete" && <Retete {...props} />}
       {(stare === "ok" || stare === "verific") && modul.k === "nomenclatoare" && <Nomenclatoare {...props} />}
       {(stare === "ok" || stare === "verific") && modul.k === "achizitii" && <Achizitii {...props} />}
+      {(stare === "ok" || stare === "verific") && modul.k === "documente" && <DocumentePoze {...props} />}
       {(stare === "ok" || stare === "verific") && modul.k === "dezmembrare" && <Dezmembrare {...props} />}
       {(stare === "ok" || stare === "verific") && modul.k === "dezmfr" && <DezmFractii {...props} />}
       {(stare === "ok" || stare === "verific") && modul.k === "stocuri" && <Stocuri {...props} />}

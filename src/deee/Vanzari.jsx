@@ -2,6 +2,8 @@ import { useState, useMemo } from "react";
 import { useTabela, numar, colatie } from "./hooks";
 import { useStoc, cheieStoc, calculeazaStoc, problemeStoc } from "./stoc";
 import { dataRo, fmtKg } from "./constante";
+import { useFisiere, stergeFisiere } from "./stocareFisiere";
+import PanouFisiere from "./PanouFisiere";
 
 const r3 = (n) => Math.round((Number(n) || 0) * 1000) / 1000;
 const azi = () => new Date().toISOString().slice(0, 10);
@@ -25,6 +27,8 @@ export default function Vanzari({ sb, G, ui, currentUser, logAction, confirmDel 
   const [eroare, setEroare] = useState("");
   const [seSalveaza, setSeSalveaza] = useState(false);
   const [pr, setPr] = useState(null); // dialog procente R/D
+  const fis = useFisiere(sb); // poze si documente atasate (apar dupa supabase-deee-14-fisiere.sql)
+  const [panou, setPanou] = useState(null);
   const [sel, setSel] = useState(() => new Set());
   const [orgMasa, setOrgMasa] = useState("");
   const org = useTabela(sb, "deee_organizatii");
@@ -118,10 +122,13 @@ export default function Vanzari({ sb, G, ui, currentUser, logAction, confirmDel 
 
   const sterge = async (r) => {
     if (!confirmDel(`vânzarea ${r.fractie} ${fmtKg(r.kg)} kg către ${r.client}`)) return;
+    const faraFisiere = await stergeFisiere(sb, fis.pe("vanzare", r.id)); // intai fisierele din stocare, ca sa nu ramana orfane
+    if (faraFisiere) { alert("Nu am putut șterge fișierele atașate: " + faraFisiere); return; }
     const { error } = await sb.from("deee_vanzari").delete().eq("id", r.id);
     if (error) { alert("Eroare: " + error.message); return; }
     s.van.setRows((p) => p.filter((x) => x.id !== r.id));
-    logAction("delete", "deee_vanzari", r.id, { client: r.client, nr_aviz: r.nr_aviz, fractie: r.fractie, kg: r.kg, _sters: r });
+    fis.setRows((p) => p.filter((x) => x.vanzare_id !== r.id));
+    logAction("delete", "deee_vanzari", r.id, { client: r.client, nr_aviz: r.nr_aviz, fractie: r.fractie, kg: r.kg, _sters: { ...r, fisiere: fis.pe("vanzare", r.id).map((f) => ({ nume: f.nume, cale: f.cale })) } });
   };
 
   // ── Procente reciclare / valorificare / eliminare, per grup (client + cod + fractie) ──
@@ -245,16 +252,16 @@ export default function Vanzari({ sb, G, ui, currentUser, logAction, confirmDel 
       )}
 
       <div style={ui.TBL}>
-        <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1020 }}>
+        <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1080 }}>
           <thead><tr>
             <th style={ui.th({ width: 30 })}><input type="checkbox" checked={toateBifate} onChange={(e) => setSel(e.target.checked ? new Set(filtrate.map((r) => r.id)) : new Set())} title="Selectează tot ce e afișat" /></th>
             <th style={ui.th({ width: 90 })}>Data</th><th style={ui.th({ textAlign: "left" })}>Client</th><th style={ui.th({ width: 110 })}>Nr. aviz</th>
             <th style={ui.th({ width: 80 })}>Cod</th><th style={ui.th({ textAlign: "left", width: 190 })}>Fracție</th><th style={ui.th({ width: 100 })}>Organizație</th>
-            <th style={ui.th({ width: 110 })}>Kg</th><th style={ui.th({ width: 100 })} title="Valoarea vânzării (kg × preț)">Valoare lei</th><th style={ui.th({ width: 130 })} title="Reciclare / Valorificare / Eliminare">R / V / E %</th><th style={ui.th({ width: 70 })}></th>
+            <th style={ui.th({ width: 110 })}>Kg</th><th style={ui.th({ width: 100 })} title="Valoarea vânzării (kg × preț)">Valoare lei</th><th style={ui.th({ width: 130 })} title="Reciclare / Valorificare / Eliminare">R / V / E %</th><th style={ui.th({ width: 60 })} title="Poze și documente atașate">Docs</th><th style={ui.th({ width: 70 })}></th>
           </tr></thead>
           <tbody>
-            {!s.incarcat && <tr><td colSpan={11} style={ui.td({ textAlign: "center", padding: 18, color: "#94a3b8" })}>Se încarcă…</td></tr>}
-            {s.incarcat && filtrate.length === 0 && <tr><td colSpan={11} style={ui.td({ textAlign: "center", padding: 18, color: "#94a3b8" })}>{rows.length ? "Nicio vânzare pentru filtrele alese." : "Nicio vânzare încă. Fracțiile apar în stoc după o dezmembrare."}</td></tr>}
+            {!s.incarcat && <tr><td colSpan={12} style={ui.td({ textAlign: "center", padding: 18, color: "#94a3b8" })}>Se încarcă…</td></tr>}
+            {s.incarcat && filtrate.length === 0 && <tr><td colSpan={12} style={ui.td({ textAlign: "center", padding: 18, color: "#94a3b8" })}>{rows.length ? "Nicio vânzare pentru filtrele alese." : "Nicio vânzare încă. Fracțiile apar în stoc după o dezmembrare."}</td></tr>}
             {filtrate.map((r) => (
               <tr key={r.id} style={{ background: sel.has(r.id) ? "#ecfdf5" : undefined }}>
                 <td style={ui.td({ textAlign: "center" })}><input type="checkbox" checked={sel.has(r.id)} onChange={() => setSel((p) => { const n = new Set(p); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; })} /></td>
@@ -267,6 +274,11 @@ export default function Vanzari({ sb, G, ui, currentUser, logAction, confirmDel 
                 <td style={ui.td({ textAlign: "right", fontWeight: 700 })}>{fmtKg(r.kg)}</td>
                 <td style={ui.td({ textAlign: "right", fontSize: 11, color: aSet(r.valoare) ? "#92400e" : "#94a3b8" })} title={aSet(r.pret_kg) ? `${r.pret_kg} lei/kg` : ""}>{fmtLei(r.valoare)}</td>
                 <td style={ui.td({ textAlign: "center", fontSize: 10, color: textProc(r) === "—" ? "#94a3b8" : "#334155" })}>{textProc(r)}</td>
+                <td style={ui.td({ textAlign: "center", padding: 2 })}>
+                  {(() => { const n = fis.pe("vanzare", r.id).length; return (
+                    <button onClick={() => setPanou(r)} title={n ? `${n} fișiere atașate` : "Adaugă poze și documente"} style={{ background: n ? "#e8f5e9" : "#f1f5f9", border: `1px solid ${n ? "#a5d6a7" : "#cbd5e1"}`, borderRadius: 4, cursor: "pointer", color: n ? "#047857" : "#64748b", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>📎 {n || "+"}</button>
+                  ); })()}
+                </td>
                 <td style={ui.td({ textAlign: "center", padding: 2, whiteSpace: "nowrap" })}>
                   <button onClick={() => deschideEditare(r)} title="Editează" style={{ background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 4, cursor: "pointer", color: "#e65100", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>✏️</button>{" "}
                   <button onClick={() => sterge(r)} title="Șterge" style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button>
@@ -317,6 +329,8 @@ export default function Vanzari({ sb, G, ui, currentUser, logAction, confirmDel 
           </div>
         </div>
       )}
+
+      {panou && <PanouFisiere sb={sb} G={G} user={currentUser} logAction={logAction} fis={fis} sursa={{ tip: "vanzare", id: panou.id, titlu: `${panou.client} • ${panou.fractie} • aviz ${panou.nr_aviz || "—"}` }} onClose={() => setPanou(null)} />}
 
       {pr && (
         <div onClick={() => !pr.seSalveaza && setPr(null)} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>

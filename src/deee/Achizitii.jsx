@@ -3,6 +3,8 @@ import { useTabela, numar, colatie } from "./hooks";
 import { COD_EWC, TIPURI_ANEXA, dataRo, roIso, lunaDin, numeLuna, fmtKg } from "./constante";
 import { htmlNir } from "./nir";
 import { useCoduriOrg, etichetaCod } from "./coduriOrg";
+import { useFisiere, stergeFisiere } from "./stocareFisiere";
+import PanouFisiere from "./PanouFisiere";
 
 const rot = (n) => Math.round(n * 100) / 100;
 const azi = () => new Date().toISOString().slice(0, 10);
@@ -32,6 +34,9 @@ export default function Achizitii({ sb, G, ui, currentUser, logAction, confirmDe
   const [fOrg, setFOrg] = useState("");
   const [fCod, setFCod] = useState("");
   const [fVerif, setFVerif] = useState("");
+  const fis = useFisiere(sb); // poze si documente atasate (apar dupa ce se ruleaza supabase-deee-14-fisiere.sql)
+  const [fFis, setFFis] = useState("");
+  const [panou, setPanou] = useState(null); // documentul ale carui fisiere se vad
   const [sel, setSel] = useState(() => new Set());
   const [orgMasa, setOrgMasa] = useState("");
   const [edit, setEdit] = useState(null); // { id|null, pas, f, linii:[{echipament,buc,kg}], tichet }
@@ -58,9 +63,11 @@ export default function Achizitii({ sb, G, ui, currentUser, logAction, confirmDe
     return ach.rows
       .filter((r) => (!luna || lunaDin(r.data_colectare) === luna) && (!fOrg || orgDoc(r).includes(fOrg)) && (!fCod || r.cod_hg856 === fCod)
         && (!fVerif || (fVerif === "da") === !!r.verificat)
+        && (!fFis || (() => { const f = fis.pe("achizitie", r.id); const poze = f.some((x) => x.categorie === "poza"), doc = f.some((x) => x.categorie === "document");
+          return fFis === "niciunul" ? !f.length : fFis === "fara_doc" ? !doc : fFis === "fara_poze" ? !poze : poze && doc; })())
         && (!t || [r.furnizor, r.nr_document, r.nr_auto, r.cod_hg856, r.nr_ticket, r.transportator].some((x) => String(x || "").toLowerCase().includes(t))))
       .sort((a, b) => String(b.data_colectare).localeCompare(String(a.data_colectare)) || String(b.created_at).localeCompare(String(a.created_at)));
-  }, [ach.rows, liniiDe, q, luna, fOrg, fCod, fVerif]);
+  }, [ach.rows, liniiDe, q, luna, fOrg, fCod, fVerif, fFis, fis.pe]);
 
   const totKg = rot(filtrate.reduce((s, r) => s + Number(r.greutate || 0), 0));
   const totBuc = filtrate.reduce((s, r) => s + (liniiDe[r.id] || []).reduce((x, l) => x + (l.buc || 0), 0), 0);
@@ -225,12 +232,14 @@ export default function Achizitii({ sb, G, ui, currentUser, logAction, confirmDe
 
   const sterge = async (r) => {
     if (!confirmDel(`documentul ${r.nr_document} (${r.furnizor})`)) return;
-    const snapshot = { achizitie: r, linii: liniiDe[r.id] || [] };
+    const snapshot = { achizitie: r, linii: liniiDe[r.id] || [], fisiere: fis.pe("achizitie", r.id).map((f) => ({ nume: f.nume, cale: f.cale })) };
+    const faraFisiere = await stergeFisiere(sb, fis.pe("achizitie", r.id)); // intai fisierele din stocare, ca sa nu ramana orfane
+    if (faraFisiere) { alert("Nu am putut șterge fișierele atașate: " + faraFisiere); return; }
     const { error } = await sb.from("deee_achizitii").delete().eq("id", r.id);
     if (error) { alert("Eroare: " + error.message); return; }
     logAction("delete", "deee_achizitii", r.id, { furnizor: r.furnizor, nr_document: r.nr_document, _sters: snapshot });
     setSel((p) => { const n = new Set(p); n.delete(r.id); return n; });
-    await Promise.all([ach.reload(), lin.reload()]);
+    await Promise.all([ach.reload(), lin.reload(), fis.reload()]);
   };
 
   const comutaVerificat = async (r) => {
@@ -288,7 +297,7 @@ export default function Achizitii({ sb, G, ui, currentUser, logAction, confirmDe
     </div>
   );
   const toateVizibileBifate = filtrate.length > 0 && filtrate.every((r) => sel.has(r.id));
-  const colspan = 12;
+  const colspan = 13;
 
   // sugestii pentru nr. auto / sofer, dupa transportatorul ales
   const tr = edit ? transportatorGasit(edit.f.transportator) : null;
@@ -323,7 +332,10 @@ export default function Achizitii({ sb, G, ui, currentUser, logAction, confirmDe
         <select style={{ ...inputSt, width: 130 }} value={fVerif} onChange={(e) => setFVerif(e.target.value)}>
           <option value="">Verificat: toate</option><option value="da">Verificate</option><option value="nu">Neverificate</option>
         </select>
-        {(q || luna || fOrg || fCod || fVerif) && <button onClick={() => { setQ(""); setLuna(""); setFOrg(""); setFCod(""); setFVerif(""); }} style={{ padding: "5px 10px", border: "1px solid #ccc", borderRadius: 6, background: "#fff", cursor: "pointer", fontSize: 11 }}>↺ Reset</button>}
+        <select style={{ ...inputSt, width: 150 }} value={fFis} onChange={(e) => setFFis(e.target.value)} title="Fișiere atașate">
+          <option value="">Documente / poze</option><option value="niciunul">Fără niciun fișier</option><option value="fara_doc">Fără document</option><option value="fara_poze">Fără poze</option><option value="complete">Complete</option>
+        </select>
+        {(q || luna || fOrg || fCod || fVerif || fFis) && <button onClick={() => { setQ(""); setLuna(""); setFOrg(""); setFCod(""); setFVerif(""); setFFis(""); }} style={{ padding: "5px 10px", border: "1px solid #ccc", borderRadius: 6, background: "#fff", cursor: "pointer", fontSize: 11 }}>↺ Reset</button>}
         <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
           <button onClick={exporta} disabled={!filtrate.length} style={{ background: "#fff", color: G, border: `1px solid ${G}`, borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>⬇️ Export Excel (CSV)</button>
           <button onClick={deschideNou} style={{ background: G, color: "#fff", border: "none", borderRadius: 8, padding: "8px 16px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>+ Document nou</button>
@@ -342,7 +354,7 @@ export default function Achizitii({ sb, G, ui, currentUser, logAction, confirmDe
       )}
 
       <div style={ui.TBL}>
-        <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1110 }}>
+        <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1170 }}>
           <thead>
             <tr>
               <th style={ui.th({ width: 30 })}><input type="checkbox" checked={toateVizibileBifate} onChange={(e) => setSel(e.target.checked ? new Set(filtrate.map((r) => r.id)) : new Set())} title="Selectează tot ce e afișat" /></th>
@@ -356,6 +368,7 @@ export default function Achizitii({ sb, G, ui, currentUser, logAction, confirmDe
               <th style={ui.th({ width: 110 })}>Org.</th>
               <th style={ui.th({ width: 50 })} title="Verificat">Verif.</th>
               <th style={ui.th({ width: 80 })} title="Nota de Intrare-Recepție">NIR</th>
+              <th style={ui.th({ width: 60 })} title="Poze și documente atașate">Fișiere</th>
               <th style={ui.th({ width: 70 })}></th>
             </tr>
           </thead>
@@ -381,6 +394,11 @@ export default function Achizitii({ sb, G, ui, currentUser, logAction, confirmDe
                   <td style={ui.td({ textAlign: "center", padding: 2 })}>
                     <button onClick={() => tiparesteNir(r)} title={`Tipărește ${nrNir(r)} (Nota de Intrare-Recepție)`} style={{ background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 4, cursor: "pointer", color: "#1565c0", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>🖨️ NIR</button>
                   </td>
+                  <td style={ui.td({ textAlign: "center", padding: 2 })}>
+                    {(() => { const n = fis.pe("achizitie", r.id).length; return (
+                      <button onClick={() => setPanou(r)} title={n ? `${n} fișiere atașate` : "Adaugă poze și documente"} style={{ background: n ? "#e8f5e9" : "#f1f5f9", border: `1px solid ${n ? "#a5d6a7" : "#cbd5e1"}`, borderRadius: 4, cursor: "pointer", color: n ? "#047857" : "#64748b", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>📎 {n || "+"}</button>
+                    ); })()}
+                  </td>
                   <td style={ui.td({ textAlign: "center", padding: 2, whiteSpace: "nowrap" })}>
                     <button onClick={() => deschideEditare(r)} title="Editează" style={{ background: "#fff8e1", border: "1px solid #ffd54f", borderRadius: 4, cursor: "pointer", color: "#e65100", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>✏️</button>{" "}
                     <button onClick={() => sterge(r)} title="Șterge" style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button>
@@ -391,6 +409,8 @@ export default function Achizitii({ sb, G, ui, currentUser, logAction, confirmDe
           </tbody>
         </table>
       </div>
+
+      {panou && <PanouFisiere sb={sb} G={G} user={currentUser} logAction={logAction} fis={fis} sursa={{ tip: "achizitie", id: panou.id, titlu: `${panou.furnizor} • aviz ${panou.nr_document}` }} onClose={() => setPanou(null)} />}
 
       {edit && (
         <div onClick={() => !seSalveaza && setEdit(null)} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
