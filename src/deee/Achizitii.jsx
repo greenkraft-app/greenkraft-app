@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useTabela, numar, colatie } from "./hooks";
 import { COD_EWC, TIPURI_ANEXA, dataRo, roIso, lunaDin, numeLuna, fmtKg } from "./constante";
 import { htmlNir } from "./nir";
+import { useCoduriOrg, etichetaCod } from "./coduriOrg";
 
 const rot = (n) => Math.round(n * 100) / 100;
 const azi = () => new Date().toISOString().slice(0, 10);
@@ -11,6 +12,7 @@ const GOL = {
 };
 const CAMPURI_DB = Object.keys(GOL);
 const norm = (s) => String(s || "").trim().toLowerCase();
+const rot4 = (n) => Math.round(n * 10000) / 10000;
 
 // Documentele de colectare DEEE: furnizor + aviz + cod EWC + greutate, impartite pe echipamente (bucati si kg).
 // Se pot completa pornind de la un tichet de cantar inchis (Intrare) din Greenkraft.
@@ -23,6 +25,7 @@ export default function Achizitii({ sb, G, ui, currentUser, logAction, confirmDe
   const soferi = useTabela(sb, "deee_soferi");
   const ech = useTabela(sb, "deee_echipamente");
   const org = useTabela(sb, "deee_organizatii");
+  const co = useCoduriOrg(sb); // greutati medii si coduri implicite ale organizatiilor
 
   const [q, setQ] = useState("");
   const [luna, setLuna] = useState("");
@@ -42,6 +45,10 @@ export default function Achizitii({ sb, G, ui, currentUser, logAction, confirmDe
     return m;
   }, [lin.rows]);
 
+  const orgLinie = (l, r) => l.organizatie || r.organizatie;
+  const orgDoc = (r) => { const ls = liniiDe[r.id] || []; return ls.length ? [...new Set(ls.map((l) => orgLinie(l, r)))] : [r.organizatie]; };
+  const bucAuto = (den, kg) => (co.medii[den] > 0 && kg > 0 ? Math.round(kg / co.medii[den]) : null);
+
   const luniDisp = useMemo(() => [...new Set(ach.rows.map((r) => lunaDin(r.data_colectare)).filter(Boolean))].sort().reverse(), [ach.rows]);
   const coduriDisp = useMemo(() => [...new Set(ach.rows.map((r) => r.cod_hg856))].sort(), [ach.rows]);
   const organizatiiNume = useMemo(() => org.rows.filter((o) => o.activ).map((o) => o.den).sort(colatie), [org.rows]);
@@ -49,11 +56,11 @@ export default function Achizitii({ sb, G, ui, currentUser, logAction, confirmDe
   const filtrate = useMemo(() => {
     const t = q.trim().toLowerCase();
     return ach.rows
-      .filter((r) => (!luna || lunaDin(r.data_colectare) === luna) && (!fOrg || r.organizatie === fOrg) && (!fCod || r.cod_hg856 === fCod)
+      .filter((r) => (!luna || lunaDin(r.data_colectare) === luna) && (!fOrg || orgDoc(r).includes(fOrg)) && (!fCod || r.cod_hg856 === fCod)
         && (!fVerif || (fVerif === "da") === !!r.verificat)
         && (!t || [r.furnizor, r.nr_document, r.nr_auto, r.cod_hg856, r.nr_ticket, r.transportator].some((x) => String(x || "").toLowerCase().includes(t))))
       .sort((a, b) => String(b.data_colectare).localeCompare(String(a.data_colectare)) || String(b.created_at).localeCompare(String(a.created_at)));
-  }, [ach.rows, q, luna, fOrg, fCod, fVerif]);
+  }, [ach.rows, liniiDe, q, luna, fOrg, fCod, fVerif]);
 
   const totKg = rot(filtrate.reduce((s, r) => s + Number(r.greutate || 0), 0));
   const totBuc = filtrate.reduce((s, r) => s + (liniiDe[r.id] || []).reduce((x, l) => x + (l.buc || 0), 0), 0);
@@ -77,7 +84,7 @@ export default function Achizitii({ sb, G, ui, currentUser, logAction, confirmDe
     setEdit({
       id: r.id, pas: 1, tichet: "",
       f: Object.fromEntries(CAMPURI_DB.map((k) => [k, k === "greutate" ? String(r[k]) : (r[k] ?? (typeof GOL[k] === "boolean" ? false : ""))])),
-      linii: (liniiDe[r.id] || []).map((l) => ({ echipament: l.echipament, buc: String(l.buc), kg: String(l.kg) })),
+      linii: (liniiDe[r.id] || []).map((l) => ({ echipament: l.echipament, buc: String(l.buc), kg: String(l.kg), organizatie: orgLinie(l, r) })),
       tichet_id: r.tichet_id || null,
     });
   };
@@ -111,12 +118,28 @@ export default function Achizitii({ sb, G, ui, currentUser, logAction, confirmDe
   const urmatorulPas = () => {
     const e = validPas1(); if (e) { setEroare(e); return; }
     setEroare("");
-    setEdit((p) => ({ ...p, pas: 2, linii: p.linii.length ? p.linii : [{ echipament: "", buc: "", kg: String(numar(p.f.greutate)) }] }));
+    setEdit((p) => ({ ...p, pas: 2, linii: p.linii.length ? p.linii : [{ echipament: "", buc: "", kg: String(numar(p.f.greutate)), organizatie: p.f.organizatie }] }));
   };
 
   const totalLinii = edit ? rot(edit.linii.reduce((s, l) => s + (numar(l.kg) || 0), 0)) : 0;
   const greutateEdit = edit ? numar(edit.f.greutate) : 0;
   const diferenta = rot(greutateEdit - totalLinii);
+
+  // Bucatile se recalculeaza (kg / greutate medie) doar cand se schimba echipamentul sau procentul; la editarea kg se recalculeaza doar procentul.
+  const setLinie = (i, patch) => setEdit((p) => ({ ...p, linii: p.linii.map((x, j) => (j === i ? { ...x, ...patch } : x)) }));
+  const alegeEchipament = (i, den) => {
+    const kg = numar(edit.linii[i].kg);
+    const b = bucAuto(den, kg);
+    setLinie(i, { echipament: den, ...(b !== null ? { buc: String(b) } : {}) });
+  };
+  const schimbaProcent = (i, text) => {
+    const pct = numar(text);
+    if (!(pct >= 0) || !(greutateEdit > 0)) return;
+    const kg = rot(pct / 100 * greutateEdit);
+    const b = bucAuto(edit.linii[i].echipament, kg);
+    setLinie(i, { kg: String(kg), ...(b !== null ? { buc: String(b) } : {}) });
+  };
+  const alocaToate = (o) => setEdit((p) => ({ ...p, f: { ...p.f, organizatie: o }, linii: p.linii.map((x) => ({ ...x, organizatie: o })) }));
 
   const validPas2 = () => {
     if (!edit.linii.length) return "Adaugă cel puțin un echipament.";
@@ -125,8 +148,20 @@ export default function Achizitii({ sb, G, ui, currentUser, logAction, confirmDe
       if (!(numar(l.kg) > 0)) return `Greutatea pentru „${l.echipament}” trebuie să fie mai mare ca 0.`;
       if (l.buc !== "" && !(Number.isInteger(numar(l.buc)) && numar(l.buc) >= 0)) return `Bucățile pentru „${l.echipament}” trebuie să fie un număr întreg.`;
     }
+    for (const l of edit.linii) if (!l.organizatie) return `Alege organizația pentru „${l.echipament}”.`;
+    if (edit.linii.some((l) => l.organizatie === "REDPOINT")) {
+      const lipsa = [["Nr. auto", edit.f.nr_auto], ["Șofer", edit.f.sofer], ["Nr. ticket cântar", edit.f.nr_ticket]].filter(([, v]) => !String(v || "").trim()).map(([n]) => n);
+      if (lipsa.length) return `Pentru REDPOINT sunt obligatorii: ${lipsa.join(", ")} (completează-le la pasul 1).`;
+    }
     if (Math.abs(diferenta) > 0.01) return `Greutatea distribuită (${fmtKg(totalLinii)} kg) nu e egală cu cea a documentului (${fmtKg(greutateEdit)} kg).`;
     return "";
+  };
+
+  // daca nu s-a rulat inca supabase-deee-7-achizitii-pe-linie.sql, liniile se salveaza fara organizatie (ramane cea a documentului)
+  const insereazaLinii = async (randuri) => {
+    let r = await sb.from("deee_achizitii_linii").insert(randuri).select();
+    if (r.error && /organizatie/i.test(r.error.message || "")) r = await sb.from("deee_achizitii_linii").insert(randuri.map(({ organizatie, ...x }) => x)).select();
+    return r;
   };
 
   const salveaza = async () => {
@@ -143,7 +178,9 @@ export default function Achizitii({ sb, G, ui, currentUser, logAction, confirmDe
         fara_licenta: !!f.fara_licenta, transportator: f.transportator.trim(), nr_auto: f.nr_auto.trim().toUpperCase(), sofer: f.sofer.trim(),
         observatii: f.observatii.trim(), tichet_id: edit.tichet_id || null,
       };
-      const randuri = edit.linii.map((l, i) => ({ ord: i, echipament: l.echipament, buc: l.buc === "" ? 0 : numar(l.buc), kg: numar(l.kg) }));
+      const randuri = edit.linii.map((l, i) => ({ ord: i, echipament: l.echipament, buc: l.buc === "" ? 0 : numar(l.buc), kg: numar(l.kg), organizatie: l.organizatie }));
+      // organizatia documentului = a liniei cu cea mai mare greutate (liniile sunt cele care conteaza la stoc)
+      payload.organizatie = [...randuri].sort((a, b) => b.kg - a.kg)[0].organizatie;
       const existent = ach.rows.find((r) => r.id !== edit.id && r.furnizor === payload.furnizor && r.nr_document === payload.nr_document && r.cod_hg856 === payload.cod_hg856);
       if (existent) { setEroare("Există deja un document cu același furnizor, aviz și cod HG856."); return; }
 
@@ -151,19 +188,19 @@ export default function Achizitii({ sb, G, ui, currentUser, logAction, confirmDe
         const { data, error } = await sb.from("deee_achizitii").insert({ ...payload, creat_de: currentUser || "" }).select();
         if (error) { setEroare(error.code === "23505" ? "Există deja un document cu același furnizor, aviz și cod HG856." : "Eroare: " + error.message); return; }
         const nou = data[0];
-        const { error: eL } = await sb.from("deee_achizitii_linii").insert(randuri.map((l) => ({ ...l, achizitie_id: nou.id })));
+        const { error: eL } = await insereazaLinii(randuri.map((l) => ({ ...l, achizitie_id: nou.id })));
         if (eL) { await sb.from("deee_achizitii").delete().eq("id", nou.id); setEroare("Eroare la salvarea echipamentelor: " + eL.message); return; }
         logAction("add", "deee_achizitii", nou.id, { furnizor: payload.furnizor, nr_document: payload.nr_document, cod: payload.cod_hg856, kg: payload.greutate, echipamente: randuri.length });
       } else {
         const vechi = ach.rows.find((r) => r.id === edit.id);
         const schimbat = CAMPURI_DB.concat("tichet_id").filter((k) => String(vechi?.[k] ?? "") !== String(payload[k] ?? ""));
         const liniiVechi = liniiDe[edit.id] || [];
-        const rezumat = (a) => a.map((l) => `${l.echipament}:${l.buc}:${l.kg}`).join("|");
+        const rezumat = (a) => a.map((l) => `${l.echipament}:${l.buc}:${l.kg}:${l.organizatie || vechi?.organizatie}`).join("|");
         const liniiSchimbate = rezumat(liniiVechi) !== rezumat(randuri);
         // intai randurile noi, abia apoi se sterg cele vechi: o eroare la mijloc nu lasa documentul fara echipamente
         let noi = [];
         if (liniiSchimbate) {
-          const { data: ins, error: eL } = await sb.from("deee_achizitii_linii").insert(randuri.map((l) => ({ ...l, achizitie_id: edit.id }))).select();
+          const { data: ins, error: eL } = await insereazaLinii(randuri.map((l) => ({ ...l, achizitie_id: edit.id })));
           if (eL) { setEroare("Eroare la salvarea echipamentelor: " + eL.message); return; }
           noi = ins;
         }
@@ -206,10 +243,13 @@ export default function Achizitii({ sb, G, ui, currentUser, logAction, confirmDe
   const aloca = async () => {
     const ids = [...sel].filter((id) => ach.rows.some((r) => r.id === id));
     if (!ids.length || !orgMasa) return;
-    const inainte = Object.fromEntries(ids.map((id) => [id, ach.rows.find((r) => r.id === id)?.organizatie]));
+    const inainte = Object.fromEntries(ids.map((id) => [id, orgDoc(ach.rows.find((r) => r.id === id) || {}).join(", ")]));
     const { error } = await sb.from("deee_achizitii").update({ organizatie: orgMasa }).in("id", ids);
     if (error) { alert("Eroare: " + error.message); return; }
+    const { error: eL } = await sb.from("deee_achizitii_linii").update({ organizatie: orgMasa }).in("achizitie_id", ids);
+    if (eL && !/organizatie/i.test(eL.message || "")) { alert("Eroare la linii: " + eL.message); await Promise.all([ach.reload(), lin.reload()]); return; }
     ach.setRows((p) => p.map((x) => (ids.includes(x.id) ? { ...x, organizatie: orgMasa } : x)));
+    lin.setRows((p) => p.map((x) => (ids.includes(x.achizitie_id) ? { ...x, organizatie: orgMasa } : x)));
     logAction("update", "deee_achizitii", "", { organizatie: orgMasa, documente: ids.length, ids, _inainte: { organizatie: inainte } });
     setSel(new Set()); setOrgMasa("");
   };
@@ -221,18 +261,18 @@ export default function Achizitii({ sb, G, ui, currentUser, logAction, confirmDe
     if (!w) { alert("Browserul a blocat fereastra de tipărire. Permite pop-up-urile pentru această pagină și încearcă din nou."); return; }
     const f = furn.rows.find((x) => norm(x.den) === norm(r.furnizor));
     w.document.open();
-    w.document.write(htmlNir({ doc: r, linii: liniiDe[r.id] || [], furnizorCui: r.furnizor_cui || f?.cui || "", nr: nrNir(r), data: r.data_colectare, gestionar: undefined }));
+    w.document.write(htmlNir({ doc: r, linii: (liniiDe[r.id] || []).map((l) => { const o = orgLinie(l, r); const c = co.codPentru(l.echipament, o); return { ...l, organizatie: o, denOrg: c ? etichetaCod(o, c) : "", categorieOrg: c?.categorie || "" }; }), furnizorCui: r.furnizor_cui || f?.cui || "", nr: nrNir(r), data: r.data_colectare, gestionar: undefined }));
     w.document.close();
     logAction("Tipărire", "NIR", nrNir(r), { furnizor: r.furnizor, nr_document: r.nr_document, kg: r.greutate });
   };
 
   const exporta = () => {
     const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const cap = ["Data", "Luna", "Furnizor", "Aviz", "Nr. auto", "Cod HG856", "Echipament", "Buc", "Kg", "Organizatie", "Greutate document (kg)", "Nr. ticket", "Transportator", "Sofer", "Verificat"];
+    const cap = ["Data", "Luna", "Furnizor", "Aviz", "Nr. auto", "Cod HG856", "Echipament", "Buc", "Kg", "Organizatie", "Cod organizatie", "Greutate document (kg)", "Nr. ticket", "Transportator", "Sofer", "Verificat"];
     const linii = [cap.map(esc).join(";")];
     filtrate.forEach((r) => {
       const ls = liniiDe[r.id] || [{ echipament: "", buc: "", kg: r.greutate }];
-      ls.forEach((l) => linii.push([dataRo(r.data_colectare), numeLuna(lunaDin(r.data_colectare)), r.furnizor, r.nr_document, r.nr_auto, r.cod_hg856, l.echipament, l.buc, String(l.kg).replace(".", ","), r.organizatie, String(r.greutate).replace(".", ","), r.nr_ticket, r.transportator, r.sofer, r.verificat ? "da" : "nu"].map(esc).join(";")));
+      ls.forEach((l) => linii.push([dataRo(r.data_colectare), numeLuna(lunaDin(r.data_colectare)), r.furnizor, r.nr_document, r.nr_auto, r.cod_hg856, l.echipament, l.buc, String(l.kg).replace(".", ","), orgLinie(l, r), etichetaCod(orgLinie(l, r), co.codPentru(l.echipament, orgLinie(l, r))), String(r.greutate).replace(".", ","), r.nr_ticket, r.transportator, r.sofer, r.verificat ? "da" : "nu"].map(esc).join(";")));
     });
     const blob = new Blob(["﻿" + linii.join("\r\n")], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
@@ -313,7 +353,7 @@ export default function Achizitii({ sb, G, ui, currentUser, logAction, confirmDe
               <th style={ui.th({ width: 80 })}>Cod</th>
               <th style={ui.th({ textAlign: "left", width: 220 })}>Echipamente</th>
               <th style={ui.th({ width: 100 })}>Kg</th>
-              <th style={ui.th({ width: 100 })}>Org.</th>
+              <th style={ui.th({ width: 110 })}>Org.</th>
               <th style={ui.th({ width: 50 })} title="Verificat">Verif.</th>
               <th style={ui.th({ width: 80 })} title="Nota de Intrare-Recepție">NIR</th>
               <th style={ui.th({ width: 70 })}></th>
@@ -324,7 +364,8 @@ export default function Achizitii({ sb, G, ui, currentUser, logAction, confirmDe
             {ach.incarcat && filtrate.length === 0 && <tr><td colSpan={colspan} style={ui.td({ textAlign: "center", padding: 18, color: "#94a3b8" })}>{ach.rows.length ? "Niciun document pentru filtrele alese." : "Niciun document încă. Apasă „+ Document nou”."}</td></tr>}
             {filtrate.map((r) => {
               const ls = liniiDe[r.id] || [];
-              const rezumat = ls.map((l) => `${l.echipament}${l.buc ? ` (${l.buc} buc)` : ""}`).join(", ");
+              const orgs = orgDoc(r);
+              const rezumat = ls.map((l) => `${l.echipament}${l.buc ? ` (${l.buc} buc)` : ""}${orgs.length > 1 ? ` → ${orgLinie(l, r)}` : ""}`).join(", ");
               return (
                 <tr key={r.id} style={{ background: sel.has(r.id) ? "#ecfdf5" : undefined }}>
                   <td style={ui.td({ textAlign: "center" })}><input type="checkbox" checked={sel.has(r.id)} onChange={() => setSel((p) => { const n = new Set(p); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; })} /></td>
@@ -335,7 +376,7 @@ export default function Achizitii({ sb, G, ui, currentUser, logAction, confirmDe
                   <td style={ui.td({ textAlign: "center", fontSize: 11 })}>{r.cod_hg856}</td>
                   <td style={ui.td({ fontSize: 11 })} title={rezumat}><div style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rezumat || "—"}</div></td>
                   <td style={ui.td({ textAlign: "right", fontWeight: 700 })}>{fmtKg(r.greutate)}</td>
-                  <td style={ui.td({ textAlign: "center", fontSize: 11, color: r.organizatie === "NEALOCATE" ? "#92400e" : "#1e293b", background: r.organizatie === "NEALOCATE" ? "#fffbeb" : undefined })}>{r.organizatie}</td>
+                  <td style={ui.td({ textAlign: "center", fontSize: 11, color: orgs.includes("NEALOCATE") ? "#92400e" : "#1e293b", background: orgs.includes("NEALOCATE") ? "#fffbeb" : undefined })} title={orgs.join(", ")}>{orgs.join(", ")}</td>
                   <td style={ui.td({ textAlign: "center" })}><input type="checkbox" checked={!!r.verificat} onChange={() => comutaVerificat(r)} title="Marchează ca verificat" /></td>
                   <td style={ui.td({ textAlign: "center", padding: 2 })}>
                     <button onClick={() => tiparesteNir(r)} title={`Tipărește ${nrNir(r)} (Nota de Intrare-Recepție)`} style={{ background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 4, cursor: "pointer", color: "#1565c0", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>🖨️ NIR</button>
@@ -391,7 +432,7 @@ export default function Achizitii({ sb, G, ui, currentUser, logAction, confirmDe
                   <div style={{ flex: "1 1 150px" }}>{lab("Nr. anexă (dacă diferă)")}<input style={inputSt} value={edit.f.nr_anexa} onChange={(e) => setF({ nr_anexa: e.target.value })} /></div>
                   <div style={{ flex: "1 1 150px" }}>{lab("Dată anexă")}<input type="date" style={inputSt} value={edit.f.data_anexa} onChange={(e) => setF({ data_anexa: e.target.value })} /></div>
 
-                  <div style={{ flex: "1 1 170px" }}>{lab("Organizație alocată", true)}
+                  <div style={{ flex: "1 1 170px" }}>{lab("Organizație (implicită pe linii)", true)}
                     <select style={inputSt} value={edit.f.organizatie} onChange={(e) => setF({ organizatie: e.target.value })}>
                       {organizatiiNume.map((o) => <option key={o} value={o}>{o}</option>)}
                       {edit.f.organizatie && !organizatiiNume.includes(edit.f.organizatie) && <option value={edit.f.organizatie}>{edit.f.organizatie}</option>}
@@ -433,32 +474,61 @@ export default function Achizitii({ sb, G, ui, currentUser, logAction, confirmDe
                   <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10, padding: "8px 12px", fontSize: 12, color: "#334155", marginBottom: 12 }}>
                     <b>{edit.f.furnizor}</b> • aviz {edit.f.nr_document} • cod {edit.f.cod_hg856} • <b>{fmtKg(greutateEdit)} kg</b>
                   </div>
-                  <table style={{ borderCollapse: "collapse", width: "100%" }}>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 11, color: "#64748b" }}>Alocă toate liniile la:</span>
+                    <select style={{ ...inputSt, width: 160 }} value="" onChange={(e) => e.target.value && alocaToate(e.target.value)}>
+                      <option value="">Alege organizația…</option>{organizatiiNume.map((o) => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ overflowX: "auto" }}>
+                  <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 760 }}>
                     <thead><tr>
                       <th style={ui.th({ textAlign: "left" })}>Echipament</th>
-                      <th style={ui.th({ width: 100 })}>Bucăți</th>
-                      <th style={ui.th({ width: 140 })}>Kg</th>
+                      <th style={ui.th({ width: 130 })}>Organizație</th>
+                      <th style={ui.th({ textAlign: "left", width: 190 })}>Cod organizație</th>
+                      <th style={ui.th({ width: 70 })} title="Se calculează din greutatea medie când alegi echipamentul sau procentul">Bucăți</th>
+                      <th style={ui.th({ width: 100 })}>Kg</th>
+                      <th style={ui.th({ width: 80 })}>% din total</th>
                       <th style={ui.th({ width: 36 })}></th>
                     </tr></thead>
                     <tbody>
-                      {edit.linii.map((l, i) => (
-                        <tr key={i}>
-                          <td style={ui.td({ padding: 3 })}>
-                            <select style={inputSt} value={l.echipament} onChange={(e) => setEdit((p) => ({ ...p, linii: p.linii.map((x, j) => (j === i ? { ...x, echipament: e.target.value } : x)) }))}>
-                              <option value="">Alege echipamentul…</option>
-                              {echipamenteActive.map((e) => <option key={e.id} value={e.den}>{e.den}</option>)}
-                              {l.echipament && !echipamenteActive.some((e) => e.den === l.echipament) && <option value={l.echipament}>{l.echipament}</option>}
-                            </select>
-                          </td>
-                          <td style={ui.td({ padding: 3 })}><input style={{ ...inputSt, textAlign: "right" }} inputMode="numeric" value={l.buc} placeholder="0" onChange={(e) => setEdit((p) => ({ ...p, linii: p.linii.map((x, j) => (j === i ? { ...x, buc: e.target.value } : x)) }))} /></td>
-                          <td style={ui.td({ padding: 3 })}><input style={{ ...inputSt, textAlign: "right", fontWeight: 700 }} inputMode="decimal" value={l.kg} onChange={(e) => setEdit((p) => ({ ...p, linii: p.linii.map((x, j) => (j === i ? { ...x, kg: e.target.value } : x)) }))} /></td>
-                          <td style={ui.td({ textAlign: "center", padding: 2 })}><button onClick={() => setEdit((p) => ({ ...p, linii: p.linii.filter((_, j) => j !== i) }))} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }} title="Scoate rândul">✕</button></td>
-                        </tr>
-                      ))}
+                      {edit.linii.map((l, i) => {
+                        const cod = co.codPentru(l.echipament, l.organizatie);
+                        const kgL = numar(l.kg) || 0;
+                        const pct = greutateEdit > 0 ? rot4(kgL / greutateEdit * 100) : "";
+                        return (
+                          <tr key={i}>
+                            <td style={ui.td({ padding: 3 })}>
+                              <select style={inputSt} value={l.echipament} onChange={(e) => alegeEchipament(i, e.target.value)}>
+                                <option value="">Alege echipamentul…</option>
+                                {echipamenteActive.map((e) => <option key={e.id} value={e.den}>{e.den}</option>)}
+                                {l.echipament && !echipamenteActive.some((e) => e.den === l.echipament) && <option value={l.echipament}>{l.echipament}</option>}
+                              </select>
+                            </td>
+                            <td style={ui.td({ padding: 3 })}>
+                              <select style={inputSt} value={l.organizatie || ""} onChange={(e) => setLinie(i, { organizatie: e.target.value })}>
+                                {organizatiiNume.map((o) => <option key={o} value={o}>{o}</option>)}
+                                {l.organizatie && !organizatiiNume.includes(l.organizatie) && <option value={l.organizatie}>{l.organizatie}</option>}
+                              </select>
+                            </td>
+                            <td style={ui.td({ fontSize: 11, color: cod ? "#334155" : "#cbd5e1" })} title={cod ? etichetaCod(l.organizatie, cod) : ""}>
+                              <div style={{ maxWidth: 190, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cod ? etichetaCod(l.organizatie, cod) : l.organizatie === "NEALOCATE" || !l.echipament ? "—" : "fără cod"}</div>
+                            </td>
+                            <td style={ui.td({ padding: 3 })}><input style={{ ...inputSt, textAlign: "right" }} inputMode="numeric" value={l.buc} placeholder="0" onChange={(e) => setLinie(i, { buc: e.target.value })} /></td>
+                            <td style={ui.td({ padding: 3 })}><input style={{ ...inputSt, textAlign: "right", fontWeight: 700 }} inputMode="decimal" value={l.kg} onChange={(e) => setLinie(i, { kg: e.target.value })} /></td>
+                            <td style={ui.td({ padding: 3 })}>
+                              <input key={`${i}-${l.kg}`} style={{ ...inputSt, textAlign: "right" }} inputMode="decimal" defaultValue={pct}
+                                onBlur={(e) => { if (e.target.value !== String(pct)) schimbaProcent(i, e.target.value); }} onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} />
+                            </td>
+                            <td style={ui.td({ textAlign: "center", padding: 2 })}><button onClick={() => setEdit((p) => ({ ...p, linii: p.linii.filter((_, j) => j !== i) }))} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }} title="Scoate rândul">✕</button></td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
+                  </div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, flexWrap: "wrap", gap: 8 }}>
-                    <button onClick={() => setEdit((p) => ({ ...p, linii: [...p.linii, { echipament: "", buc: "", kg: diferenta > 0 ? String(diferenta) : "" }] }))} style={{ background: "#fff", color: G, border: `1px solid ${G}`, borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Adaugă echipament</button>
+                    <button onClick={() => setEdit((p) => ({ ...p, linii: [...p.linii, { echipament: "", buc: "", kg: diferenta > 0 ? String(diferenta) : "", organizatie: p.f.organizatie }] }))} style={{ background: "#fff", color: G, border: `1px solid ${G}`, borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Adaugă echipament</button>
                     <div style={{ fontSize: 13, fontWeight: 700, color: Math.abs(diferenta) <= 0.01 ? G : "#c62828" }}>
                       Distribuit: {fmtKg(totalLinii)} / {fmtKg(greutateEdit)} kg {Math.abs(diferenta) <= 0.01 ? "✓" : `(${diferenta > 0 ? "mai rămân" : "în plus"} ${fmtKg(Math.abs(diferenta))} kg)`}
                     </div>

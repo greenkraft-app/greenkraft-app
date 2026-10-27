@@ -17,7 +17,7 @@ export function calculeazaStoc({ ach, achL, dz, dzE, dzF, ini, vanzari = [] }) {
     if (!r) { r = { den: String(den || "").trim(), cod: String(cod || "").trim(), org: String(org || "").trim(), total: 0, scos: 0, buc: 0, bucScos: 0 }; M.set(k, r); }
     return r;
   };
-  achL.forEach((l) => { const a = achId[l.achizitie_id]; if (!a) return; const r = ia(E, l.echipament, a.cod_hg856, a.organizatie); r.total += Number(l.kg) || 0; r.buc += l.buc || 0; });
+  achL.forEach((l) => { const a = achId[l.achizitie_id]; if (!a) return; const r = ia(E, l.echipament, a.cod_hg856, l.organizatie || a.organizatie); r.total += Number(l.kg) || 0; r.buc += l.buc || 0; });
   ini.forEach((i) => { const r = ia(i.tip === "echipament" ? E : F, i.den, i.cod, i.organizatie); r.total += Number(i.kg) || 0; r.buc += i.buc || 0; });
   dzE.forEach((l) => { const d = dzId[l.dezm_id]; if (!d) return; const r = ia(E, l.echipament, l.cod_ewc, d.organizatie); r.scos += Number(l.kg) || 0; r.bucScos += l.buc || 0; });
   dzF.forEach((l) => { const d = dzId[l.dezm_id]; if (!d) return; const r = ia(F, l.fractie, l.cod, d.organizatie); r.total += Number(l.kg) || 0; });

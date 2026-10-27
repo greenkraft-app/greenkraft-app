@@ -9,8 +9,8 @@ export function htmlNir({ doc, linii, furnizorCui, nr, data, gestionar }) {
   const totKg = linii.reduce((s, l) => s + Number(l.kg || 0), 0);
   const totBuc = linii.reduce((s, l) => s + (l.buc || 0), 0);
   const randuri = linii.map((l, i) => `<tr>
-    <td class="c">${i + 1}</td><td>${e(l.echipament)}</td><td class="c">${e(doc.cod_hg856)}</td><td class="c">${e(doc.organizatie)}</td>
-    <td></td><td></td><td class="c">kg</td><td class="r">${kg(l.kg)}</td><td class="r">${l.buc || 0}</td><td></td><td></td></tr>`).join("");
+    <td class="c">${i + 1}</td><td>${e(l.echipament)}</td><td class="c">${e(doc.cod_hg856)}</td><td class="c">${e(l.organizatie || doc.organizatie)}</td>
+    <td>${e(l.denOrg || "")}</td><td>${e(l.categorieOrg || "")}</td><td class="c">kg</td><td class="r">${kg(l.kg)}</td><td class="r">${l.buc || 0}</td><td></td><td></td></tr>`).join("");
   return `<html><head><meta charset="utf-8"><title>${e(nr)}</title>
 <style>
   @page { size: A4 landscape; margin: 14mm 16mm; }
