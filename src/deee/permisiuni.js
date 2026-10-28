@@ -7,7 +7,7 @@
 export const ADMIN = "Alexandru";
 
 export const SECTIUNI = [
-  { k: "achizitii", l: "Achiziții" }, { k: "documente", l: "Documente / Poze" }, { k: "dezmembrare", l: "Dezmembrare" }, { k: "dezmfr", l: "Dezm. fracții" },
+  { k: "achizitii", l: "Achiziții" }, { k: "tratare", l: "Tratare zilnică" }, { k: "documente", l: "Documente / Poze" }, { k: "dezmembrare", l: "Dezmembrare" }, { k: "dezmfr", l: "Dezm. fracții" },
   { k: "stocuri", l: "Stocuri" }, { k: "vanzari", l: "Vânzări fracții" }, { k: "rate", l: "Rate R&R" }, { k: "rapoarte", l: "Rapoarte" }, { k: "registre", l: "Registre" },
   { k: "furnizori", l: "Furnizori" }, { k: "transportatori", l: "Transportatori" }, { k: "retete", l: "Rețete" }, { k: "companie", l: "Compania mea" }, { k: "nomenclatoare", l: "Nomenclatoare" },
 ];
@@ -19,8 +19,8 @@ const cu = (baza, patch) => ({ ...toate(baza), ...patch });
 export const ROLURI = {
   Administrator: toate("complet"),
   Manager: toate("complet"),
-  Angajat: cu("citire", { achizitii: "complet", documente: "complet", furnizori: "complet", transportatori: "complet", registre: "complet", companie: "fara", nomenclatoare: "fara", retete: "fara" }),
-  "Responsabil tratare": cu("citire", { dezmembrare: "complet", dezmfr: "complet", retete: "complet", stocuri: "complet", registre: "complet", documente: "complet", rate: "complet", companie: "fara" }),
+  Angajat: cu("citire", { achizitii: "complet", tratare: "complet", documente: "complet", furnizori: "complet", transportatori: "complet", registre: "complet", companie: "fara", nomenclatoare: "fara", retete: "fara" }),
+  "Responsabil tratare": cu("citire", { tratare: "complet", dezmembrare: "complet", dezmfr: "complet", retete: "complet", stocuri: "complet", registre: "complet", documente: "complet", rate: "complet", companie: "fara" }),
   "Doar vizualizare": toate("citire"),
 };
 

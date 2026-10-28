@@ -12,6 +12,7 @@ export default function DocumentePoze({ sb, G, ui, logAction }) {
   const ach = useTabela(sb, "deee_achizitii");
   const achL = useTabela(sb, "deee_achizitii_linii");
   const van = useTabela(sb, "deee_vanzari");
+  const pvTr = useTabela(sb, "deee_tr_pv"); // PV-urile de tratare zilnica (tabelul apare dupa etapa 17)
   const [an, setAn] = useState("");
   const [luna, setLuna] = useState("");
   const [partener, setPartener] = useState("");
@@ -27,15 +28,17 @@ export default function DocumentePoze({ sb, G, ui, logAction }) {
   const randuri = useMemo(() => {
     const A = Object.fromEntries(ach.rows.map((a) => [a.id, a]));
     const V = Object.fromEntries(van.rows.map((v) => [v.id, v]));
+    const T = Object.fromEntries(pvTr.rows.map((t) => [t.id, t]));
     const orgsA = {}; achL.rows.forEach((l) => { (orgsA[l.achizitie_id] = orgsA[l.achizitie_id] || new Set()).add(l.organizatie || A[l.achizitie_id]?.organizatie); });
     return fis.rows.map((f) => {
-      const a = f.achizitie_id ? A[f.achizitie_id] : null, v = f.vanzare_id ? V[f.vanzare_id] : null;
+      const a = f.achizitie_id ? A[f.achizitie_id] : null, v = f.vanzare_id ? V[f.vanzare_id] : null, t = f.tratare_id ? T[f.tratare_id] : null;
+      if (t) return { f, sursa: "Tratare", data: t.data || "", partener: t.tratat_de || "", aviz: t.nr_pv || "", orgs: [] };
       return {
         f, sursa: a ? "Achiziție" : "Vânzare", data: (a ? a.data_colectare : v?.data) || "", partener: (a ? a.furnizor : v?.client) || "", aviz: (a ? a.nr_document : v?.nr_aviz) || "",
         orgs: a ? [...(orgsA[a.id] || [a.organizatie])].filter(Boolean) : v ? [v.organizatie] : [],
       };
     }).sort((x, y) => String(y.data).localeCompare(String(x.data)) || String(y.f.created_at).localeCompare(String(x.f.created_at)));
-  }, [fis.rows, ach.rows, achL.rows, van.rows]);
+  }, [fis.rows, ach.rows, achL.rows, van.rows, pvTr.rows]);
 
   const ani = useMemo(() => [...new Set(randuri.map((r) => String(r.data).slice(0, 4)).filter(Boolean))].sort().reverse(), [randuri]);
   const luni = useMemo(() => [...new Set(randuri.filter((r) => !an || String(r.data).startsWith(an)).map((r) => lunaDin(r.data)).filter(Boolean))].sort().reverse(), [randuri, an]);

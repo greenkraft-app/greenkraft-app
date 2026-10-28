@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useTabela } from "./hooks";
 
-// Fisiere atasate (poze si documente) la achizitii si vanzari, in Supabase Storage (bucket privat) — ca "Fisiere" din WiseWeee.
+// Fisiere atasate (poze si documente) la achizitii, vanzari si PV-urile de tratare zilnica, in Supabase Storage (bucket privat) — ca "Fisiere" din WiseWeee.
 export const BUCKET = "deee-fisiere";
 export const MAX_BYTES = 15 * 1024 * 1024;
 export const ACCEPT = "image/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt,.csv";
@@ -11,7 +11,7 @@ export function useFisiere(sb) {
   const t = useTabela(sb, "deee_fisiere");
   const pe = useMemo(() => {
     const m = new Map();
-    t.rows.forEach((f) => { const k = f.achizitie_id ? `achizitie:${f.achizitie_id}` : `vanzare:${f.vanzare_id}`; (m.get(k) || m.set(k, []).get(k)).push(f); });
+    t.rows.forEach((f) => { const k = f.achizitie_id ? `achizitie:${f.achizitie_id}` : f.vanzare_id ? `vanzare:${f.vanzare_id}` : `tratare:${f.tratare_id}`; (m.get(k) || m.set(k, []).get(k)).push(f); });
     return (tip, id) => (m.get(`${tip}:${id}`) || []).slice().sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
   }, [t.rows]);
   return { ...t, pe };
@@ -43,7 +43,7 @@ export async function incarcaFisier(sb, file, sursa, user) {
   const up = await sb.storage.from(BUCKET).upload(cale, f, { contentType: f.type || "application/octet-stream", upsert: false });
   if (up.error) return { eroare: `„${file.name}”: ${/mime|not supported/i.test(up.error.message || "") ? "tip de fișier neacceptat" : up.error.message}` };
   const row = {
-    [sursa.tip === "achizitie" ? "achizitie_id" : "vanzare_id"]: sursa.id, nume: f.name, cale,
+    [sursa.tip === "achizitie" ? "achizitie_id" : sursa.tip === "tratare" ? "tratare_id" : "vanzare_id"]: sursa.id, nume: f.name, cale,
     mime: f.type || "", marime: f.size, categorie: /^image\//.test(f.type) ? "poza" : "document", creat_de: user || "",
   };
   const { data, error } = await sb.from("deee_fisiere").insert(row).select();
