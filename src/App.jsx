@@ -2791,7 +2791,7 @@ export default function App() {
   const RAP_HEADERS_TICHETE = ["Serie", "Nr. Tichet", "Data", "Tip", "Status", "Ora Intrare", "Ora Ieșire", "Partener", "CUI Partener", "Transportator", "CUI Transportator", "Nr. Mașină", "Șofer", "Material", "Brut (kg)", "Tara (kg)", "Net (kg)", "Factură", "Aviz", "Operator", "Observații"];
   const RAP_HEADERS_STOC = ["Deșeu", "Cod HG", "Cod SAGA", "Cant. Intrată (kg)", "Cant. Ieșită (kg)", "Stoc Rămas (kg)", "Preț Mediu (lei/kg)", "Valoare Stoc (lei)"];
 
-  const buildPFRows = () => registru.filter(r => inRange(r.data)).map(r => {
+  const pfRow = (r) => {
     const cant = parseSuma(r.cantitate) || 0;
     const pu = parseSuma(r.pu) || 0;
     const v = cant * pu;
@@ -2800,7 +2800,8 @@ export default function App() {
     const codSaga = fd?.cod_art || "";
     const denSaga = fd?.den || r.denumire || "";
     return [r.serie || "", r.nr || "", r.data || "", r.furnizor || "", r.adresa || "", r.cnp || "", denSaga, codSaga, cant, pu, "", "", "", r.denumire || "", imp, tax, parseSuma(r.valoare) || 0];
-  });
+  };
+  const buildPFRows = () => registru.filter(r => inRange(r.data)).map(pfRow);
 
   const buildPJRows = () => pvList.filter(p => inRange(p.data)).flatMap(p => {
     const mats = (p.materiale || []).filter(m => m.den);
@@ -2812,7 +2813,28 @@ export default function App() {
     });
   });
 
-  const buildColRows = () => colRows.filter(r => r.nr_doc && inRange(r.data)).map(r => {
+  // Un borderou (Registru PF) poate fi deja trecut manual in Achizitii: la nr. document apare "GK 18054" / "GK18054" / "18054", cu acelasi furnizor
+  // (sau aceeasi data / cantitate). Acelea nu se mai aduc a doua oara in raport.
+  const alnumDoc = (x) => String(x || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const faraDiacr = (x) => String(x || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const borderouInAchizitii = (b, achizitii) => {
+    const nr = alnumDoc(b.nr), serie = alnumDoc(b.serie);
+    if (!nr) return false;
+    return achizitii.some((c) => {
+      const d = alnumDoc(c.nr_doc);
+      if (!(d === nr || d === serie + nr || (serie && d.startsWith(serie) && d.endsWith(nr)))) return false;
+      return faraDiacr(c.furn) === faraDiacr(b.furnizor) || c.data === b.data || Math.abs((parseSuma(c.cant) || 0) - (parseSuma(b.cantitate) || 0)) < 0.01;
+    });
+  };
+  // Raportul Achizitii = achizitiile cu nr. document + borderourile din Registru PF care nu sunt deja printre ele, in ordinea datei
+  const buildColRows = () => {
+    const achizitii = colRows.filter(r => r.nr_doc && inRange(r.data));
+    const borderouri = registru.filter(r => inRange(r.data) && !borderouInAchizitii(r, achizitii)).map(pfRow);
+    const dinAchizitii = achizitii.map(achizitieRow);
+    const ts = (row) => { const d = parseDateRO(row[2]); return d ? d.getTime() : Infinity; };
+    return [...dinAchizitii, ...borderouri].map((row, i) => ({ row, i })).sort((a, b) => ts(a.row) - ts(b.row) || a.i - b.i).map(x => x.row);
+  };
+  const achizitieRow = (r) => {
     const cant = parseSuma(r.cant) || 0;
     const pu = parseSuma(r.pret) || 0;
     const v = cant * pu;
@@ -2822,7 +2844,7 @@ export default function App() {
     const codSaga = fd?.cod_art || "";
     const denSaga = fd?.den || r.produs || "";
     return [r.serie || "", r.nr_doc || "", r.data || "", r.furn || "", "", "", denSaga, codSaga, cant, pu, "", "", "", r.produs || "", imp, tax, v];
-  });
+  };
 
   const buildLivRows = () => livRows.filter(r => r.nr && inRange(r.data)).map(r => {
     const cant = parseSuma(r.cant) || 0;
@@ -7456,8 +7478,8 @@ Reguli:
               <div style={{ background: "#fff", border: "2px solid #059669", borderRadius: 10, padding: 16, textAlign: "center" }}>
                 <div style={{ fontSize: 32, marginBottom: 8 }}>🚛</div>
                 <div style={{ fontWeight: 700, color: "#059669", fontSize: 14, marginBottom: 4 }}>Achiziții</div>
-                <div style={{ fontSize: 11, color: "#666", marginBottom: 12 }}>Doar cele cu Nr. document<br/>{colRows.filter(r => r.nr_doc).length} din {colRows.length} eligibile</div>
-                <button onClick={() => exportExcel("col")} disabled={rapLoading || colRows.filter(r => r.nr_doc).length === 0} style={{ width: "100%", padding: "10px", background: rapLoading ? "#ccc" : "#059669", color: "#fff", border: "none", borderRadius: 6, cursor: rapLoading ? "wait" : "pointer", fontSize: 13, fontWeight: 700 }}>
+                <div style={{ fontSize: 11, color: "#666", marginBottom: 12 }}>Cele cu Nr. document + borderourile din Registru PF (fără dubluri)<br/>{colRows.filter(r => r.nr_doc).length} din {colRows.length} achiziții eligibile + {registru.filter(r => !borderouInAchizitii(r, colRows.filter(c => c.nr_doc))).length} borderouri</div>
+                <button onClick={() => exportExcel("col")} disabled={rapLoading || (colRows.filter(r => r.nr_doc).length === 0 && registru.length === 0)} style={{ width: "100%", padding: "10px", background: rapLoading ? "#ccc" : "#059669", color: "#fff", border: "none", borderRadius: 6, cursor: rapLoading ? "wait" : "pointer", fontSize: 13, fontWeight: 700 }}>
                   {rapLoading ? "⏳ Generez..." : "📥 Descarcă Excel Achiziții"}
                 </button>
               </div>
