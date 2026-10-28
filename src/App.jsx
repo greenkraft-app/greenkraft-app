@@ -2182,7 +2182,7 @@ export default function App() {
   const creeazaVanzareDinTichet = async (t) => {
     const row = {
       data: t.data, client: t.partener || "", nr: t.aviz || "",
-      produs: t.material || "", cant: t.net || 0, pret: 0, fact: "", inc: "", det: "",
+      produs: t.material || "", cant: t.net || 0, pret: 0, fact: "NU", inc: "NU", det: "RECEPTIE", // valori implicite la o vanzare noua, ca la "+ Adaugă vânzare"
     };
     const { data, error } = await sb.from("livrari").insert(row).select();
     if (error) { alert("Tichetul a fost închis, dar înregistrarea automată în Vânzări a eșuat: " + error.message); return; }
