@@ -2332,8 +2332,7 @@ export default function App() {
         <div style="display:flex;justify-content:flex-end;margin-top:1mm;font-size:9pt;">
           <div style="text-align:center;position:relative;width:62mm;height:34mm;">
             <div style="position:absolute;top:0;left:0;right:0;">Semnătura Operator,<br/><b>${t.operator || ""}</b></div>
-            <img src="${window.location.origin}/stampila.png" onerror="this.style.display='none'" style="position:absolute;top:7mm;left:8mm;transform:rotate(-5deg);width:22mm;" />
-            <img src="${window.location.origin}/semnatura-${(t.operator || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")}.png" onerror="this.style.display='none'" style="position:absolute;bottom:3mm;right:2mm;height:14mm;max-width:30mm;object-fit:contain;" />
+            <img src="${window.location.origin}/stampila.png" onerror="this.style.display='none'" style="position:absolute;top:6mm;left:16mm;transform:rotate(-3deg);width:30mm;" />
             <div style="position:absolute;bottom:0;left:0;right:0;">__________________</div>
           </div>
         </div>
