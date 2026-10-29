@@ -2925,6 +2925,33 @@ export default function App() {
     setRapLoading(false);
   };
 
+  // Export Excel strict pe ce e afisat dupa filtre (Achizitii / Vanzari): aceleasi coloane ca tabelul din aplicatie, plus un rand de total
+  const exportFiltrat = async (tip, randuri) => {
+    if (!randuri.length) { alert("Nu există înregistrări pentru filtrele alese."); return; }
+    setRapLoading(true);
+    try {
+      const XLSX = await loadXLSX();
+      let antet, linii, total, nume, foaie;
+      if (tip === "col") {
+        antet = ["Data", "Furnizor", "Nr. doc.", "Categorie", "Produs", "Cant.(kg)", "Preț", "Total (lei)", "Fără Imp.12%", "Achitat", "Achitat De", "Din casă", "Detalii"];
+        linii = randuri.map((r) => { const cant = parseSuma(r.cant) || 0, pret = parseSuma(r.pret) || 0, tot = cant * pret; return [r.data || "", r.furn || "", r.nr_doc || "", r.cat || "", r.produs || "", cant, pret, +tot.toFixed(2), tot ? +(tot * 0.88).toFixed(2) : 0, r.ach || "", r.ach_de || "", r.din_casa ? "Da" : "", r.det || ""]; });
+        total = ["TOTAL", "", "", "", "", linii.reduce((x, l) => x + l[5], 0), "", +linii.reduce((x, l) => x + l[7], 0).toFixed(2), +linii.reduce((x, l) => x + l[8], 0).toFixed(2), "", "", "", ""];
+        nume = "Achizitii"; foaie = "Achiziții";
+      } else {
+        antet = ["Data", "Nr. doc.", "Client", "Produs", "Cant.(kg)", "Preț", "Total (lei)", "Facturat", "Încasat", "Detalii"];
+        linii = randuri.map((r) => { const cant = parseSuma(r.cant) || 0, pret = parseSuma(r.pret) || 0; return [r.data || "", r.nr || "", r.client || "", r.produs || "", cant, pret, +(cant * pret).toFixed(2), r.fact || "", r.inc || "", r.det || ""]; });
+        total = ["TOTAL", "", "", "", linii.reduce((x, l) => x + l[4], 0), "", +linii.reduce((x, l) => x + l[6], 0).toFixed(2), "", "", ""];
+        nume = "Vanzari"; foaie = "Vânzări";
+      }
+      const ws = XLSX.utils.aoa_to_sheet([antet, ...linii, total]);
+      ws["!cols"] = antet.map((h) => ({ wch: Math.max(12, h.length + 2) }));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, foaie);
+      XLSX.writeFile(wb, `${nume}_filtrat_${today().replace(/\./g, "-")}.xlsx`);
+    } catch (e) { alert("Eroare export: " + e.message); }
+    setRapLoading(false);
+  };
+
   // ── Import/Export Schemas ────────────────────────────────
   const IMPORT_SCHEMAS = {
     registru_pf: {
@@ -6057,6 +6084,7 @@ Reguli:
                 <option value="Parțial">🟡 Parțial</option>
                 <option value="Nu">⏳ Neachitat</option>
               </select>
+              <button onClick={() => exportFiltrat("col", colFiltered)} disabled={rapLoading} title="Descarcă în Excel exact ce e afișat după filtre" style={{ background: "#fff", color: "#059669", border: "1px solid #059669", borderRadius: 5, padding: "5px 10px", cursor: rapLoading ? "wait" : "pointer", fontSize: 11, fontWeight: 700 }}>📥 Export Excel ({colFiltered.length})</button>
               {(colSearch || colMonth || colCat || colAchitat || colFurn || colProdus.length || colDataDe || colDataPana) && <button onClick={() => { setColSearch(""); setColMonth(""); setColCat(""); setColAchitat(""); setColFurn(""); setColProdus([]); setColDataDe(""); setColDataPana(""); }} style={{ background: "#e53935", color: "#fff", border: "none", borderRadius: 5, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕ Reset</button>}
             </div>
             <div style={TBL}>
@@ -6155,6 +6183,7 @@ Reguli:
                 <option value="PARTIAL">🟡 Parțial</option>
                 <option value="NU">⏳ Neîncasat</option>
               </select>
+              <button onClick={() => exportFiltrat("liv", livFiltered)} disabled={rapLoading} title="Descarcă în Excel exact ce e afișat după filtre" style={{ background: "#fff", color: "#6a1b9a", border: "1px solid #6a1b9a", borderRadius: 5, padding: "5px 10px", cursor: rapLoading ? "wait" : "pointer", fontSize: 11, fontWeight: 700 }}>📥 Export Excel ({livFiltered.length})</button>
               {(livSearch || livMonth || livClient || livProdus.length || livDataDe || livDataPana || livFact || livInc) && <button onClick={() => { setLivSearch(""); setLivMonth(""); setLivClient(""); setLivProdus([]); setLivDataDe(""); setLivDataPana(""); setLivFact(""); setLivInc(""); }} style={{ background: "#e53935", color: "#fff", border: "none", borderRadius: 5, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕ Reset</button>}
             </div>
             <div style={TBL}>
