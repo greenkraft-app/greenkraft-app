@@ -2093,14 +2093,27 @@ export default function App() {
   };
   // Rezervă un număr de tichet fără date (pentru un tichet fizic completat mai târziu) — statusul "gol" îl ține în
   // afara fluxului normal deschis→închis (care presupune deja o primă cântărire), pana e completat din 📝 Rezervate.
+  // Ora unui tichet gol nou NU e ora reala a rezervarii: primul tichet de azi primeste o ora in jur de 7:00, iar fiecare urmator vine dupa
+  // cel mai tarziu tichet de azi, la 20–45 de minute distanta, cu secunde aleatorii (ex. 07:03:41, 07:34:12, 08:15:27).
+  const oraTichetGol = () => {
+    const alea = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+    const azi = today();
+    const minute = (t) => { const m = String(t || "").match(/(\d{1,2}):(\d{2})/); return m ? +m[1] * 60 + +m[2] : null; };
+    const deAzi = ticheteList.filter((t) => t.data === azi).map((t) => minute(t.ora_intrare)).filter((x) => x !== null);
+    const start = 7 * 60 + alea(0, 10);
+    const total = Math.min(deAzi.length ? Math.max(start, Math.max(...deAzi) + alea(20, 45)) : start, 23 * 60 + 58);
+    const p = (n) => String(n).padStart(2, "0");
+    const ora = `${p(Math.floor(total / 60))}:${p(total % 60)}`;
+    return { ora, ts: `${azi} ${ora}:${p(alea(0, 59))}` };
+  };
   const addTicBlank = async (tip) => {
     if (ticSavingRef.current) return;
     ticSavingRef.current = true;
     setTicSaving(true);
     try {
-      const ts = timestampAcum();
+      const { ora, ts } = oraTichetGol();
       const row = {
-        serie: "TC", nr_tichet: getNextTichetNr(), data: today(), ora_intrare: oraAcum(), ora_iesire: "",
+        serie: "TC", nr_tichet: getNextTichetNr(), data: today(), ora_intrare: ora, ora_iesire: "",
         tip, partener: "", partener_cui: "", client: "GREEN KRAFT SRL", transportator: "", transportator_cui: "",
         nr_masina: "", sofer: "", material: "", brut: null, tara: null, net: null, brut_la: ts, tara_la: ts,
         status: "gol", operator: currentUser || "", factura: "", aviz: "", obs: "",
