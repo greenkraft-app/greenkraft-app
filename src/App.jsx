@@ -1374,6 +1374,8 @@ export default function App() {
   const [masiniModal, setMasiniModal] = useState(null); // { tip: "PF"|"PJ", idx, den, items: [{auto,licenta,licenta_expira}] }
   // ── Filtre pentru Cheltuieli/Colectari/Livrari ───────────
   const [chSearch, setChSearch] = useState("");
+  const [chDataDe, setChDataDe] = useState("");
+  const [chDataPana, setChDataPana] = useState("");
   const [chCat, setChCat] = useState("");
   const [chAchitat, setChAchitat] = useState("");
   const [chAchDe, setChAchDe] = useState("");
@@ -5969,6 +5971,7 @@ Reguli:
         {tab === "cheltuieli" && (() => {
           const chFiltered = sortByDateAsc(chRows.filter(r => {
             if (chMonth && monthOf(r.data) !== chMonth) return false;
+            if (!inDateRange(r.data, chDataDe, chDataPana)) return false;
             if (chCat && r.cat !== chCat) return false;
             if (chAchitat && r.ach !== chAchitat) return false;
             if (chAchDe && r.ach_de !== chAchDe) return false;
@@ -5992,6 +5995,12 @@ Reguli:
                 <option value="">📅 Toate lunile</option>
                 {chMonthOpts.map(m => <option key={m}>{m}</option>)}
               </select>
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <span style={{ fontSize: 11, color: "#777" }}>de la</span>
+                <DateInput value={chDataDe} onChange={setChDataDe} style={{ border: "1px solid #ccc", padding: "5px 6px", fontSize: 12 }} />
+                <span style={{ fontSize: 11, color: "#777" }}>până la</span>
+                <DateInput value={chDataPana} onChange={setChDataPana} style={{ border: "1px solid #ccc", padding: "5px 6px", fontSize: 12 }} />
+              </div>
               <select value={chCat} onChange={(e) => setChCat(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}>
                 <option value="">📂 Toate categoriile</option>
                 {CATEGORIE_CH.map(c => <option key={c}>{c}</option>)}
@@ -6006,7 +6015,7 @@ Reguli:
                 <option value="">👤 Toți</option>
                 {achitatOptions.map(o => <option key={o}>{o}</option>)}
               </select>
-              {(chSearch || chMonth || chCat || chAchitat || chAchDe) && <button onClick={() => { setChSearch(""); setChMonth(""); setChCat(""); setChAchitat(""); setChAchDe(""); }} style={{ background: "#e53935", color: "#fff", border: "none", borderRadius: 5, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕ Reset</button>}
+              {(chSearch || chMonth || chCat || chAchitat || chAchDe || chDataDe || chDataPana) && <button onClick={() => { setChSearch(""); setChMonth(""); setChCat(""); setChAchitat(""); setChAchDe(""); setChDataDe(""); setChDataPana(""); }} style={{ background: "#e53935", color: "#fff", border: "none", borderRadius: 5, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕ Reset</button>}
             </div>
             <div style={TBL}>
               <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 1010 }}>
