@@ -1988,7 +1988,7 @@ export default function App() {
   };
   const salveazaTichet1 = async () => {
     if (ticSavingRef.current) return; // click dublu / apasat de mai multe ori inainte sa se reactualizeze ecranul -> ar crea acelasi nr_tichet de mai multe ori
-    if (!ticNou.partener) { alert("Completați furnizorul (cine aduce marfa)!"); return; }
+    if (!ticNou.partener) { alert(ticNou.tip === "Iesire" ? "Completați clientul (cine primește marfa)!" : "Completați furnizorul (cine aduce marfa)!"); return; }
     if (!ticNou.nr_masina) { alert("Completați nr. de înmatriculare!"); return; }
     if (!ticNou.greutate || parseSuma(ticNou.greutate) <= 0) { alert("Completați greutatea primei cântăriri!"); return; }
     ticSavingRef.current = true;
@@ -2289,8 +2289,10 @@ export default function App() {
         </div>
         <!-- Date partener / transport -->
         <table style="width:100%;border-collapse:collapse;font-size:9pt;">
-          ${R("Furnizor", "<b>" + (t.partener || "").toUpperCase() + "</b>", "CUI/CNP", cuiFurnizor)}
-          ${R("Client", "<b>" + (t.client || "GREEN KRAFT SRL").toUpperCase() + "</b>", "CUI", cuiClient)}
+          ${t.tip === "Iesire"
+            // Iesire: Green Kraft e FURNIZORUL fractiei, iar partenerul (cel care o primeste si o plateste) e CLIENTUL
+            ? R("Furnizor", "<b>" + (t.client || "GREEN KRAFT SRL").toUpperCase() + "</b>", "CUI", cuiClient) + R("Client", "<b>" + (t.partener || "").toUpperCase() + "</b>", "CUI/CNP", cuiFurnizor)
+            : R("Furnizor", "<b>" + (t.partener || "").toUpperCase() + "</b>", "CUI/CNP", cuiFurnizor) + R("Client", "<b>" + (t.client || "GREEN KRAFT SRL").toUpperCase() + "</b>", "CUI", cuiClient)}
           ${R("Transportator", (t.transportator || "").toUpperCase(), "CUI", cuiTransp)}
           ${R("Nr. auto", "<b>" + (t.nr_masina || "") + "</b>", "Delegat", (t.sofer || "").toUpperCase())}
           ${R("Material / Deșeu", t.material, "Factura / Aviz", [t.factura, t.aviz].filter(Boolean).join(" / "))}
@@ -4692,7 +4694,7 @@ Reguli:
                 </div>
               )}
               <div><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Data (apare pe tichetul printat și în registru)</label><DateInput value={ticEdit.data} onChange={(v) => setTicEdit((p) => ({ ...p, data: v }))} style={{ border: "1px solid #ccc" }} /></div>
-              <div><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Furnizor</label><div style={{ border: "1px solid #ccc", borderRadius: 5, padding: "2px 4px" }}><ACStrict value={ticEdit.partener} options={[...new Set([...pfList.map(f => f.denumire), ...pjList.map(f => f.denumire)].filter(Boolean))]} placeholder="Caută partener înregistrat..." strict onChange={(v) => setTicEdit((p) => {
+              <div><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>{ticEdit.tip === "Iesire" ? "Client (cine primește marfa)" : "Furnizor"}</label><div style={{ border: "1px solid #ccc", borderRadius: 5, padding: "2px 4px" }}><ACStrict value={ticEdit.partener} options={[...new Set([...pfList.map(f => f.denumire), ...pjList.map(f => f.denumire)].filter(Boolean))]} placeholder="Caută partener înregistrat..." strict onChange={(v) => setTicEdit((p) => {
                 if (p.partener === v) return p;
                 // Furnizor schimbat: completam din ultimul lui tichet transportatorul, masina, soferul si materialul (ce lipseste acolo ramane cum era)
                 const lc = (x) => String(x || "").trim().toLowerCase();
@@ -6650,9 +6652,9 @@ Reguli:
                           <option value="gol">🛻 Vine gol (1. TARA)</option>
                         </select>
                       </div>
-                      <div style={{ marginBottom: 10 }}><label style={FL}>Furnizor (cine aduce marfa) <span style={{ color: "#c62828" }}>*</span></label><div style={ACB}><ACStrict value={ticNou.partener} options={partenerOpts} placeholder="Caută partener înregistrat..." strict onChange={(v) => { const f = pjList.find(x => x.denumire === v) || pfList.find(x => x.denumire === v); setTicNou((p) => ({ ...p, partener: v, partener_cui: f?.cod_fiscal || "" })); }} /></div></div>
+                      <div style={{ marginBottom: 10 }}><label style={FL}>{ticNou.tip === "Iesire" ? "Client (cine primește marfa)" : "Furnizor (cine aduce marfa)"} <span style={{ color: "#c62828" }}>*</span></label><div style={ACB}><ACStrict value={ticNou.partener} options={partenerOpts} placeholder="Caută partener înregistrat..." strict onChange={(v) => { const f = pjList.find(x => x.denumire === v) || pfList.find(x => x.denumire === v); setTicNou((p) => ({ ...p, partener: v, partener_cui: f?.cod_fiscal || "" })); }} /></div></div>
                       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-                        <div style={{ flex: 1 }}><label style={FL}>Client</label><div style={{ ...FI, color: G, fontWeight: 700, background: "#f0faf4", border: `1px solid ${G}`, display: "flex", alignItems: "center" }}>GREEN KRAFT SRL</div></div>
+                        <div style={{ flex: 1 }}><label style={FL}>{ticNou.tip === "Iesire" ? "Furnizor" : "Client"}</label><div style={{ ...FI, color: G, fontWeight: 700, background: "#f0faf4", border: `1px solid ${G}`, display: "flex", alignItems: "center" }}>GREEN KRAFT SRL</div></div>
                         <div style={{ flex: 1 }}><label style={FL}>Transportator</label><div style={ACB}><ACStrict value={ticNou.transportator} options={transpOpts} placeholder="noi / PF / PJ" strict onChange={(v) => { const f = pjList.find(x => x.denumire === v) || pfList.find(x => x.denumire === v); const cui = v.toUpperCase().includes("GREEN KRAFT") ? "36191378" : (f?.cod_fiscal || ""); setTicNou((p) => ({ ...p, transportator: v, transportator_cui: cui })); }} /></div></div>
                       </div>
                       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
