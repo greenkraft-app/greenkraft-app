@@ -297,6 +297,8 @@ const getNextNr = (serie, reg) => {
   const m = reg.filter((r) => r.serie === serie).map((r) => parseInt(r.nr) || 0);
   return m.length ? String(Math.max(...m) + 1) : serie === "GK" ? "18050" : "1";
 };
+// Stocurile pornesc curat de la 1 noiembrie 2026: tot ce e mai vechi nu se mai ia in calcul (nici ca stoc ramas).
+const STOC_START = new Date(2026, 10, 1);
 function calcStoc(miscari = []) {
   const map = {};
   miscari.forEach((m) => {
@@ -1344,6 +1346,7 @@ export default function App() {
   const [detSearch, setDetSearch] = useState("");
   const [detOpen, setDetOpen] = useState(false);
   const [stocFilter, setStocFilter] = useState("");
+  const [stocLuna, setStocLuna] = useState(() => { const d = new Date(); return `${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`; }); // "" = toate lunile de la 01.11.2026
   const [showMisc, setShowMisc] = useState(false);
   const [newM, setNewM] = useState({ data: today(), tip: "intrare", produs: "", cod: "", cant: "", pu: "", sursa: "" });
   const [selSal, setSelSal] = useState(null);
@@ -4009,17 +4012,32 @@ Reguli:
   // Stoc computed
   const getMiscari = () => {
     const r = [];
-    colRows.forEach((x, i) => { if (!x.produs || !x.cant) return; const fd = produseList.find((p) => p.den === x.produs); r.push({ id: `col-${i}`, data: x.data, tip: "intrare", produs: x.produs, cod: fd?.cod || "", cod_art: fd?.cod_art || "", cant: parseSuma(x.cant) || 0, pu: parseSuma(x.pret) || 0, sursa: `Colectare${x.agent ? " - " + x.agent : ""}` }); });
+    colRows.forEach((x, i) => { if (!x.produs || !x.cant) return; const fd = produseList.find((p) => p.den === x.produs); r.push({ id: `col-${i}`, data: x.data, tip: "intrare", produs: x.produs, cod: fd?.cod || "", cod_art: fd?.cod_art || "", cant: parseSuma(x.cant) || 0, pu: parseSuma(x.pret) || 0, sursa: `Colectare${x.agent ? " - " + x.agent : ""}`, fara_doc: !String(x.nr_doc || "").trim() }); });
     registru.forEach((x, i) => { if (!x.denumire || !x.cantitate) return; const fd = produseList.find((p) => p.den === x.denumire || p.den.toUpperCase() === x.denumire); r.push({ id: `bord-${i}`, data: x.data, tip: "intrare", produs: x.denumire, cod: fd?.cod || "", cod_art: fd?.cod_art || "", cant: parseSuma(x.cantitate) || 0, pu: parseSuma(x.pu) || 0, sursa: `Borderou ${x.serie} ${x.nr} - ${x.furnizor}` }); });
-    livRows.forEach((x, i) => { if (!x.produs || !x.cant) return; const fd = produseList.find((p) => p.den === x.produs); r.push({ id: `liv-${i}`, data: x.data, tip: "iesire", produs: x.produs, cod: fd?.cod || "", cod_art: fd?.cod_art || "", cant: parseSuma(x.cant) || 0, pu: parseSuma(x.pret) || 0, sursa: `Livrare ${x.client || ""} ${x.nr ? "nr." + x.nr : ""}`.trim() }); });
+    livRows.forEach((x, i) => { if (!x.produs || !x.cant) return; const fd = produseList.find((p) => p.den === x.produs); r.push({ id: `liv-${i}`, data: x.data, tip: "iesire", produs: x.produs, cod: fd?.cod || "", cod_art: fd?.cod_art || "", cant: parseSuma(x.cant) || 0, pu: parseSuma(x.pret) || 0, sursa: `Livrare ${x.client || ""} ${x.nr ? "nr." + x.nr : ""}`.trim(), fara_doc: !String(x.nr || "").trim() }); });
     manMisc.forEach((m) => r.push(m));
     return r;
   };
   const miscari = getMiscari();
-  const stocAg = calcStoc(miscari);
-  const stocFilt = stocAg.filter((r) => !stocFilter || r.produs.toLowerCase().includes(stocFilter.toLowerCase()) || r.cod.includes(stocFilter));
-  const totStocVal = stocAg.reduce((s, r) => s + Math.max(0, r.cant) * r.pm, 0);
-  const totStocKg = stocAg.reduce((s, r) => s + Math.max(0, r.cant), 0);
+  // ── Stocuri: pornesc curat de la 01.11.2026; achizitiile si vanzarile FARA Nr. doc. nu se iau in calcul; filtru pe luna ──
+  const lunaKey = (mm) => { const [m, y] = String(mm).split("."); return `${y}${m}`; };
+  const primaZiLuna = (mm) => { const [m, y] = mm.split("."); return new Date(+y, +m - 1, 1); };
+  const ultimaZiLuna = (mm) => { const [m, y] = mm.split("."); return new Date(+y, +m, 0, 23, 59, 59); };
+  const miscariStoc = miscari.filter((m) => { if (m.fara_doc) return false; const d = parseDateRO(m.data); return !!d && d >= STOC_START; });
+  const luniStoc = [...new Set([...miscariStoc.map((m) => monthOf(m.data)), monthOf(today())])].filter(Boolean).sort((a, b) => lunaKey(a).localeCompare(lunaKey(b)));
+  const stocAg = calcStoc(miscariStoc); // cumulativ de la 01.11.2026 (il foloseste si Dashboard-ul)
+  const miscariLuna = stocLuna ? miscariStoc.filter((m) => monthOf(m.data) === stocLuna) : miscariStoc;
+  const stocLunar = calcStoc(miscariLuna);
+  const stocPrec = stocLuna ? calcStoc(miscariStoc.filter((m) => parseDateRO(m.data) < primaZiLuna(stocLuna))) : [];
+  const stocFinal = stocLuna ? calcStoc(miscariStoc.filter((m) => parseDateRO(m.data) <= ultimaZiLuna(stocLuna))) : stocAg;
+  const pePrec = Object.fromEntries(stocPrec.map((r) => [r.produs, r.cant]));
+  const peLuna = Object.fromEntries(stocLunar.map((r) => [r.produs, r]));
+  const randuriStoc = stocFinal.map((r) => ({ ...r, prec: pePrec[r.produs] || 0, intrariLuna: peLuna[r.produs]?.intrari || 0, iesiriLuna: peLuna[r.produs]?.iesiri || 0 }))
+    .filter((r) => Math.abs(r.prec) > 0.0005 || r.intrariLuna > 0 || r.iesiriLuna > 0 || Math.abs(r.cant) > 0.0005);
+  const stocFilt = randuriStoc.filter((r) => !stocFilter || r.produs.toLowerCase().includes(stocFilter.toLowerCase()) || r.cod.includes(stocFilter));
+  const totStocVal = randuriStoc.reduce((s, r) => s + Math.max(0, r.cant) * r.pm, 0);
+  const totStocKg = randuriStoc.reduce((s, r) => s + Math.max(0, r.cant), 0);
+  const totPrecKg = randuriStoc.reduce((s, r) => s + Math.max(0, r.prec), 0);
 
   // Calculator
   const updCost = (v) => { const c = parseSuma(v) || 0; setCostAl(v); setCalRows((p) => p.map((r) => calcRow(r, c))); };
@@ -6850,10 +6868,15 @@ Reguli:
         {tab === "stoc" && (
           <div>
             <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
-              <SC label="Produse în stoc" value={stocAg.filter((r) => r.cant > 0).length + " tipuri"} c={G} bg="#e8f5e9" />
-              <SC label="Total Cantitate" value={fmt(totStocKg) + " kg"} c="#1565c0" bg="#e3f2fd" />
+              <SC label="Produse în stoc" value={randuriStoc.filter((r) => r.cant > 0).length + " tipuri"} c={G} bg="#e8f5e9" />
+              {stocLuna && <SC label="Stoc din luni anterioare" value={fmt(totPrecKg) + " kg"} c="#e65100" bg="#fff3e0" />}
+              <SC label={stocLuna ? "Stoc la sfârșit de lună" : "Total Cantitate"} value={fmt(totStocKg) + " kg"} c="#1565c0" bg="#e3f2fd" />
               <SC label="Valoare estimată" value={fmt(totStocVal) + " lei"} c="#6a1b9a" bg="#f3e5f5" />
               <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+                <select value={stocLuna} onChange={(e) => setStocLuna(e.target.value)} title="Stocul pe luna aleasă; cel din lunile anterioare apare într-o coloană separată" style={{ border: "1px solid #ccc", borderRadius: 6, padding: "5px 8px", fontSize: 12, fontWeight: 600 }}>
+                  <option value="">📅 Toate lunile (de la 01.11.2026)</option>
+                  {[...luniStoc].reverse().map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
                 <FastInput value={stocFilter} onChange={(e) => setStocFilter(e.target.value)} placeholder="🔍 Caută..." style={{ border: "1px solid #ccc", borderRadius: 6, padding: "5px 10px", fontSize: 12, width: 160 }} />
                 <button onClick={() => setShowMisc((p) => !p)} style={{ padding: "6px 12px", background: showMisc ? "#1565c0" : "#e3f2fd", color: showMisc ? "#fff" : "#1565c0", border: "1px solid #90caf9", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>{showMisc ? "📊 Stoc" : "📋 Mișcări"}</button>
               </div>
@@ -6861,14 +6884,14 @@ Reguli:
             {!showMisc && (
               <div style={TBL}>
                 <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 680 }}>
-                  <thead><tr><th style={th({ width: 28 })}>#</th><th style={th({ textAlign: "center", minWidth: 190 })}>Produs</th><th style={th({ textAlign: "center", width: 75 })}>CodSAGA</th><th style={th({ textAlign: "center", width: 90 })}>Cod HG 856</th><th style={th({ textAlign: "center", width: 105 })}>Intrat (kg)</th><th style={th({ textAlign: "center", width: 105 })}>Ieșit (kg)</th><th style={{ ...th({ textAlign: "center", width: 115 }), background: "#0d4a2a" }}>Stoc Curent</th><th style={th({ textAlign: "center", width: 100 })}>Preț Mediu</th><th style={{ ...th({ textAlign: "center", width: 115 }), background: "#6a1b9a" }}>Val. Stoc (lei)</th><th style={th({ textAlign: "center", width: 95 })}>Ultima misc.</th></tr></thead>
+                  <thead><tr><th style={th({ width: 28 })}>#</th><th style={th({ textAlign: "center", minWidth: 190 })}>Produs</th><th style={th({ textAlign: "center", width: 75 })}>CodSAGA</th><th style={th({ textAlign: "center", width: 90 })}>Cod HG 856</th><th style={{ ...th({ textAlign: "center", width: 120 }), background: "#e65100" }} title="Ce a rămas din lunile anterioare (de la 01.11.2026)">Stoc luni anterioare</th><th style={th({ textAlign: "center", width: 105 })}>{stocLuna ? "Intrat în lună (kg)" : "Intrat (kg)"}</th><th style={th({ textAlign: "center", width: 105 })}>{stocLuna ? "Ieșit în lună (kg)" : "Ieșit (kg)"}</th><th style={{ ...th({ textAlign: "center", width: 115 }), background: "#0d4a2a" }}>{stocLuna && stocLuna !== monthOf(today()) ? "Stoc la sfârșit de lună" : "Stoc Curent"}</th><th style={th({ textAlign: "center", width: 100 })}>Preț Mediu</th><th style={{ ...th({ textAlign: "center", width: 115 }), background: "#6a1b9a" }}>Val. Stoc (lei)</th><th style={th({ textAlign: "center", width: 95 })}>Ultima misc.</th></tr></thead>
                   <tbody>
-                    {stocFilt.length === 0 && <tr><td colSpan={10} style={{ textAlign: "center", padding: 20, color: "#aaa" }}>Niciun produs. Adaugă colectări sau borderouri.</td></tr>}
-                    {stocFilt.map((r, i) => { const vs = Math.max(0, r.cant) * r.pm; const alert = r.cant <= 0; const rowBg = alert ? "#fff8f8" : i % 2 === 0 ? "#fff" : "#f8fbf9"; return (<tr key={i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td><td style={td({ background: rowBg, fontWeight: 600, color: alert ? "#c62828" : G })}>{alert && "⚠️ "}{r.produs}</td><td style={td({ background: "#fff3e0", textAlign: "center", fontFamily: "monospace", fontSize: 11, fontWeight: 700, color: "#e65100" })}>{r.cod_art || "—"}</td><td style={td({ background: rowBg, textAlign: "center", fontFamily: "monospace", fontSize: 11 })}>{r.cod}</td><td style={td({ background: "#e8f5e9", textAlign: "right", color: G, fontWeight: 600 })}>{fmt(r.intrari)}</td><td style={td({ background: "#ffebee", textAlign: "right", color: "#c62828", fontWeight: 600 })}>{fmt(r.iesiri)}</td><td style={td({ background: alert ? "#ffcdd2" : "#d4edda", textAlign: "right", fontWeight: 700, fontSize: 13, color: alert ? "#c62828" : "#0d4a2a" })}>{fmt(Math.max(0, r.cant))}</td><td style={td({ background: rowBg, textAlign: "right" })}>{fmt(r.pm, 4)}</td><td style={td({ background: "#f3e5f5", textAlign: "right", fontWeight: 700, color: "#6a1b9a" })}>{fmt(vs)}</td><td style={td({ background: rowBg, textAlign: "center", fontSize: 11, color: "#888" })}>{r.data}</td></tr>); })}
+                    {stocFilt.length === 0 && <tr><td colSpan={11} style={{ textAlign: "center", padding: 20, color: "#aaa" }}>Niciun produs pentru luna aleasă.</td></tr>}
+                    {stocFilt.map((r, i) => { const vs = Math.max(0, r.cant) * r.pm; const alert = r.cant <= 0; const rowBg = alert ? "#fff8f8" : i % 2 === 0 ? "#fff" : "#f8fbf9"; return (<tr key={i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td><td style={td({ background: rowBg, fontWeight: 600, color: alert ? "#c62828" : G })}>{alert && "⚠️ "}{r.produs}</td><td style={td({ background: "#fff3e0", textAlign: "center", fontFamily: "monospace", fontSize: 11, fontWeight: 700, color: "#e65100" })}>{r.cod_art || "—"}</td><td style={td({ background: rowBg, textAlign: "center", fontFamily: "monospace", fontSize: 11 })}>{r.cod}</td><td style={td({ background: "#fff3e0", textAlign: "right", color: r.prec < 0 ? "#c62828" : "#e65100", fontWeight: 600 })}>{fmt(r.prec)}</td><td style={td({ background: "#e8f5e9", textAlign: "right", color: G, fontWeight: 600 })}>{fmt(r.intrariLuna)}</td><td style={td({ background: "#ffebee", textAlign: "right", color: "#c62828", fontWeight: 600 })}>{fmt(r.iesiriLuna)}</td><td style={td({ background: alert ? "#ffcdd2" : "#d4edda", textAlign: "right", fontWeight: 700, fontSize: 13, color: alert ? "#c62828" : "#0d4a2a" })}>{fmt(Math.max(0, r.cant))}</td><td style={td({ background: rowBg, textAlign: "right" })}>{fmt(r.pm, 4)}</td><td style={td({ background: "#f3e5f5", textAlign: "right", fontWeight: 700, color: "#6a1b9a" })}>{fmt(vs)}</td><td style={td({ background: rowBg, textAlign: "center", fontSize: 11, color: "#888" })}>{r.data}</td></tr>); })}
                   </tbody>
-                  <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={4} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(stocAg.reduce((s, r) => s + r.intrari, 0))}</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(stocAg.reduce((s, r) => s + r.iesiri, 0))}</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(totStocKg)}</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(totStocVal)}</td><td></td></tr></tfoot>
+                  <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={4} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(totPrecKg)}</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(randuriStoc.reduce((s, r) => s + r.intrariLuna, 0))}</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(randuriStoc.reduce((s, r) => s + r.iesiriLuna, 0))}</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(totStocKg)}</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(totStocVal)}</td><td></td></tr></tfoot>
                 </table>
-                <div style={{ marginTop: 10, background: "#e8f5e9", border: "1px solid #a5d6a7", borderRadius: 6, padding: "8px 12px", fontSize: 11, color: G }}>💡 <strong>Actualizare automată:</strong> Achizițiile + Borderourile = intrări ⬆️ &nbsp;|&nbsp; Vânzările = ieșiri ⬇️</div>
+                <div style={{ marginTop: 10, background: "#e8f5e9", border: "1px solid #a5d6a7", borderRadius: 6, padding: "8px 12px", fontSize: 11, color: G }}>💡 <strong>Actualizare automată:</strong> Achizițiile + Borderourile = intrări ⬆️ &nbsp;|&nbsp; Vânzările = ieșiri ⬇️<br/>Stocurile pornesc de la <strong>01.11.2026</strong> (tot ce e mai vechi nu se ia în calcul). Achizițiile și vânzările <strong>fără Nr. doc.</strong> nu intră în stoc.</div>
               </div>
             )}
             {showMisc && (
@@ -6888,7 +6911,7 @@ Reguli:
                 <div style={TBL}>
                   <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 680 }}>
                     <thead><tr><th style={th({ width: 28 })}>#</th><th style={th({ width: 82 })}>Data</th><th style={th({ width: 72 })}>Tip</th><th style={th({ minWidth: 170 })}>Produs</th><th style={th({ width: 78 })}>Cod</th><th style={th({ width: 80 })}>Cant.(kg)</th><th style={th({ width: 78 })}>Preț/kg</th><th style={th({ width: 80 })}>Valoare</th><th style={th({ minWidth: 150 })}>Sursă</th><th style={th({ width: 28 })}></th></tr></thead>
-                    <tbody>{[...miscari].reverse().map((r, i) => { const v = (parseSuma(r.cant) || 0) * (parseSuma(r.pu) || 0); const isIn = r.tip === "intrare"; const isCol = String(r.id).startsWith("col-"); const isBord = String(r.id).startsWith("bord-"); const isLiv = String(r.id).startsWith("liv-"); const isMan = String(r.id).startsWith("man-"); const rowBg = isCol ? "#f0fff4" : isBord ? "#fffde7" : isLiv ? "#fff5f5" : "#f0f4ff"; const badge = isCol ? { bg: "#c6efce", c: G, l: "🚛" } : isBord ? { bg: "#fff2cc", c: "#e65100", l: "📄" } : isLiv ? { bg: "#fce4d6", c: "#c62828", l: "📤" } : { bg: "#e3f2fd", c: "#1565c0", l: "✏️" }; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{miscari.length - i}</td><td style={td({ background: rowBg, textAlign: "center", fontSize: 11 })}>{r.data}</td><td style={td({ background: isIn ? "#e8f5e9" : "#ffebee", textAlign: "center", fontWeight: 700, color: isIn ? G : "#c62828" })}>{isIn ? "⬆" : "⬇"} {isIn ? "Intrare" : "Ieșire"}</td><td style={td({ background: rowBg, fontSize: 11 })}>{r.produs}</td><td style={td({ background: rowBg, textAlign: "center", fontFamily: "monospace", fontSize: 11 })}>{r.cod}</td><td style={td({ background: rowBg, textAlign: "right", fontWeight: 600, color: isIn ? G : "#c62828" })}>{isIn ? "+" : "-"}{fmt(r.cant)}</td><td style={td({ background: rowBg, textAlign: "right" })}>{fmt(r.pu, 4)}</td><td style={td({ background: rowBg, textAlign: "right", fontWeight: 600 })}>{fmt(v)}</td><td style={td({ background: rowBg, fontSize: 11 })}><span style={{ background: badge.bg, color: badge.c, borderRadius: 4, padding: "1px 5px", fontSize: 10, fontWeight: 700, marginRight: 5 }}>{badge.l}</span>{r.sursa}</td><td style={td({ textAlign: "center", padding: 3 })}>{isMan ? <button onClick={() => delManMisc(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button> : <span style={{ color: "#ccc", fontSize: 11 }} title="Modifică din sursa originală">🔒</span>}</td></tr>); })}</tbody>
+                    <tbody>{[...miscariLuna].reverse().map((r, i) => { const v = (parseSuma(r.cant) || 0) * (parseSuma(r.pu) || 0); const isIn = r.tip === "intrare"; const isCol = String(r.id).startsWith("col-"); const isBord = String(r.id).startsWith("bord-"); const isLiv = String(r.id).startsWith("liv-"); const isMan = String(r.id).startsWith("man-"); const rowBg = isCol ? "#f0fff4" : isBord ? "#fffde7" : isLiv ? "#fff5f5" : "#f0f4ff"; const badge = isCol ? { bg: "#c6efce", c: G, l: "🚛" } : isBord ? { bg: "#fff2cc", c: "#e65100", l: "📄" } : isLiv ? { bg: "#fce4d6", c: "#c62828", l: "📤" } : { bg: "#e3f2fd", c: "#1565c0", l: "✏️" }; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{miscariLuna.length - i}</td><td style={td({ background: rowBg, textAlign: "center", fontSize: 11 })}>{r.data}</td><td style={td({ background: isIn ? "#e8f5e9" : "#ffebee", textAlign: "center", fontWeight: 700, color: isIn ? G : "#c62828" })}>{isIn ? "⬆" : "⬇"} {isIn ? "Intrare" : "Ieșire"}</td><td style={td({ background: rowBg, fontSize: 11 })}>{r.produs}</td><td style={td({ background: rowBg, textAlign: "center", fontFamily: "monospace", fontSize: 11 })}>{r.cod}</td><td style={td({ background: rowBg, textAlign: "right", fontWeight: 600, color: isIn ? G : "#c62828" })}>{isIn ? "+" : "-"}{fmt(r.cant)}</td><td style={td({ background: rowBg, textAlign: "right" })}>{fmt(r.pu, 4)}</td><td style={td({ background: rowBg, textAlign: "right", fontWeight: 600 })}>{fmt(v)}</td><td style={td({ background: rowBg, fontSize: 11 })}><span style={{ background: badge.bg, color: badge.c, borderRadius: 4, padding: "1px 5px", fontSize: 10, fontWeight: 700, marginRight: 5 }}>{badge.l}</span>{r.sursa}</td><td style={td({ textAlign: "center", padding: 3 })}>{isMan ? <button onClick={() => delManMisc(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button> : <span style={{ color: "#ccc", fontSize: 11 }} title="Modifică din sursa originală">🔒</span>}</td></tr>); })}</tbody>
                   </table>
                 </div>
               </div>
