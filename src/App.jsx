@@ -742,9 +742,20 @@ const acelasiRand = (a, b) => {
 function useSupaTable(tableName, setFn) {
   useEffect(() => {
     let activ = true;
-    const refetch = () =>
-      sb.from(tableName).select("*").order("created_at", { ascending: true })
-        .then(({ data }) => { if (activ && data) setFn(pastreazaEditarile(tableName, data)); });
+    // Baza de date trimite maxim 1000 de randuri odata. Fara paginare, un tabel peste 1000 de randuri (acum tichetele de cantar)
+    // pierdea la reincarcarea paginii exact cele mai noi randuri: dispareau tichete, iar numerotarea se repeta.
+    const PAGINA = 1000;
+    const refetch = async () => {
+      const toate = [];
+      for (let de = 0; de < 200000; de += PAGINA) {
+        let { data, error } = await sb.from(tableName).select("*").order("created_at", { ascending: true }).order("id", { ascending: true }).range(de, de + PAGINA - 1);
+        if (error) ({ data, error } = await sb.from(tableName).select("*").order("created_at", { ascending: true }).range(de, de + PAGINA - 1)); // tabel fara coloana id
+        if (error || !data) return; // la eroare pastram ce era deja pe ecran
+        toate.push(...data);
+        if (data.length < PAGINA) break;
+      }
+      if (activ) setFn(pastreazaEditarile(tableName, toate));
+    };
     refetch();
     // O schimbare venita prin realtime se aplica DOAR pe randul ei. Inainte reincarcam
     // toata tabela la fiecare modificare, deci orice salvare (inclusiv a ta, in timp ce
