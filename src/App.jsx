@@ -529,7 +529,7 @@ function BordPrint({ b }) {
         <p style={{ margin: "0" }}>Datele dumneavoastra personale sunt prelucrate de societatea GREEN KRAFT S.R.L. in conformitate cu Regulamentul (UE) 2016/679 privind protectia persoanelor fizice in ceea ce priveste prelucrarea datelor cu caracter personal si privind libera circulatie a acestor date in scopul completarii si transmiterii declaratiilor si raportarilor legale.</p>
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", marginTop: 14, fontSize: 11 }}>
-        <div style={{ textAlign: "center" }}><div>Am primit,</div><div style={{ fontWeight: "bold" }}>Gana Mihai</div><div style={{ fontSize: 9 }}>(nume/CNP/semnatura/stampila)</div><div style={{ marginTop: 6, width: 60, height: 60, border: "1px dashed #bbb", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "#bbb", fontSize: 9, margin: "6px auto 0" }}>ștampilă</div></div>
+        <div style={{ textAlign: "center" }}><div>Am primit,</div><div style={{ marginTop: 6, width: 60, height: 60, border: "1px dashed #bbb", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "#bbb", fontSize: 9, margin: "6px auto 0" }}>ștampilă</div></div>
         <div style={{ flex: 1, paddingLeft: 20 }}>
           <div style={{ fontWeight: "bold" }}>Detinator de deseuri-persoana fizica.</div>
           <div>1. Cunosc faptul ca falsul in declaratii constituie infractiune si se pedepseste conform Codului penal.</div>
@@ -2347,7 +2347,7 @@ export default function App() {
         <!-- Semnatura + stampila -->
         <div style="display:flex;justify-content:flex-end;margin-top:1mm;font-size:9pt;">
           <div style="text-align:center;position:relative;width:62mm;height:34mm;">
-            <div style="position:absolute;top:0;left:0;right:0;">Semnătura Operator,<br/><b>${t.operator || ""}</b></div>
+            <div style="position:absolute;top:0;left:0;right:0;">Semnătura Operator,<br/><b>GREEN KRAFT SRL</b></div>
             <img src="${window.location.origin}/stampila.png" onerror="this.style.display='none'" style="position:absolute;top:6mm;left:16mm;transform:rotate(-3deg);width:30mm;" />
             <div style="position:absolute;bottom:0;left:0;right:0;">__________________</div>
           </div>
