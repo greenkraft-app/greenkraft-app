@@ -1491,6 +1491,7 @@ export default function App() {
   const [livRows, setLivRows] = useState([]);
   const [datRows, setDatRows] = useState([]);
   const [avRows, setAvRows] = useState([]);
+  const [ajCasa, setAjCasa] = useState(null); // { sold, motiv } - panou discret pentru ajustarea soldului din casa
   // Cine a adăugat fiecare achiziție, cheltuială, vânzare și depunere de bani.
   // Se reîncarcă odată cu lista respectivă, ca o înregistrare nouă să-și arate autorul imediat.
   useEffect(() => {
@@ -1748,6 +1749,25 @@ export default function App() {
     const { data, error } = await sb.from("avansuri").insert(row).select();
     if (error) { alert("Eroare: " + error.message + "\n\nAsigură-te că există coloana \"sold_anterior\" (numeric) în tabelul avansuri din Supabase."); return; }
     if (data && data.length) { setAvRows((p) => [...p, data[0]]); logAction("add", "avansuri", data[0].id, { tip: "bani_adus" }); }
+  };
+  // Ajustare sold casa: se salveaza ca rand tip="ajustare_casa" in tabelul "avansuri" (suma = diferenta, cu semn).
+  // Apare mereu in Registru de casa (coloana Ajustare) si in Istoric, cu motiv - controlul de editare e doar discret ascuns.
+  const salveazaAjustareCasa = async () => {
+    const dorit = parseSuma(ajCasa?.sold);
+    const motiv = String(ajCasa?.motiv || "").trim();
+    if (ajCasa?.sold === "" || ajCasa?.sold == null || isNaN(dorit)) { alert("Introduceți soldul dorit."); return; }
+    if (!motiv) { alert("Scrieți motivul ajustării (rămâne în Registru de casă și în Istoric)."); return; }
+    const diferenta = Math.round((dorit - ramasInCasaTotal) * 100) / 100;
+    if (!diferenta) { setAjCasa(null); return; }
+    if (!window.confirm(`Soldul din casă se schimbă de la ${fmt(ramasInCasaTotal)} la ${fmt(dorit)} lei (ajustare ${diferenta > 0 ? "+" : ""}${fmt(diferenta)} lei).\n\nMotiv: ${motiv}\n\nAjustarea apare în Registru de casă și în Istoric. Continuați?`)) return;
+    const row = { data: today(), catre: currentUser || "", suma: String(diferenta), tip: "ajustare_casa", det: motiv, decont: [], sold_anterior: null };
+    const { data, error } = await sb.from("avansuri").insert(row).select();
+    if (error) { alert("Eroare: " + error.message); return; }
+    if (data && data.length) {
+      setAvRows((p) => [...p, data[0]]);
+      logAction("Ajustare sold casă", "avansuri", data[0].id, { de_la: ramasInCasaTotal, la: dorit, diferenta, motiv });
+    }
+    setAjCasa(null);
   };
   // Decont items
   const addDecontItem = async (avansId) => {
@@ -4109,10 +4129,10 @@ Reguli:
   const totDatAchitat = datRows.filter((r) => r.ach === "Da").reduce((s, r) => s + (parseSuma(r.suma) || 0), 0);
 
   // Avansuri computed
-  const filtAv = sortByDateAsc(avRows.filter((r) => r.tip !== "bani_adus" && (avTip === "toate" || r.tip === avTip) && (!avPers || r.catre === avPers)));
+  const filtAv = sortByDateAsc(avRows.filter((r) => r.tip !== "bani_adus" && r.tip !== "ajustare_casa" && (avTip === "toate" || r.tip === avTip) && (!avPers || r.catre === avPers)));
   const totAvans = avRows.filter((r) => r.tip === "avans").reduce((s, r) => s + (parseSuma(r.suma) || 0), 0);
   const totDiv = avRows.filter((r) => r.tip === "dividend").reduce((s, r) => s + (parseSuma(r.suma) || 0), 0);
-  const persList = [...new Set(avRows.map((r) => r.catre).filter(Boolean))];
+  const persList = [...new Set(avRows.filter((r) => r.tip !== "ajustare_casa").map((r) => r.catre).filter(Boolean))];
 
   // Bani aduși în casă. Banii sunt un singur fond, nu legat de o depunere anume:
   // din el se scad achizițiile bifate „Din casă" în 🚛 Achiziții.
@@ -4129,7 +4149,9 @@ Reguli:
   const totalCheltuieliDinCasa = cheltuieliDinCasa.reduce((s, r) => s + (parseSuma(r.suma) || 0), 0);
   const cheltuitDinCasa = totalAchizitiiDinCasa + totalCheltuieliDinCasa;
   // Afișat si in headerul aplicatiei pentru vizibilitate rapida.
-  const ramasInCasaTotal = totalAdusInCasa - platiVechiTotal - cheltuitDinCasa;
+  const ajustariCasa = sortByDateAsc(avRows.filter((r) => r.tip === "ajustare_casa"));
+  const totalAjustariCasa = ajustariCasa.reduce((s, r) => s + (parseSuma(r.suma) || 0), 0);
+  const ramasInCasaTotal = totalAdusInCasa - platiVechiTotal - cheltuitDinCasa + totalAjustariCasa;
 
   // Registru de casă pe zile, ținut de la REGISTRU_CASA_START încoace. Tot ce s-a
   // întâmplat înainte intră într-un singur sold de pornire — nu reconstruim zi cu zi
@@ -4144,8 +4166,8 @@ Reguli:
       if (!val) return;
       const d = parseDateRO(data);
       // fără dată sau mai veche decât ziua de pornire ⇒ intră în soldul de pornire
-      if (!d || !start || d < start) { soldPornire += camp === "adus" ? val : -val; return; }
-      if (!zile.has(data)) zile.set(data, { adus: 0, platiVechi: 0, achizitii: 0, cheltuieli: 0 });
+      if (!d || !start || d < start) { soldPornire += (camp === "adus" || camp === "ajustare") ? val : -val; return; }
+      if (!zile.has(data)) zile.set(data, { adus: 0, platiVechi: 0, achizitii: 0, cheltuieli: 0, ajustare: 0 });
       zile.get(data)[camp] += val;
     };
     baniAdusiRows.forEach((r) => {
@@ -4155,19 +4177,20 @@ Reguli:
     });
     achizitiiDinCasa.forEach((r) => pune(r.data, "achizitii", valoareAchizitie(r)));
     cheltuieliDinCasa.forEach((r) => pune(r.data, "cheltuieli", parseSuma(r.suma) || 0));
+    ajustariCasa.forEach((r) => pune(r.data, "ajustare", parseSuma(r.suma) || 0));
     let sold = soldPornire;
     const zileCuMiscari = [...zile.entries()]
       .sort((a, b) => (parseDateRO(a[0]) || 0) - (parseDateRO(b[0]) || 0))
       .map(([data, v]) => {
         const inceput = sold;
         const iesit = v.platiVechi + v.achizitii + v.cheltuieli;
-        sold = inceput + v.adus - iesit;
+        sold = inceput + v.adus + v.ajustare - iesit;
         return { data, inceput, ...v, iesit, ramas: sold };
       });
     return { soldPornire, zile: zileCuMiscari };
   })();
   const ziuaDeAzi = registruCasa.zile.find((z) => z.data === today())
-    || { data: today(), inceput: ramasInCasaTotal, adus: 0, platiVechi: 0, achizitii: 0, cheltuieli: 0, iesit: 0, ramas: ramasInCasaTotal };
+    || { data: today(), inceput: ramasInCasaTotal, adus: 0, platiVechi: 0, achizitii: 0, cheltuieli: 0, ajustare: 0, iesit: 0, ramas: ramasInCasaTotal };
 
   // Rezultatele căutării globale: caut în tot ce are un nume, un număr sau un CUI.
   // Fiecare rezultat știe în ce secțiune duce și ce filtru să pună acolo.
@@ -7220,8 +7243,20 @@ Reguli:
                 <SC label="Total adus" value={fmt(totalAdusInCasa) + " lei"} c="#00695c" bg="#e0f2f1" />
                 {platiVechiTotal > 0 && <SC label="Plăți anterioare" value={fmt(platiVechiTotal) + " lei"} c="#6a1b9a" bg="#f3e5f5" />}
                 <SC label="Plătit din casă" value={fmt(cheltuitDinCasa) + " lei"} c="#bf360c" bg="#fce4d6" />
-                <SC label="Rămas în casă" value={fmt(ramasInCasaTotal) + " lei"} c={ramasInCasaTotal < 0 ? "#c62828" : G} bg={ramasInCasaTotal < 0 ? "#ffebee" : "#e8f5e9"} />
+                <div style={{ position: "relative" }}>
+                  <SC label="Rămas în casă" value={fmt(ramasInCasaTotal) + " lei"} c={ramasInCasaTotal < 0 ? "#c62828" : G} bg={ramasInCasaTotal < 0 ? "#ffebee" : "#e8f5e9"} />
+                  {esteAdminIstoric && <span onClick={() => setAjCasa(ajCasa ? null : { sold: String(Math.round(ramasInCasaTotal * 100) / 100).replace(".", ","), motiv: "" })} style={{ position: "absolute", top: 2, right: 5, fontSize: 9, color: "rgba(0,0,0,0.18)", cursor: "pointer", userSelect: "none", padding: "0 3px" }}>✎</span>}
+                </div>
               </div>
+              {esteAdminIstoric && ajCasa && (
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", margin: "-4px 0 12px", padding: "8px 10px", background: "#fafafa", border: "1px dashed #cfd8dc", borderRadius: 8, fontSize: 12 }}>
+                  <span style={{ color: "#78909c" }}>Sold casă:</span>
+                  <FastInput style={{ width: 110, padding: "5px 8px", border: "1px solid #ccc", borderRadius: 5, textAlign: "right", fontWeight: 700 }} value={ajCasa.sold} onChange={(e) => setAjCasa((p) => ({ ...p, sold: e.target.value }))} />
+                  <FastInput style={{ flex: 1, minWidth: 180, padding: "5px 8px", border: "1px solid #ccc", borderRadius: 5 }} value={ajCasa.motiv} onChange={(e) => setAjCasa((p) => ({ ...p, motiv: e.target.value }))} placeholder="Motiv (obligatoriu, apare în Registru de casă)" />
+                  <button onClick={salveazaAjustareCasa} style={{ padding: "5px 12px", background: "#00838f", color: "#fff", border: "none", borderRadius: 5, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Salvează</button>
+                  <button onClick={() => setAjCasa(null)} style={{ padding: "5px 10px", background: "#fff", border: "1px solid #ccc", borderRadius: 5, cursor: "pointer", fontSize: 12 }}>Anulează</button>
+                </div>
+              )}
               <div style={{ background: "#e0f7fa", border: "1px solid #80deea", borderRadius: 8, padding: "9px 12px", marginBottom: 12, fontSize: 12, color: "#00636b" }}>
                 Banii se scad automat: bifează <strong>„Din casă"</strong> pe achiziția plătită din casă, în 🚛 Achiziții.
                 {platiVechiTotal > 0 && <> Cele <strong>{fmt(platiVechiTotal)} lei</strong> de la „Plăți anterioare" sunt plățile introduse manual înainte de bifă — rămân scăzute, dar nu se mai modifică. Nu bifa achiziții plătite deja atunci, că s-ar scădea de două ori.</>}
@@ -7272,6 +7307,11 @@ Reguli:
                   )}
                 </table>
               </div>
+              {ajustariCasa.length > 0 && (
+                <div style={{ marginTop: 10, fontSize: 11, color: "#78909c" }}>
+                  Ajustări sold casă: {ajustariCasa.map((r) => `${r.data} ${(parseSuma(r.suma) || 0) > 0 ? "+" : ""}${fmt(parseSuma(r.suma) || 0)} lei (${r.det || "fără motiv"}${r.catre ? ", " + r.catre : ""})`).join(" · ")}
+                </div>
+              )}
               {cheltuitDinCasa > 0 && (
                 <div style={{ marginTop: 10, fontSize: 12, color: "#555" }}>
                   Scăzute din casă: <strong>{achizitiiDinCasa.length}</strong> {achizitiiDinCasa.length === 1 ? "achiziție" : "achiziții"} (<strong style={{ color: "#bf360c" }}>{fmt(totalAchizitiiDinCasa)} lei</strong>){" "}
@@ -7293,23 +7333,24 @@ Reguli:
               </div>
               <div style={TBL}>
                 <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 760 }}>
-                  <colgroup><col style={{ width: 110 }} /><col style={{ width: 120 }} /><col style={{ width: 115 }} /><col style={{ width: 125 }} /><col style={{ width: 125 }} /><col style={{ width: 125 }} /></colgroup>
+                  <colgroup><col style={{ width: 110 }} /><col style={{ width: 120 }} /><col style={{ width: 115 }} /><col style={{ width: 125 }} /><col style={{ width: 125 }} />{ajustariCasa.length > 0 && <col style={{ width: 125 }} />}<col style={{ width: 125 }} /></colgroup>
                   <thead><tr style={{ background: "#00838f" }}>
                     <th style={th({ textAlign: "center" })}>Ziua</th>
                     <th style={th({ textAlign: "center" })}>Început de zi</th>
                     <th style={th({ textAlign: "center" })}>Bani aduși</th>
                     <th style={th({ textAlign: "center" })}>Achiziții</th>
                     <th style={th({ textAlign: "center" })}>Cheltuieli</th>
+                    {ajustariCasa.length > 0 && <th style={th({ textAlign: "center" })}>Ajustare sold</th>}
                     <th style={th({ textAlign: "center" })}>Rămas la final</th>
                   </tr></thead>
                   <tbody>
                     <tr style={{ background: "#f5f5f5" }}>
                       <td style={td({ textAlign: "center", fontWeight: 600, color: "#777" })}>până la {REGISTRU_CASA_START}</td>
-                      <td colSpan={4} style={td({ color: "#777", fontSize: 11 })}>sold de pornire (tot ce a fost înainte)</td>
+                      <td colSpan={ajustariCasa.length > 0 ? 5 : 4} style={td({ color: "#777", fontSize: 11 })}>sold de pornire (tot ce a fost înainte)</td>
                       <td style={td({ textAlign: "right", fontWeight: 700 })}>{fmt(registruCasa.soldPornire)}</td>
                     </tr>
                     {registruCasa.zile.length === 0 && (
-                      <tr><td colSpan={6} style={{ textAlign: "center", padding: 18, color: "#aaa", fontSize: 12 }}>Nicio mișcare de casă de la {REGISTRU_CASA_START} încoace.</td></tr>
+                      <tr><td colSpan={ajustariCasa.length > 0 ? 7 : 6} style={{ textAlign: "center", padding: 18, color: "#aaa", fontSize: 12 }}>Nicio mișcare de casă de la {REGISTRU_CASA_START} încoace.</td></tr>
                     )}
                     {registruCasa.zile.map((z, i) => {
                       const esteAzi = z.data === today();
@@ -7320,6 +7361,7 @@ Reguli:
                           <td style={td({ textAlign: "right", color: z.adus ? "#00695c" : "#bbb", fontWeight: z.adus ? 700 : 400, background: z.adus ? "#e0f2f1" : undefined })}>{z.adus ? "+" + fmt(z.adus) : "—"}</td>
                           <td style={td({ textAlign: "right", color: z.achizitii ? "#bf360c" : "#bbb", background: z.achizitii ? "#fce4d6" : undefined })}>{z.achizitii ? "−" + fmt(z.achizitii) : "—"}</td>
                           <td style={td({ textAlign: "right", color: (z.cheltuieli + z.platiVechi) ? "#bf360c" : "#bbb", background: (z.cheltuieli + z.platiVechi) ? "#fce4d6" : undefined })}>{(z.cheltuieli + z.platiVechi) ? "−" + fmt(z.cheltuieli + z.platiVechi) : "—"}</td>
+                          {ajustariCasa.length > 0 && <td style={td({ textAlign: "right", color: z.ajustare ? "#6a1b9a" : "#bbb", fontWeight: z.ajustare ? 700 : 400, background: z.ajustare ? "#f3e5f5" : undefined })}>{z.ajustare ? (z.ajustare > 0 ? "+" : "−") + fmt(Math.abs(z.ajustare)) : "—"}</td>}
                           <td style={td({ textAlign: "right", fontWeight: 700, background: z.ramas < 0 ? "#ffebee" : "#e8f5e9", color: z.ramas < 0 ? "#c62828" : G })}>{fmt(z.ramas)}</td>
                         </tr>
                       );
