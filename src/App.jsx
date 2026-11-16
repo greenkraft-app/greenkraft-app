@@ -210,6 +210,13 @@ const CAT_PAROLE = ["Email","Bancă","Card","Platformă","WiFi","Altele"];
 // Ziua de la care ținem registrul de casă pe zile. Tot ce e mai vechi intră într-un
 // singur sold de pornire, pentru că plățile de dinainte nu erau legate de o zi anume.
 const REGISTRU_CASA_START = "12.10.2026";
+// Registru documente: fiecare tip are propria numerotare (nr. de inregistrare). Randurile vechi, fara tip, sunt contracte.
+const DOC_TIPURI = [
+  { tip: "Contract", ico: "📃", plural: "Contracte", c: "#1565c0", bg: "#e3f2fd" },
+  { tip: "Adeverință", ico: "🧾", plural: "Adeverințe", c: "#6a1b9a", bg: "#f3e5f5" },
+  { tip: "Alt document", ico: "📎", plural: "Alte documente", c: "#e65100", bg: "#fff3e0" },
+];
+const docTip = (r) => (DOC_TIPURI.some((t) => t.tip === r.tip) ? r.tip : "Contract");
 const PIN_CORRECT = "336699";
 const USER_PASSWORDS = { Catalin: "Kraft$8888", Alexandru: "310890", Mihai: "336699" };
 // Login-ul ramane in localStorage pe fiecare telefon/calculator, deci nu poate fi sters de la distanta.
@@ -1373,6 +1380,7 @@ export default function App() {
   const [avPers, setAvPers] = useState("");
   const [expandedAv, setExpandedAv] = useState(null); // id of expanded avans row
   const [ctSearch, setCtSearch] = useState("");
+  const [ctTip, setCtTip] = useState(""); // "" = toate tipurile de documente
   const [pinUnlocked, setPinUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState("");
   const [pinError, setPinError] = useState(false);
@@ -1806,12 +1814,19 @@ export default function App() {
 
   // Contracte
   const updCT = mkUpd(contracte, setContracte, "contracte");
-  const delCT = mkDel(setContracte, "contracte", "acest contract");
-  const addCT = async () => {
-    const maxNr = contracte.reduce((m, r) => Math.max(m, parseInt(r.nr) || 0), 0);
-    const row = { nr: String(maxNr + 1), companie: "", data: today(), detalii: "" };
-    const { data } = await sb.from("contracte").insert(row).select();
-    if (data) { setContracte((p) => [...p, data[0]]); logAction("add", "contracte", data[0].id); }
+  const delCT = mkDel(setContracte, "contracte", "acest document");
+  // Numarul de inregistrare urmeaza numerotarea fiecarui tip (contractele au sirul lor, adeverintele pe al lor).
+  const addCT = async (tip = "Contract") => {
+    const maxNr = contracte.filter((r) => docTip(r) === tip).reduce((m, r) => Math.max(m, parseInt(r.nr) || 0), 0);
+    const row = { nr: String(maxNr + 1), companie: "", data: today(), detalii: "", tip };
+    const { data, error } = await sb.from("contracte").insert(row).select();
+    if (error) {
+      alert(/tip/.test(error.message)
+        ? ["Lipsește coloana „tip” din tabelul contracte.", "", "Deschide Supabase → SQL Editor și rulează o singură dată:", "", "alter table contracte add column if not exists tip text not null default 'Contract';"].join(String.fromCharCode(10))
+        : "Eroare: " + error.message);
+      return;
+    }
+    if (data) { setContracte((p) => [...p, data[0]]); logAction("add", "contracte", data[0].id, { tip }); }
   };
 
   // Furnizori PF
@@ -4239,7 +4254,7 @@ Reguli:
   })();
 
   // Contracte computed
-  const filtCT = sortByDateAsc(contracte.filter((r) => !ctSearch || r.companie?.toLowerCase().includes(ctSearch.toLowerCase()) || r.nr?.includes(ctSearch) || r.detalii?.toLowerCase().includes(ctSearch.toLowerCase())));
+  const filtCT = sortByDateAsc(contracte.filter((r) => (!ctTip || docTip(r) === ctTip) && (!ctSearch || r.companie?.toLowerCase().includes(ctSearch.toLowerCase()) || r.nr?.includes(ctSearch) || r.detalii?.toLowerCase().includes(ctSearch.toLowerCase()))));
 
   // Parole computed
   const filtParole = parole.filter((r) => {
@@ -4883,7 +4898,7 @@ Reguli:
 
       {/* Tabs */}
       <div style={{ display: "flex", background: "#fff", padding: "8px 10px", borderLeft: "1px solid #e2e8f0", borderRight: "1px solid #e2e8f0", borderBottom: "1px solid #eef2f6", overflowX: "auto" }}>
-        {[["dashboard","🏠 Dashboard"],["borderou","📄 Borderouri"],["pv","📋 PV & Anexa 3"],["cheltuieli","💸 Cheltuieli"],["colectari","🚛 Achiziții"],["livrari","📤 Vânzări"],["cantar","⚖️ Tichete Cântar"],["stoc","📦 Stocuri"],["produse","🛠️ Variabile"],["salariati","👷 Salariați"],["datorii","💳 Datorii"],["avansuri","💵 Avansuri & Dividende"],["contracte","📃 Contracte"],["deee","♻️ DEEE"],["parole","🔐 Parole"],["rapoarte","📊 Rapoarte"],["trasabilitate","🔄 Trasabilitate"],["audit","🕘 Istoric"]].filter(([k]) => k !== "audit" || esteAdminIstoric).map(([k, l]) => (
+        {[["dashboard","🏠 Dashboard"],["borderou","📄 Borderouri"],["pv","📋 PV & Anexa 3"],["cheltuieli","💸 Cheltuieli"],["colectari","🚛 Achiziții"],["livrari","📤 Vânzări"],["cantar","⚖️ Tichete Cântar"],["stoc","📦 Stocuri"],["produse","🛠️ Variabile"],["salariati","👷 Salariați"],["datorii","💳 Datorii"],["avansuri","💵 Avansuri & Dividende"],["contracte","🗂️ Registru documente"],["deee","♻️ DEEE"],["parole","🔐 Parole"],["rapoarte","📊 Rapoarte"],["trasabilitate","🔄 Trasabilitate"],["audit","🕘 Istoric"]].filter(([k]) => k !== "audit" || esteAdminIstoric).map(([k, l]) => (
           <button key={k} style={tabSt(k)} onClick={() => setTab(k)}>{l}</button>
         ))}
       </div>
@@ -7374,27 +7389,53 @@ Reguli:
           </div>
         )}
 
-        {/* ══ CONTRACTE ══ */}
+        {/* ══ REGISTRU DOCUMENTE (contracte, adeverinte, alte documente) ══ */}
         {tab === "contracte" && (
           <div>
             <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
-              <SC label="Total Contracte" value={contracte.filter((r) => r.companie).length + " buc."} c="#1565c0" bg="#e3f2fd" />
-              <SC label="Cu detalii" value={contracte.filter((r) => r.detalii).length + " buc."} c={G} bg="#e8f5e9" />
-              <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
-                <FastInput value={ctSearch} onChange={(e) => setCtSearch(e.target.value)} placeholder="🔍 Caută companie, nr, detalii..." style={{ border: "1px solid #ccc", borderRadius: 6, padding: "5px 10px", fontSize: 12, width: 220 }} />
+              <div onClick={() => setCtTip("")} style={{ cursor: "pointer", opacity: ctTip ? 0.55 : 1, outline: !ctTip ? "2px solid #263238" : "none", borderRadius: 8 }}><SC label="Toate documentele" value={contracte.filter((r) => r.companie).length + " buc."} c="#263238" bg="#eceff1" /></div>
+              {DOC_TIPURI.map((t) => (
+                <div key={t.tip} onClick={() => setCtTip(ctTip === t.tip ? "" : t.tip)} title={"Arată doar: " + t.plural} style={{ cursor: "pointer", opacity: ctTip && ctTip !== t.tip ? 0.55 : 1, outline: ctTip === t.tip ? `2px solid ${t.c}` : "none", borderRadius: 8 }}>
+                  <SC label={t.ico + " " + t.plural} value={contracte.filter((r) => docTip(r) === t.tip && r.companie).length + " buc."} c={t.c} bg={t.bg} />
+                </div>
+              ))}
+              <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <FastInput value={ctSearch} onChange={(e) => setCtSearch(e.target.value)} placeholder="🔍 Caută nr., companie/persoană, detalii..." style={{ border: "1px solid #ccc", borderRadius: 6, padding: "5px 10px", fontSize: 12, width: 240 }} />
                 {ctSearch && <button onClick={() => setCtSearch("")} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 16, lineHeight: 1 }}>✕</button>}
-                <button onClick={addCT} style={{ padding: "6px 14px", background: G, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Adaugă contract</button>
+                {DOC_TIPURI.map((t) => <button key={t.tip} onClick={() => addCT(t.tip)} style={{ padding: "6px 12px", background: t.c, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ {t.tip}</button>)}
               </div>
             </div>
+            <div style={{ fontSize: 11, color: "#78909c", marginBottom: 8 }}>Fiecare tip de document are propria numerotare (nr. de înregistrare): contractele, adeverințele și celelalte documente se numără separat.</div>
             <div style={TBL}>
-              <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 520 }}>
-                <colgroup><col style={{ width: 28 }} /><col style={{ width: 65 }} /><col style={{ width: "auto" }} /><col style={{ width: 130 }} /><col style={{ width: 180 }} /><col style={{ width: 30 }} /></colgroup>
-                <thead><tr style={{ background: G }}><th style={th({ background: "#155a35" })}></th><th style={th({ textAlign: "center" })}>Nr.</th><th style={th({ textAlign: "center" })}>Companie</th><th style={th({ textAlign: "center" })}>Data</th><th style={th({ textAlign: "center" })}>Detalii</th><th style={th({})}></th></tr></thead>
+              <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 700 }}>
+                <colgroup><col style={{ width: 28 }} /><col style={{ width: 90 }} /><col style={{ width: 130 }} /><col style={{ width: "auto" }} /><col style={{ width: 120 }} /><col style={{ width: 220 }} /><col style={{ width: 30 }} /></colgroup>
+                <thead><tr style={{ background: G }}><th style={th({ background: "#155a35" })}></th><th style={th({ textAlign: "center" })} title="Numărul de înregistrare, separat pe tip de document">Nr. înreg.</th><th style={th({ textAlign: "center" })}>Tip document</th><th style={th({ textAlign: "center" })}>Companie / Persoană</th><th style={th({ textAlign: "center" })}>Data</th><th style={th({ textAlign: "center" })}>Obiect / Detalii</th><th style={th({})}></th></tr></thead>
                 <tbody>
-                  {filtCT.length === 0 && <tr><td colSpan={6} style={{ textAlign: "center", padding: 20, color: "#aaa" }}>Niciun contract găsit.</td></tr>}
-                  {filtCT.map((r, i) => { const oi = contracte.indexOf(r); const isEmpty = !r.companie; const rowBg = isEmpty ? "#fafafa" : i % 2 === 0 ? "#fff" : "#f3f8ff"; const hasD = !!r.detalii; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td><td style={td({ background: "#e3f2fd", textAlign: "center", fontWeight: 700, color: "#1565c0", fontFamily: "monospace" })}><FastInput style={inp({ textAlign: "center", fontWeight: 700, color: "#1565c0", fontFamily: "monospace" })} value={r.nr || ""} onChange={(e) => updCT(oi, "nr", e.target.value)} /></td><td style={td({ background: rowBg, fontWeight: isEmpty ? 400 : 600, color: isEmpty ? "#bbb" : "#222", textAlign: "center" })}><div style={{ display: "flex", alignItems: "center", gap: 2 }}><FastInput title={r.companie || undefined} style={inp({ textAlign: "center", fontWeight: isEmpty ? 400 : 600, color: isEmpty ? "#bbb" : "#222" })} value={r.companie || ""} onChange={(e) => updCT(oi, "companie", e.target.value)} placeholder="—" /><button onClick={() => searchAnafInto((v) => updCT(oi, "companie", v))} title="Caută firma după CUI la ANAF" style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, flexShrink: 0, padding: 0 }}>🔍</button></div></td><td style={td({ background: rowBg, textAlign: "center", fontSize: 12 })}><DateInput value={r.data || ""} onChange={(v) => updCT(oi, "data", v)} /></td><td style={td({ background: hasD ? "#fff8e1" : rowBg, fontStyle: hasD ? "italic" : "normal", color: hasD ? "#e65100" : "#555", textAlign: "center" })}><FastInput title={r.detalii || undefined} style={inp({ textAlign: "center", fontStyle: hasD ? "italic" : "normal", color: hasD ? "#e65100" : "#555" })} value={r.detalii || ""} onChange={(e) => updCT(oi, "detalii", e.target.value)} placeholder="—" /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delCT(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 14 }}>✕</button></td></tr>); })}
+                  {filtCT.length === 0 && <tr><td colSpan={7} style={{ textAlign: "center", padding: 20, color: "#aaa" }}>Niciun document găsit.</td></tr>}
+                  {filtCT.map((r, i) => {
+                    const oi = contracte.indexOf(r);
+                    const t = DOC_TIPURI.find((x) => x.tip === docTip(r));
+                    const isEmpty = !r.companie;
+                    const rowBg = isEmpty ? "#fafafa" : i % 2 === 0 ? "#fff" : "#f3f8ff";
+                    const hasD = !!r.detalii;
+                    return (
+                      <tr key={r.id || i} style={{ background: rowBg }}>
+                        <td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td>
+                        <td style={td({ background: t.bg, textAlign: "center", fontWeight: 700, color: t.c, fontFamily: "monospace" })}><FastInput style={inp({ textAlign: "center", fontWeight: 700, color: t.c, fontFamily: "monospace" })} value={r.nr || ""} onChange={(e) => updCT(oi, "nr", e.target.value)} /></td>
+                        <td style={td({ background: rowBg, textAlign: "center", padding: 2 })}>
+                          <select value={docTip(r)} onChange={(e) => updCT(oi, "tip", e.target.value)} style={{ width: "100%", border: "none", background: "transparent", fontSize: 12, fontWeight: 600, color: t.c, cursor: "pointer" }}>
+                            {DOC_TIPURI.map((x) => <option key={x.tip} value={x.tip}>{x.ico} {x.tip}</option>)}
+                          </select>
+                        </td>
+                        <td style={td({ background: rowBg, fontWeight: isEmpty ? 400 : 600, color: isEmpty ? "#bbb" : "#222", textAlign: "center" })}><div style={{ display: "flex", alignItems: "center", gap: 2 }}><FastInput title={r.companie || undefined} style={inp({ textAlign: "center", fontWeight: isEmpty ? 400 : 600, color: isEmpty ? "#bbb" : "#222" })} value={r.companie || ""} onChange={(e) => updCT(oi, "companie", e.target.value)} placeholder="—" /><button onClick={() => searchAnafInto((v) => updCT(oi, "companie", v))} title="Caută firma după CUI la ANAF" style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, flexShrink: 0, padding: 0 }}>🔍</button></div></td>
+                        <td style={td({ background: rowBg, textAlign: "center", fontSize: 12 })}><DateInput value={r.data || ""} onChange={(v) => updCT(oi, "data", v)} /></td>
+                        <td style={td({ background: hasD ? "#fff8e1" : rowBg, fontStyle: hasD ? "italic" : "normal", color: hasD ? "#e65100" : "#555", textAlign: "center" })}><FastInput title={r.detalii || undefined} style={inp({ textAlign: "center", fontStyle: hasD ? "italic" : "normal", color: hasD ? "#e65100" : "#555" })} value={r.detalii || ""} onChange={(e) => updCT(oi, "detalii", e.target.value)} placeholder="—" /></td>
+                        <td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delCT(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 14 }}>✕</button></td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
-                <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={2} style={{ padding: "7px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td colSpan={4} style={{ padding: "7px 10px", fontSize: 12 }}>{filtCT.length} contracte din {contracte.length}</td></tr></tfoot>
+                <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={3} style={{ padding: "7px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td colSpan={4} style={{ padding: "7px 10px", fontSize: 12 }}>{filtCT.length} documente din {contracte.length}</td></tr></tfoot>
               </table>
             </div>
           </div>
