@@ -2012,6 +2012,21 @@ export default function App() {
     return { tara: parseSuma(t.tara), data: t.data, nr: t.nr_tichet, partener: t.partener || "" };
   };
 
+  // Un tichet de cantar nu se poate emite/inchide/printa daca vreun camp e necompletat — singurul optional e Factura.
+  // (Observatiile sunt doar o nota libera, nu un camp al tichetului.) Intoarce lista campurilor lipsa.
+  const campuriLipsaTichet = (t) => {
+    const lipsa = [];
+    const gol = (v) => !String(v ?? "").trim();
+    if (gol(t.partener)) lipsa.push(t.tip === "Iesire" ? "Client" : "Furnizor");
+    if (gol(t.transportator)) lipsa.push("Transportator");
+    if (gol(t.nr_masina)) lipsa.push("Nr. auto");
+    if (gol(t.sofer)) lipsa.push("Delegat (șofer)");
+    if (gol(t.material)) lipsa.push("Material / Deșeu");
+    if (gol(t.aviz)) lipsa.push("Aviz");
+    return lipsa;
+  };
+  const alertaCampuriLipsa = (lipsa) => alert(["Tichetul nu poate fi emis — completați câmpurile obligatorii:", "", ...lipsa.map((x) => "• " + x), "", "(Singurul câmp opțional este Factura.)"].join(String.fromCharCode(10)));
+
   const getNextTichetNr = () => {
     const nrs = ticheteList.map((t) => parseInt(t.nr_tichet) || 0);
     const maxNr = nrs.length ? Math.max(...nrs) : 0;
@@ -2019,9 +2034,9 @@ export default function App() {
   };
   const salveazaTichet1 = async () => {
     if (ticSavingRef.current) return; // click dublu / apasat de mai multe ori inainte sa se reactualizeze ecranul -> ar crea acelasi nr_tichet de mai multe ori
-    if (!ticNou.partener) { alert(ticNou.tip === "Iesire" ? "Completați clientul (cine primește marfa)!" : "Completați furnizorul (cine aduce marfa)!"); return; }
-    if (!ticNou.nr_masina) { alert("Completați nr. de înmatriculare!"); return; }
-    if (!ticNou.greutate || parseSuma(ticNou.greutate) <= 0) { alert("Completați greutatea primei cântăriri!"); return; }
+    const lipsaNou = campuriLipsaTichet(ticNou);
+    if (!ticNou.greutate || parseSuma(ticNou.greutate) <= 0) lipsaNou.push("Greutatea primei cântăriri");
+    if (lipsaNou.length) { alertaCampuriLipsa(lipsaNou); return; }
     ticSavingRef.current = true;
     setTicSaving(true);
     try {
@@ -2162,6 +2177,8 @@ export default function App() {
     }
   };
   const inchideTichet = async (t) => {
+    const lipsaInch = campuriLipsaTichet(t);
+    if (lipsaInch.length) { alertaCampuriLipsa([...lipsaInch]); return; }
     const v = parseSuma(ticTaraInput[t.id]);
     if (!v || v <= 0) { alert("Introduceți greutatea celei de-a doua cântăriri!"); return; }
     const areBrut = t.brut != null && t.brut !== "";
@@ -2231,7 +2248,9 @@ export default function App() {
   const salveazaTicEdit = async () => {
     const brutV = parseSuma(ticEdit.brut);
     const taraV = parseSuma(ticEdit.tara);
-    if (!ticEdit.partener) { alert("Furnizorul nu poate fi gol!"); return; }
+    // Un tichet rezervat (fara nicio cantarire) poate ramane incomplet; orice tichet cu cantariri are nevoie de toate campurile.
+    if (brutV > 0 || taraV > 0) { const lipsaEd = campuriLipsaTichet(ticEdit); if (lipsaEd.length) { alertaCampuriLipsa(lipsaEd); return; } }
+    else if (!ticEdit.partener && ticEdit.status !== "gol") { alert("Furnizorul nu poate fi gol!"); return; }
     // Un tichet deschis are o singura cantarire — il putem corecta fara sa-l si inchidem.
     // Se inchide doar cand sunt completate ambele greutati.
     const ambele = brutV > 0 && taraV > 0;
@@ -2367,6 +2386,8 @@ export default function App() {
     return `<html><head><title>Tichet ${t.serie} ${t.nr_tichet}</title><style>html,body{margin:0;padding:0;} body{box-sizing:border-box;padding:4mm;max-width:150mm;} *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;} @page{size:A5 portrait;margin:5mm;} @media print{ body{page-break-after:avoid;} }</style></head><body>${html}<scr` + `ipt>window.onload=function(){setTimeout(function(){window.print();},300);};</scr` + `ipt></body></html>`;
   };
   const printTichet = (t) => {
+    const lipsaP = campuriLipsaTichet(t);
+    if (lipsaP.length) { alertaCampuriLipsa(lipsaP); return; }
     const w = window.open("", "_blank");
     w.document.write(buildTichetHTML(t));
     w.document.close(); w.focus();
@@ -2390,6 +2411,8 @@ export default function App() {
     localStorage.setItem("gk_print_server", nv ? "1" : "0");
   };
   const trimiteLaPrint = async (t) => {
+    const lipsaQ = campuriLipsaTichet(t);
+    if (lipsaQ.length) { alertaCampuriLipsa(lipsaQ); return; }
     const { error } = await sb.from("print_queue").insert({ tichet_id: t.id, status: "pending", requested_by: currentUser || "" });
     if (error) { alert("Eroare la trimitere: " + error.message); return; }
     alert(`🖨️ Tichetul TC #${t.nr_tichet} a fost trimis la imprimanta de la birou.`);
@@ -4759,7 +4782,7 @@ Reguli:
                   nr_masina: ultim.nr_masina || p.nr_masina, sofer: ultim.sofer || p.sofer, material: ultim.material || p.material,
                 };
               })} /></div></div>
-              <div><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Transportator</label><div style={{ border: "1px solid #ccc", borderRadius: 5, padding: "2px 4px" }}><ACStrict value={ticEdit.transportator} options={[...new Set(["GREEN KRAFT SRL", ...pfList.map(f => f.denumire), ...pjList.map(f => f.denumire)].filter(Boolean))]} placeholder="noi / PF / PJ" strict onChange={(v) => { const f = pjList.find(x => x.denumire === v) || pfList.find(x => x.denumire === v); const cui = v.toUpperCase().includes("GREEN KRAFT") ? "36191378" : (f?.cod_fiscal || ""); setTicEdit((p) => {
+              <div><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Transportator <span style={{ color: "#c62828" }}>*</span></label><div style={{ border: "1px solid #ccc", borderRadius: 5, padding: "2px 4px" }}><ACStrict value={ticEdit.transportator} options={[...new Set(["GREEN KRAFT SRL", ...pfList.map(f => f.denumire), ...pjList.map(f => f.denumire)].filter(Boolean))]} placeholder="noi / PF / PJ" strict onChange={(v) => { const f = pjList.find(x => x.denumire === v) || pfList.find(x => x.denumire === v); const cui = v.toUpperCase().includes("GREEN KRAFT") ? "36191378" : (f?.cod_fiscal || ""); setTicEdit((p) => {
                 if (p.transportator === v) return p;
                 const baza = { ...p, transportator: v, transportator_cui: cui };
                 // Transportator schimbat: aducem masina si soferul din ultimul tichet al perechii furnizor + transportator;
@@ -4773,10 +4796,10 @@ Reguli:
                 return { ...baza, nr_masina: ultim.nr_masina, sofer: ultim.sofer || p.sofer, material: p.material || ultim.material || "" };
               }); }} /></div></div>
               <div style={{ display: "flex", gap: 8 }}>
-                <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Mașină</label><div style={{ border: "1px solid #ccc", borderRadius: 5, padding: "2px 4px" }}><ACStrict value={ticEdit.nr_masina} options={[...new Set([...TIC_MASINI, ...ticheteList.map(t => t.nr_masina)].filter(Boolean))].sort()} placeholder="IF55KFT" onChange={(v) => setTicEdit((p) => ({ ...p, nr_masina: v.toUpperCase() }))} /></div></div>
-                <div style={{ flex: 1.4 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Șofer</label><div style={{ border: "1px solid #ccc", borderRadius: 5, padding: "2px 4px" }}><ACStrict value={ticEdit.sofer} options={[...new Set([...TIC_DELEGATI, ...delegatiList.map(d => (d.nume || "").toUpperCase()), ...ticheteList.map(t => (t.sofer || "").toUpperCase())].filter(Boolean))].sort()} placeholder="alege sau scrie nou" onChange={(v) => setTicEdit((p) => ({ ...p, sofer: v }))} /></div></div>
+                <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Mașină <span style={{ color: "#c62828" }}>*</span></label><div style={{ border: "1px solid #ccc", borderRadius: 5, padding: "2px 4px" }}><ACStrict value={ticEdit.nr_masina} options={[...new Set([...TIC_MASINI, ...ticheteList.map(t => t.nr_masina)].filter(Boolean))].sort()} placeholder="IF55KFT" onChange={(v) => setTicEdit((p) => ({ ...p, nr_masina: v.toUpperCase() }))} /></div></div>
+                <div style={{ flex: 1.4 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Șofer <span style={{ color: "#c62828" }}>*</span></label><div style={{ border: "1px solid #ccc", borderRadius: 5, padding: "2px 4px" }}><ACStrict value={ticEdit.sofer} options={[...new Set([...TIC_DELEGATI, ...delegatiList.map(d => (d.nume || "").toUpperCase()), ...ticheteList.map(t => (t.sofer || "").toUpperCase())].filter(Boolean))].sort()} placeholder="alege sau scrie nou" onChange={(v) => setTicEdit((p) => ({ ...p, sofer: v }))} /></div></div>
               </div>
-              <div><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Material / Deșeu</label><div style={{ border: "1px solid #ccc", borderRadius: 5, padding: "2px 4px" }}><ACStrict value={ticEdit.material} options={PRODUSE_DYN} placeholder="Selectează..." style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, boxSizing: "border-box" }} onChange={(v) => setTicEdit((p) => ({ ...p, material: v }))} /></div></div>
+              <div><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Material / Deșeu <span style={{ color: "#c62828" }}>*</span></label><div style={{ border: "1px solid #ccc", borderRadius: 5, padding: "2px 4px" }}><ACStrict value={ticEdit.material} options={PRODUSE_DYN} placeholder="Selectează..." style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, boxSizing: "border-box" }} onChange={(v) => setTicEdit((p) => ({ ...p, material: v }))} /></div></div>
               <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
                 <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 700, color: G }}>Brut (kg)</label><FastInput style={{ width: "100%", padding: "7px 8px", border: `1.5px solid ${G}`, borderRadius: 5, fontSize: 14, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="text" inputMode="decimal" value={ticEdit.brut} onChange={(e) => setTicEdit((p) => ({ ...p, brut: e.target.value }))} /></div>
                 <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 700, color: "#e65100" }}>Tara (kg)</label><FastInput style={{ width: "100%", padding: "7px 8px", border: "1.5px solid #ffa726", borderRadius: 5, fontSize: 14, fontWeight: 700, textAlign: "right", boxSizing: "border-box", fontFamily: "monospace" }} type="text" inputMode="decimal" value={ticEdit.tara} onChange={(e) => setTicEdit((p) => ({ ...p, tara: e.target.value }))} /></div>
@@ -4811,7 +4834,7 @@ Reguli:
               })()}
               <div style={{ display: "flex", gap: 8 }}>
                 <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Factura</label><FastInput style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, boxSizing: "border-box" }} value={ticEdit.factura} onChange={(e) => setTicEdit((p) => ({ ...p, factura: e.target.value }))} /></div>
-                <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Aviz</label><FastInput style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, boxSizing: "border-box" }} value={ticEdit.aviz} onChange={(e) => setTicEdit((p) => ({ ...p, aviz: e.target.value }))} /></div>
+                <div style={{ flex: 1 }}><label style={{ fontSize: 11, fontWeight: 600, color: "#555" }}>Aviz <span style={{ color: "#c62828" }}>*</span></label><FastInput style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: 13, boxSizing: "border-box" }} value={ticEdit.aviz} onChange={(e) => setTicEdit((p) => ({ ...p, aviz: e.target.value }))} /></div>
               </div>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 700, color: "#6a1b9a" }}>⚖️ Cântărit BRUT la</label>
@@ -6709,18 +6732,18 @@ Reguli:
                       <div style={{ marginBottom: 10 }}><label style={FL}>{ticNou.tip === "Iesire" ? "Client (cine primește marfa)" : "Furnizor (cine aduce marfa)"} <span style={{ color: "#c62828" }}>*</span></label><div style={ACB}><ACStrict value={ticNou.partener} options={partenerOpts} placeholder="Caută partener înregistrat..." strict onChange={(v) => { const f = pjList.find(x => x.denumire === v) || pfList.find(x => x.denumire === v); setTicNou((p) => ({ ...p, partener: v, partener_cui: f?.cod_fiscal || "" })); }} /></div></div>
                       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
                         <div style={{ flex: 1 }}><label style={FL}>{ticNou.tip === "Iesire" ? "Furnizor" : "Client"}</label><div style={{ ...FI, color: G, fontWeight: 700, background: "#f0faf4", border: `1px solid ${G}`, display: "flex", alignItems: "center" }}>GREEN KRAFT SRL</div></div>
-                        <div style={{ flex: 1 }}><label style={FL}>Transportator</label><div style={ACB}><ACStrict value={ticNou.transportator} options={transpOpts} placeholder="noi / PF / PJ" strict onChange={(v) => { const f = pjList.find(x => x.denumire === v) || pfList.find(x => x.denumire === v); const cui = v.toUpperCase().includes("GREEN KRAFT") ? "36191378" : (f?.cod_fiscal || ""); setTicNou((p) => ({ ...p, transportator: v, transportator_cui: cui })); }} /></div></div>
+                        <div style={{ flex: 1 }}><label style={FL}>Transportator <span style={{ color: "#c62828" }}>*</span></label><div style={ACB}><ACStrict value={ticNou.transportator} options={transpOpts} placeholder="noi / PF / PJ" strict onChange={(v) => { const f = pjList.find(x => x.denumire === v) || pfList.find(x => x.denumire === v); const cui = v.toUpperCase().includes("GREEN KRAFT") ? "36191378" : (f?.cod_fiscal || ""); setTicNou((p) => ({ ...p, transportator: v, transportator_cui: cui })); }} /></div></div>
                       </div>
                       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
                         <div style={{ flex: 1 }}><label style={FL}>Nr. auto <span style={{ color: "#c62828" }}>*</span></label><div style={ACB}><ACStrict value={ticNou.nr_masina} options={masiniOpts} placeholder="IF55KFT" onChange={(v) => setTicNou((p) => ({ ...p, nr_masina: v.toUpperCase() }))} /></div></div>
-                        <div style={{ flex: 1 }}><label style={FL}>Delegat (șofer)</label><div style={ACB}><ACStrict value={ticNou.sofer} options={soferiOpts} placeholder="alege sau scrie nou" onChange={(v) => setTicNou((p) => ({ ...p, sofer: v }))} /></div></div>
+                        <div style={{ flex: 1 }}><label style={FL}>Delegat (șofer) <span style={{ color: "#c62828" }}>*</span></label><div style={ACB}><ACStrict value={ticNou.sofer} options={soferiOpts} placeholder="alege sau scrie nou" onChange={(v) => setTicNou((p) => ({ ...p, sofer: v }))} /></div></div>
                       </div>
-                      <div style={{ marginBottom: 10 }}><label style={FL}>Material / Deșeu</label><div style={ACB}><ACStrict value={ticNou.material} options={PRODUSE_DYN} placeholder="Selectează..." style={{ width: "100%", padding: "7px 9px", border: "1px solid #d5d5d5", borderRadius: 6, fontSize: 13, boxSizing: "border-box" }} onChange={(v) => setTicNou((p) => ({ ...p, material: v }))} /></div></div>
+                      <div style={{ marginBottom: 10 }}><label style={FL}>Material / Deșeu <span style={{ color: "#c62828" }}>*</span></label><div style={ACB}><ACStrict value={ticNou.material} options={PRODUSE_DYN} placeholder="Selectează..." style={{ width: "100%", padding: "7px 9px", border: "1px solid #d5d5d5", borderRadius: 6, fontSize: 13, boxSizing: "border-box" }} onChange={(v) => setTicNou((p) => ({ ...p, material: v }))} /></div></div>
                       <div style={{ display: "flex", gap: 8 }}>
                         <div style={{ flex: 1 }}><label style={FL}>Factura</label><FastInput style={FI} value={ticNou.factura} onChange={(e) => setTicNou((p) => ({ ...p, factura: e.target.value }))} placeholder="opțional" /></div>
                         <div style={{ flex: 1 }}>
-                          <label style={FL}>Aviz</label>
-                          <FastInput style={FI} value={ticNou.aviz} onChange={(e) => setTicNou((p) => ({ ...p, aviz: e.target.value }))} placeholder="opțional" />
+                          <label style={FL}>Aviz <span style={{ color: "#c62828" }}>*</span></label>
+                          <FastInput style={FI} value={ticNou.aviz} onChange={(e) => setTicNou((p) => ({ ...p, aviz: e.target.value }))} placeholder="obligatoriu" />
                           {ultimulTicAviz && <div style={{ fontSize: 10, color: "#888", marginTop: 3 }}>Ultimul aviz {ticNou.partener}: <strong>{ultimulTicAviz.aviz}</strong> {ultimulTicAviz.nr_tichet ? `(TC #${ultimulTicAviz.nr_tichet}, ${ultimulTicAviz.data})` : `(${ultimulTicAviz.data})`}</div>}
                         </div>
                         <div style={{ flex: 1 }}><label style={FL}>Observații</label><FastInput style={FI} value={ticNou.obs} onChange={(e) => setTicNou((p) => ({ ...p, obs: e.target.value }))} placeholder="opțional" /></div>
