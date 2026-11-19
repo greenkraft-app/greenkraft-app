@@ -1410,6 +1410,7 @@ export default function App() {
   const [colMonth, setColMonth] = useState(() => { const d = new Date(); return `${String(d.getMonth()+1).padStart(2,"0")}.${d.getFullYear()}`; });
   const [colDataDe, setColDataDe] = useState("");
   const [colDataPana, setColDataPana] = useState("");
+  const [colFaraNr, setColFaraNr] = useState(false); // true = ascunde achizitiile fara Nr. doc.
   const [livSearch, setLivSearch] = useState("");
   const [livClient, setLivClient] = useState("");
   const [livProdus, setLivProdus] = useState([]);
@@ -1418,6 +1419,7 @@ export default function App() {
   const [livDataPana, setLivDataPana] = useState("");
   const [livFact, setLivFact] = useState("");
   const [livInc, setLivInc] = useState("");
+  const [livFaraNr, setLivFaraNr] = useState(false); // true = ascunde vanzarile fara Nr. doc.
   // ── Rapoarte state ────────────────────────────────────────
   const [rapDateStart, setRapDateStart] = useState("");
   const [rapDateEnd, setRapDateEnd] = useState("");
@@ -1625,6 +1627,7 @@ export default function App() {
   const updCOL = mkUpd(colRows, setColRows, "colectari");
   const delCOL = mkDel(setColRows, "colectari", "această achiziție");
   const addCOL = async () => {
+    setColFaraNr(false); // randul nou nu are Nr. doc. inca; altfel ar disparea imediat din lista
     const row = { data: today(), agent: "", furn: "", nr_doc: "", cat: "Curte", produs: "", cant: 0, pret: 0, ach: "", ach_de: "", det: "" };
     const { data } = await sb.from("colectari").insert(row).select();
     if (data && data.length) { setColRows((p) => [...p, data[0]]); logAction("add", "colectari", data[0].id); }
@@ -1728,6 +1731,7 @@ export default function App() {
   const updLIV = mkUpd(livRows, setLivRows, "livrari");
   const delLIV = mkDel(setLivRows, "livrari", "această vânzare");
   const addLIV = async () => {
+    setLivFaraNr(false);
     const row = { data: today(), nr: "", client: "", produs: "", cant: 0, pret: 0, fact: "NU", inc: "NU", det: "RECEPTIE" }; // valori implicite la o vanzare noua
     const { data } = await sb.from("livrari").insert(row).select();
     if (data && data.length) { setLivRows((p) => [...p, data[0]]); logAction("add", "livrari", data[0].id); }
@@ -6174,6 +6178,7 @@ Reguli:
         {/* ══ COLECTARI ══ */}
         {tab === "colectari" && (() => {
           const colFiltered = sortByDateAsc(colRows.filter(r => {
+            if (colFaraNr && !String(r.nr_doc || "").trim()) return false;
             if (colMonth && monthOf(r.data) !== colMonth) return false;
             if (!inDateRange(r.data, colDataDe, colDataPana)) return false;
             if (colCat && r.cat !== colCat) return false;
@@ -6196,6 +6201,7 @@ Reguli:
             </div>
             <div style={{ background: "#f5f5f5", border: "1px solid #ddd", borderRadius: 8, padding: 10, marginBottom: 10, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
               <FastInput value={colSearch} onChange={(e) => setColSearch(e.target.value)} placeholder="🔍 Caută furnizor, produs, achitat de, detalii, nr. doc..." style={{ flex: 1, minWidth: 180, border: "1px solid #ccc", borderRadius: 5, padding: "5px 10px", fontSize: 12 }} />
+              <label title="Ascunde achizițiile la care Nr. doc. nu e completat" style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 600, color: colFaraNr ? "#c62828" : "#555", cursor: "pointer", whiteSpace: "nowrap" }}><input type="checkbox" checked={colFaraNr} onChange={(e) => setColFaraNr(e.target.checked)} style={{ accentColor: "#c62828" }} />Ascunde fără Nr. doc.</label>
               <select value={colMonth} onChange={(e) => setColMonth(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}>
                 <option value="">📅 Toate lunile</option>
                 {colMonthOpts.map(m => <option key={m}>{m}</option>)}
@@ -6222,7 +6228,7 @@ Reguli:
                 <option value="Nu">⏳ Neachitat</option>
               </select>
               <button onClick={() => exportFiltrat("col", colFiltered)} disabled={rapLoading} title="Descarcă în Excel exact ce e afișat după filtre" style={{ background: "#fff", color: "#059669", border: "1px solid #059669", borderRadius: 5, padding: "5px 10px", cursor: rapLoading ? "wait" : "pointer", fontSize: 11, fontWeight: 700 }}>📥 Export Excel ({colFiltered.length})</button>
-              {(colSearch || colMonth || colCat || colAchitat || colFurn || colProdus.length || colDataDe || colDataPana) && <button onClick={() => { setColSearch(""); setColMonth(""); setColCat(""); setColAchitat(""); setColFurn(""); setColProdus([]); setColDataDe(""); setColDataPana(""); }} style={{ background: "#e53935", color: "#fff", border: "none", borderRadius: 5, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕ Reset</button>}
+              {(colSearch || colMonth || colCat || colAchitat || colFurn || colProdus.length || colDataDe || colDataPana || colFaraNr) && <button onClick={() => { setColFaraNr(false); setColSearch(""); setColMonth(""); setColCat(""); setColAchitat(""); setColFurn(""); setColProdus([]); setColDataDe(""); setColDataPana(""); }} style={{ background: "#e53935", color: "#fff", border: "none", borderRadius: 5, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕ Reset</button>}
             </div>
             <div style={TBL}>
               <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 1564 }}>
@@ -6276,6 +6282,7 @@ Reguli:
         {/* ══ LIVRARI ══ */}
         {tab === "livrari" && (() => {
           const livFiltered = sortByDateAsc(livRows.filter(r => {
+            if (livFaraNr && !String(r.nr || "").trim()) return false;
             if (livMonth && monthOf(r.data) !== livMonth) return false;
             if (!inDateRange(r.data, livDataDe, livDataPana)) return false;
             if (livClient && r.client !== livClient) return false;
@@ -6296,6 +6303,7 @@ Reguli:
             </div>
             <div style={{ background: "#f5f5f5", border: "1px solid #ddd", borderRadius: 8, padding: 10, marginBottom: 10, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
               <FastInput value={livSearch} onChange={(e) => setLivSearch(e.target.value)} placeholder="🔍 Caută client, produs, nr factură, detalii..." style={{ flex: 1, minWidth: 180, border: "1px solid #ccc", borderRadius: 5, padding: "5px 10px", fontSize: 12 }} />
+              <label title="Ascunde vânzările la care Nr. doc. nu e completat" style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 600, color: livFaraNr ? "#c62828" : "#555", cursor: "pointer", whiteSpace: "nowrap" }}><input type="checkbox" checked={livFaraNr} onChange={(e) => setLivFaraNr(e.target.checked)} style={{ accentColor: "#c62828" }} />Ascunde fără Nr. doc.</label>
               <select value={livMonth} onChange={(e) => setLivMonth(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 5, padding: "5px 8px", fontSize: 12 }}>
                 <option value="">📅 Toate lunile</option>
                 {livMonthOpts.map(m => <option key={m}>{m}</option>)}
@@ -6323,7 +6331,7 @@ Reguli:
                 <option value="NU">⏳ Neîncasat</option>
               </select>
               <button onClick={() => exportFiltrat("liv", livFiltered)} disabled={rapLoading} title="Descarcă în Excel exact ce e afișat după filtre" style={{ background: "#fff", color: "#6a1b9a", border: "1px solid #6a1b9a", borderRadius: 5, padding: "5px 10px", cursor: rapLoading ? "wait" : "pointer", fontSize: 11, fontWeight: 700 }}>📥 Export Excel ({livFiltered.length})</button>
-              {(livSearch || livMonth || livClient || livProdus.length || livDataDe || livDataPana || livFact || livInc) && <button onClick={() => { setLivSearch(""); setLivMonth(""); setLivClient(""); setLivProdus([]); setLivDataDe(""); setLivDataPana(""); setLivFact(""); setLivInc(""); }} style={{ background: "#e53935", color: "#fff", border: "none", borderRadius: 5, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕ Reset</button>}
+              {(livSearch || livMonth || livClient || livProdus.length || livDataDe || livDataPana || livFact || livInc || livFaraNr) && <button onClick={() => { setLivFaraNr(false); setLivSearch(""); setLivMonth(""); setLivClient(""); setLivProdus([]); setLivDataDe(""); setLivDataPana(""); setLivFact(""); setLivInc(""); }} style={{ background: "#e53935", color: "#fff", border: "none", borderRadius: 5, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕ Reset</button>}
             </div>
             <div style={TBL}>
               <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 1310 }}>
