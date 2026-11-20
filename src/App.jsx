@@ -1685,6 +1685,23 @@ export default function App() {
       { detalii: r.det, suma: parseSuma(r.suma) || 0 });
   };
 
+  // Aceeași bifă, pentru borderourile din Registru PF (valoarea = ce s-a plătit efectiv persoanei).
+  const toggleDinCasaReg = async (r, valoare) => {
+    setRegistru((p) => p.map((x) => (x.id === r.id ? { ...x, din_casa: valoare } : x)));
+    const { error } = await sb.from("registru").update({ din_casa: valoare }).eq("id", r.id);
+    if (error) {
+      setRegistru((p) => p.map((x) => (x.id === r.id ? { ...x, din_casa: !valoare } : x)));
+      alert(
+        /din_casa/.test(error.message)
+          ? "Lipsește coloana „din_casa” din tabelul registru." + String.fromCharCode(10, 10) + "Deschide Supabase → SQL Editor și rulează o singură dată:" + String.fromCharCode(10, 10) + "alter table registru add column din_casa boolean not null default false;"
+          : "Eroare la salvare: " + error.message
+      );
+      return;
+    }
+    logAction(valoare ? "Plătit din casă" : "Anulat plata din casă", "registru", r.id,
+      { borderou: `${r.serie} ${r.nr}`, furnizor: r.furnizor, suma: parseSuma(r.valoare) || 0 });
+  };
+
   // ── Transfer catre WiseWeee (extensie Chrome) ──────────────
   const findTichetPentruColectare = (r) => {
     if (r.tichet_id) {
@@ -1939,7 +1956,7 @@ export default function App() {
       const denumire = p.den.toUpperCase();
       // pastram trasabilitatea deja alocata liniei cu acelasi deseu
       const vechiRand = vechi.find(x => (x.denumire || "").toUpperCase() === denumire);
-      return { serie: b.serie, nr: b.nr, data: b.data, furnizor: b.det, adresa: b.dom, cnp: b.cnp, denumire, cantitate: parseSuma(p.cant) || 0, pu: parseSuma(p.pret) || 0, valoare: Math.round(calcRetineri(v, b.sursa).rest), ...(vechiRand?.trasabilitate ? { trasabilitate: vechiRand.trasabilitate } : {}) };
+      return { serie: b.serie, nr: b.nr, data: b.data, furnizor: b.det, adresa: b.dom, cnp: b.cnp, denumire, cantitate: parseSuma(p.cant) || 0, pu: parseSuma(p.pret) || 0, valoare: Math.round(calcRetineri(v, b.sursa).rest), ...(vechiRand?.trasabilitate ? { trasabilitate: vechiRand.trasabilitate } : {}), ...(vechiRand?.din_casa ? { din_casa: true } : {}) };
     });
     if (editBord && vechi.length) {
       const { error: delErr } = await sb.from("registru").delete().in("id", vechi.map(x => x.id));
@@ -4164,9 +4181,11 @@ Reguli:
   const valoareAchizitie = (r) => (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0);
   const achizitiiDinCasa = colRows.filter((r) => r.din_casa);
   const cheltuieliDinCasa = chRows.filter((r) => r.din_casa);
+  const borderouriDinCasa = registru.filter((r) => r.din_casa);
+  const totalBorderouriDinCasa = borderouriDinCasa.reduce((s, r) => s + (parseSuma(r.valoare) || 0), 0);
   const totalAchizitiiDinCasa = achizitiiDinCasa.reduce((s, r) => s + valoareAchizitie(r), 0);
   const totalCheltuieliDinCasa = cheltuieliDinCasa.reduce((s, r) => s + (parseSuma(r.suma) || 0), 0);
-  const cheltuitDinCasa = totalAchizitiiDinCasa + totalCheltuieliDinCasa;
+  const cheltuitDinCasa = totalAchizitiiDinCasa + totalCheltuieliDinCasa + totalBorderouriDinCasa;
   // Afișat si in headerul aplicatiei pentru vizibilitate rapida.
   const ajustariCasa = sortByDateAsc(avRows.filter((r) => r.tip === "ajustare_casa"));
   const totalAjustariCasa = ajustariCasa.reduce((s, r) => s + (parseSuma(r.suma) || 0), 0);
@@ -4195,6 +4214,7 @@ Reguli:
       (r.decont || []).forEach((d) => pune(d.data || r.data, "platiVechi", parseSuma(d.suma) || 0));
     });
     achizitiiDinCasa.forEach((r) => pune(r.data, "achizitii", valoareAchizitie(r)));
+    borderouriDinCasa.forEach((r) => pune(r.data, "achizitii", parseSuma(r.valoare) || 0)); // borderourile PF sunt tot achizitii
     cheltuieliDinCasa.forEach((r) => pune(r.data, "cheltuieli", parseSuma(r.suma) || 0));
     ajustariCasa.forEach((r) => pune(r.data, "ajustare", parseSuma(r.suma) || 0));
     let sold = soldPornire;
@@ -5366,7 +5386,7 @@ Reguli:
                 </div>
                 <div style={TBL}>
                   <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 800 }}>
-                    <thead><tr>{[{ l: "", w: 28 }, ...regCols, { l: "🖨️ Print", w: 70 }, { l: "✏️", w: 40 }, { l: "", w: 30 }].map((c, i) => <th key={i} style={{ ...th({ background: G }), width: c.w }}>{c.l}</th>)}</tr></thead>
+                    <thead><tr>{[{ l: "", w: 28 }, ...regCols, { l: "Din casă", w: 62 }, { l: "🖨️ Print", w: 70 }, { l: "✏️", w: 40 }, { l: "", w: 30 }].map((c, i) => <th key={i} style={{ ...th({ background: G }), width: c.w }}>{c.l}</th>)}</tr></thead>
                     <tbody>{sortByDateAsc(filteredReg).map((r, i, sortedReg) => {
                       const rowBg = i % 2 === 0 ? "#fff" : "#f7faf8";
                       // Show print button only on first row of each serie+nr group
@@ -5377,6 +5397,7 @@ Reguli:
                         <tr key={r.id || i} style={{ background: rowBg }}>
                           <td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 133}</td>
                           {regCols.map((c) => (<td key={c.k} style={td({ background: c.k === "valoare" ? "#e8f5e9" : rowBg, textAlign: ["cantitate", "pu", "valoare"].includes(c.k) ? "right" : "left", fontWeight: c.k === "valoare" || c.k === "nr" ? 600 : 400, color: c.k === "valoare" ? G : "#333", whiteSpace: "nowrap", maxWidth: c.w + 20, overflow: "hidden", textOverflow: "ellipsis" })}>{["cantitate", "pu", "valoare"].includes(c.k) ? fmt(r[c.k]) : r[c.k]}</td>))}
+                          <td style={td({ textAlign: "center", background: r.din_casa ? "#b2ebf2" : rowBg })} title={r.din_casa ? `Se scade din casă: ${fmt(parseSuma(r.valoare) || 0)} lei` : "Bifează dacă ai plătit din banii aduși în casă"}><input type="checkbox" checked={!!r.din_casa} onChange={(e) => toggleDinCasaReg(r, e.target.checked)} style={{ cursor: "pointer", width: 16, height: 16 }} /></td>
                           <td style={td({ textAlign: "center", padding: 3 })}>
                             {isFirstInGroup && (
                               <button
@@ -5401,7 +5422,7 @@ Reguli:
                         </tr>
                       );
                     })}</tbody>
-                    <tfoot><tr style={{ background: G, color: "#fff" }}><td></td><td colSpan={6} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(filteredReg.reduce((s, r) => s + (parseSuma(r.cantitate) || 0), 0))}</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(filteredReg.reduce((s, r) => s + (parseSuma(r.valoare) || 0), 0))}</td><td></td><td></td><td></td></tr></tfoot>
+                    <tfoot><tr style={{ background: G, color: "#fff" }}><td></td><td colSpan={6} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(filteredReg.reduce((s, r) => s + (parseSuma(r.cantitate) || 0), 0))}</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(filteredReg.reduce((s, r) => s + (parseSuma(r.valoare) || 0), 0))}</td><td style={{ padding: "4px 6px", textAlign: "right" }} title="Total borderouri bifate „Din casă” — se scad din banii aduși în casă"><div style={{ fontSize: 9, opacity: 0.85, lineHeight: 1.1 }}>bifate</div><div style={{ fontWeight: 700, fontSize: 12 }}>{fmt(filteredReg.filter((r) => r.din_casa).reduce((s, r) => s + (parseSuma(r.valoare) || 0), 0))}</div></td><td></td><td></td><td></td></tr></tfoot>
                   </table>
                 </div>
               </div>
@@ -7281,7 +7302,7 @@ Reguli:
                 </div>
               )}
               <div style={{ background: "#e0f7fa", border: "1px solid #80deea", borderRadius: 8, padding: "9px 12px", marginBottom: 12, fontSize: 12, color: "#00636b" }}>
-                Banii se scad automat: bifează <strong>„Din casă"</strong> pe achiziția plătită din casă, în 🚛 Achiziții.
+                Banii se scad automat: bifează <strong>„Din casă"</strong> pe achiziția plătită din casă, în 🚛 Achiziții (sau pe borderoul din 📋 Registru PF).
                 {platiVechiTotal > 0 && <> Cele <strong>{fmt(platiVechiTotal)} lei</strong> de la „Plăți anterioare" sunt plățile introduse manual înainte de bifă — rămân scăzute, dar nu se mai modifică. Nu bifa achiziții plătite deja atunci, că s-ar scădea de două ori.</>}
               </div>
               <div style={TBL}>
@@ -7338,6 +7359,7 @@ Reguli:
               {cheltuitDinCasa > 0 && (
                 <div style={{ marginTop: 10, fontSize: 12, color: "#555" }}>
                   Scăzute din casă: <strong>{achizitiiDinCasa.length}</strong> {achizitiiDinCasa.length === 1 ? "achiziție" : "achiziții"} (<strong style={{ color: "#bf360c" }}>{fmt(totalAchizitiiDinCasa)} lei</strong>){" "}
+                  {borderouriDinCasa.length > 0 && <><strong>{borderouriDinCasa.length}</strong> {borderouriDinCasa.length === 1 ? "linie de borderou PF" : "linii de borderou PF"} (<strong style={{ color: "#bf360c" }}>{fmt(totalBorderouriDinCasa)} lei</strong>){" "}</>}
                   și <strong>{cheltuieliDinCasa.length}</strong> {cheltuieliDinCasa.length === 1 ? "cheltuială" : "cheltuieli"} (<strong style={{ color: "#bf360c" }}>{fmt(totalCheltuieliDinCasa)} lei</strong>).{" "}
                   <span onClick={() => setTab("colectari")} style={{ color: "#1565c0", cursor: "pointer", textDecoration: "underline" }}>Vezi în Achiziții</span>
                   {" · "}
