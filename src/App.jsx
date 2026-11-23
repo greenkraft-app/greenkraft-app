@@ -940,6 +940,10 @@ export default function App() {
       const { error } = await sb.from(table).update(changes).eq("id", id);
       setSalvariInCurs((n) => Math.max(0, n - 1));
       if (!error) setSalvatLa(Date.now());
+      if (error && table === "livrari" && /apartine|suma_achitata/.test(error.message) && !window.__alertaColLivrari) {
+        window.__alertaColLivrari = true;
+        alert("Lipsesc coloanele noi din tabelul livrari, deci ce ai scris NU se salvează." + String.fromCharCode(10, 10) + "Deschide Supabase → SQL Editor și rulează o singură dată:" + String.fromCharCode(10, 10) + "alter table livrari add column if not exists apartine text not null default '';" + String.fromCharCode(10) + "alter table livrari add column if not exists suma_achitata text not null default '';");
+      }
       Object.entries(changes).forEach(([camp, val]) => {
         const k = `${table}:${id}:${camp}`;
         // daca intre timp ai mai scris, valoarea noua e alta — o las marcata ca nesalvata
@@ -1747,6 +1751,18 @@ export default function App() {
   // Livrari
   const updLIV = mkUpd(livRows, setLivRows, "livrari");
   const delLIV = mkDel(setLivRows, "livrari", "această vânzare");
+  // Suma achitată (total sau parțial) setează și „Încasat": 0 → NU, sub total → PARȚIAL, cât totalul sau mai mult → DA.
+  // Cele două câmpuri se salvează împreună, ca să nu se piardă una din ele.
+  const updSumaLIV = (i, v) => {
+    const r = livRows[i];
+    if (!r) return;
+    const tot = (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0);
+    const plat = parseSuma(v) || 0;
+    let inc = r.inc;
+    if (String(v || "").trim() !== "") inc = plat <= 0 ? "NU" : plat >= tot - 0.005 ? "DA" : "PARTIAL";
+    setLivRows((p) => { const n = [...p]; n[i] = { ...n[i], suma_achitata: v, inc }; return n; });
+    dbSave("livrari", r.id, { suma_achitata: v, inc }, { suma_achitata: r.suma_achitata, inc: r.inc });
+  };
   const addLIV = async () => {
     setLivFaraNr(false);
     const row = { data: today(), nr: "", client: "", produs: "", cant: 0, pret: 0, fact: "NU", inc: "NU", det: "RECEPTIE" }; // valori implicite la o vanzare noua
@@ -3065,9 +3081,9 @@ export default function App() {
         total = ["TOTAL", "", "", "", "", linii.reduce((x, l) => x + l[5], 0), "", +linii.reduce((x, l) => x + l[7], 0).toFixed(2), +linii.reduce((x, l) => x + l[8], 0).toFixed(2), "", "", "", "", ""];
         nume = "Achizitii"; foaie = "Achiziții";
       } else {
-        antet = ["Data", "Nr. doc.", "Client", "Produs", "Cant.(kg)", "Preț", "Total (lei)", "Facturat", "Încasat", "Detalii"];
-        linii = randuri.map((r) => { const cant = parseSuma(r.cant) || 0, pret = parseSuma(r.pret) || 0; return [r.data || "", r.nr || "", r.client || "", r.produs || "", cant, pret, +(cant * pret).toFixed(2), r.fact || "", r.inc || "", r.det || ""]; });
-        total = ["TOTAL", "", "", "", linii.reduce((x, l) => x + l[4], 0), "", +linii.reduce((x, l) => x + l[6], 0).toFixed(2), "", "", ""];
+        antet = ["Data", "Nr. doc.", "Client", "Produs", "Cant.(kg)", "Preț", "Total (lei)", "Facturat", "Încasat", "Detalii", "Aparține", "Suma achitată", "Rest de achitat"];
+        linii = randuri.map((r) => { const cant = parseSuma(r.cant) || 0, pret = parseSuma(r.pret) || 0; const areS = String(r.suma_achitata || "").trim() !== ""; const plat = areS ? (parseSuma(r.suma_achitata) || 0) : ""; return [r.data || "", r.nr || "", r.client || "", r.produs || "", cant, pret, +(cant * pret).toFixed(2), r.fact || "", r.inc || "", r.det || "", r.apartine || "", plat, areS ? +(cant * pret - plat).toFixed(2) : ""]; });
+        total = ["TOTAL", "", "", "", linii.reduce((x, l) => x + l[4], 0), "", +linii.reduce((x, l) => x + l[6], 0).toFixed(2), "", "", "", "", +linii.reduce((x, l) => x + (l[11] || 0), 0).toFixed(2), +linii.reduce((x, l) => x + (l[12] || 0), 0).toFixed(2)];
         nume = "Vanzari"; foaie = "Vânzări";
       }
       const ws = XLSX.utils.aoa_to_sheet([antet, ...linii, total]);
@@ -6310,16 +6326,21 @@ Reguli:
             if (livProdus.length && !livProdus.includes(r.produs)) return false;
             if (livFact && (r.fact || "") !== livFact) return false;
             if (livInc && (r.inc || "") !== livInc) return false;
-            if (livSearch) { const q = livSearch.toLowerCase(); if (!(r.client?.toLowerCase().includes(q) || r.produs?.toLowerCase().includes(q) || r.det?.toLowerCase().includes(q) || String(r.nr).includes(q))) return false; }
+            if (livSearch) { const q = livSearch.toLowerCase(); if (!(r.client?.toLowerCase().includes(q) || r.apartine?.toLowerCase().includes(q) || r.produs?.toLowerCase().includes(q) || r.det?.toLowerCase().includes(q) || String(r.nr).includes(q))) return false; }
             return true;
           }));
+          const totLiv = (r) => (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0);
+          const areSuma = (r) => String(r.suma_achitata || "").trim() !== "";
+          // cât s-a încasat: suma trecută, iar la rândurile fără sumă — tot totalul dacă e marcat DA
+          const incasatLiv = (r) => areSuma(r) ? (parseSuma(r.suma_achitata) || 0) : (r.inc === "DA" ? totLiv(r) : 0);
           const livMonthOpts = [...new Set(livRows.map(r => monthOf(r.data)).filter(Boolean))].sort();
           return (
           <div>
             <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
               <SC label="Total Cant." value={fmt(livFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0), 0)) + " kg"} c="#1565c0" bg="#e3f2fd" />
               <SC label="Total Valoare" value={fmt(livFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0)) + " lei"} c={G} bg="#e8f5e9" />
-              <SC label="✅ Încasat" value={fmt(livFiltered.filter((r) => r.inc === "DA").reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0)) + " lei"} c="#059669" bg="#c8e6c9" />
+              <SC label="✅ Încasat" value={fmt(livFiltered.reduce((s, r) => s + incasatLiv(r), 0)) + " lei"} c="#059669" bg="#c8e6c9" />
+              <SC label="⏳ Rest de încasat" value={fmt(livFiltered.reduce((s, r) => s + totLiv(r) - incasatLiv(r), 0)) + " lei"} c="#e65100" bg="#fff3e0" />
               <SC label="Înregistrări" value={livFiltered.length + " / " + livRows.length} c="#6a1b9a" bg="#f3e5f5" />
             </div>
             <div style={{ background: "#f5f5f5", border: "1px solid #ddd", borderRadius: 8, padding: 10, marginBottom: 10, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -6355,8 +6376,8 @@ Reguli:
               {(livSearch || livMonth || livClient || livProdus.length || livDataDe || livDataPana || livFact || livInc || livFaraNr) && <button onClick={() => { setLivFaraNr(false); setLivSearch(""); setLivMonth(""); setLivClient(""); setLivProdus([]); setLivDataDe(""); setLivDataPana(""); setLivFact(""); setLivInc(""); }} style={{ background: "#e53935", color: "#fff", border: "none", borderRadius: 5, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕ Reset</button>}
             </div>
             <div style={TBL}>
-              <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 1310 }}>
-                <colgroup><col style={{ width: 28 }} /><col style={{ width: 130 }} /><col style={{ width: 55 }} /><col style={{ width: 280 }} /><col style={{ width: 220 }} /><col style={{ width: 75 }} /><col style={{ width: 65 }} /><col style={{ width: 85 }} /><col style={{ width: 80 }} /><col style={{ width: 80 }} /><col style={{ width: 130 }} /><col style={{ width: 28 }} /></colgroup>
+              <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 1660 }}>
+                <colgroup><col style={{ width: 28 }} /><col style={{ width: 130 }} /><col style={{ width: 55 }} /><col style={{ width: 280 }} /><col style={{ width: 220 }} /><col style={{ width: 75 }} /><col style={{ width: 65 }} /><col style={{ width: 85 }} /><col style={{ width: 80 }} /><col style={{ width: 80 }} /><col style={{ width: 130 }} /><col style={{ width: 170 }} /><col style={{ width: 95 }} /><col style={{ width: 95 }} /><col style={{ width: 28 }} /></colgroup>
                 <thead><tr>
                   <th style={th({ position: "sticky", left: 0, zIndex: 5 })}></th>
                   <th style={th({ textAlign: "center", position: "sticky", left: 28, zIndex: 5 })}>Data</th>
@@ -6369,10 +6390,13 @@ Reguli:
                   <th style={th({ textAlign: "center" })}>Facturat</th>
                   <th style={th({ textAlign: "center" })}>Încasat</th>
                   <th style={th({})}>Detalii</th>
+                  <th style={th({})} title="Clientul căruia îi aparține livrarea / care achită">Aparține</th>
+                  <th style={th({ textAlign: "center" })} title="Cât s-a achitat, total sau parțial. Setează automat „Încasat”">Suma achitată</th>
+                  <th style={th({ textAlign: "center" })} title="Total (lei) − Suma achitată">Rest de achitat</th>
                   <th style={th({})}></th>
                 </tr></thead>
-                <tbody>{livFiltered.map((r, idx) => { const i = livRows.indexOf(r); const tot = parseSuma(r.cant) * parseSuma(r.pret); const rowBg = idx % 2 === 0 ? "#fff" : "#f8fbf9"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5", position: "sticky", left: 0, zIndex: 2 })}>{idx + 1}</td><td style={td({ background: rowBg, position: "sticky", left: 28, zIndex: 2 })}><DateInput value={r.data || ""} onChange={(v) => updLIV(i, "data", v)} /><AdaugatDe nume={autor("livrari", r)} /></td><td style={td({ background: rowBg })}><FastInput style={inp({ textAlign: "center" })} value={r.nr || ""} onChange={(e) => updLIV(i, "nr", e.target.value)} /></td><td style={td({ background: "#fffde7" })}><ACStrict value={r.client || ""} options={clientOptions} onChange={(v) => updLIV(i, "client", v)} placeholder="—" strict /></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.produs}><ACStrict value={r.produs || ""} options={PRODUSE_DYN} onChange={(v) => updLIV(i, "produs", v)} /></td><td style={td({ background: rowBg })}><FastInput style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.cant || ""} onChange={(e) => updLIV(i, "cant", e.target.value)} /></td><td style={td({ background: rowBg })}><FastInput style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.pret || ""} onChange={(e) => updLIV(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 600 })}>{tot > 0 ? fmt(tot) : "0,00"}</td><td style={td({ background: r.fact === "DA" ? "#e8f5e9" : r.fact === "NU" ? "#ffebee" : "#fff", textAlign: "center" })}><select style={sel({ color: r.fact === "DA" ? G : r.fact === "NU" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.fact || ""} onChange={(e) => updLIV(i, "fact", e.target.value)}><option value=""></option><option>DA</option><option>NU</option></select></td><td style={td({ background: r.inc === "DA" ? "#c8e6c9" : r.inc === "PARTIAL" ? "#fff8e1" : r.inc === "NU" ? "#ffebee" : "#fff", textAlign: "center" })}><select style={sel({ color: r.inc === "DA" ? G : r.inc === "PARTIAL" ? "#e65100" : r.inc === "NU" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.inc || ""} onChange={(e) => updLIV(i, "inc", e.target.value)}><option value=""></option><option>DA</option><option>PARTIAL</option><option>NU</option></select></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><FastInput title={r.det || undefined} style={inp()} value={r.det || ""} onChange={(e) => updLIV(i, "det", e.target.value)} placeholder="..." /></td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delLIV(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
-                <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={5} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(livFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0), 0))} kg</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(livFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0))}</td><td colSpan={4}></td></tr></tfoot>
+                <tbody>{livFiltered.map((r, idx) => { const i = livRows.indexOf(r); const tot = parseSuma(r.cant) * parseSuma(r.pret); const restLiv = totLiv(r) - (parseSuma(r.suma_achitata) || 0); const rowBg = idx % 2 === 0 ? "#fff" : "#f8fbf9"; return (<tr key={r.id || i} style={{ background: rowBg }}><td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5", position: "sticky", left: 0, zIndex: 2 })}>{idx + 1}</td><td style={td({ background: rowBg, position: "sticky", left: 28, zIndex: 2 })}><DateInput value={r.data || ""} onChange={(v) => updLIV(i, "data", v)} /><AdaugatDe nume={autor("livrari", r)} /></td><td style={td({ background: rowBg })}><FastInput style={inp({ textAlign: "center" })} value={r.nr || ""} onChange={(e) => updLIV(i, "nr", e.target.value)} /></td><td style={td({ background: "#fffde7" })}><ACStrict value={r.client || ""} options={clientOptions} onChange={(v) => updLIV(i, "client", v)} placeholder="—" strict /></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.produs}><ACStrict value={r.produs || ""} options={PRODUSE_DYN} onChange={(v) => updLIV(i, "produs", v)} /></td><td style={td({ background: rowBg })}><FastInput style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.cant || ""} onChange={(e) => updLIV(i, "cant", e.target.value)} /></td><td style={td({ background: rowBg })}><FastInput style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.pret || ""} onChange={(e) => updLIV(i, "pret", e.target.value)} /></td><td style={td({ textAlign: "right", background: "#f0f4f0", fontWeight: 600 })}>{tot > 0 ? fmt(tot) : "0,00"}</td><td style={td({ background: r.fact === "DA" ? "#e8f5e9" : r.fact === "NU" ? "#ffebee" : "#fff", textAlign: "center" })}><select style={sel({ color: r.fact === "DA" ? G : r.fact === "NU" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.fact || ""} onChange={(e) => updLIV(i, "fact", e.target.value)}><option value=""></option><option>DA</option><option>NU</option></select></td><td style={td({ background: r.inc === "DA" ? "#c8e6c9" : r.inc === "PARTIAL" ? "#fff8e1" : r.inc === "NU" ? "#ffebee" : "#fff", textAlign: "center" })}><select style={sel({ color: r.inc === "DA" ? G : r.inc === "PARTIAL" ? "#e65100" : r.inc === "NU" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })} value={r.inc || ""} onChange={(e) => updLIV(i, "inc", e.target.value)}><option value=""></option><option>DA</option><option>PARTIAL</option><option>NU</option></select></td><td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><FastInput title={r.det || undefined} style={inp()} value={r.det || ""} onChange={(e) => updLIV(i, "det", e.target.value)} placeholder="..." /></td><td style={td({ background: r.apartine ? "#fffde7" : rowBg })}><ACStrict value={r.apartine || ""} options={clientOptions} onChange={(v) => updLIV(i, "apartine", v)} placeholder="—" /></td><td style={td({ background: rowBg })}><FastInput style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.suma_achitata || ""} onChange={(e) => updSumaLIV(i, e.target.value)} placeholder="—" /></td><td style={td({ textAlign: "right", fontWeight: 600, background: areSuma(r) ? (restLiv > 0.005 ? "#fff3e0" : "#e8f5e9") : "#f0f4f0", color: areSuma(r) ? (restLiv > 0.005 ? "#e65100" : G) : "#999" })}>{areSuma(r) ? fmt(restLiv) : "—"}</td><td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delLIV(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td></tr>); })}</tbody>
+                <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={5} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(livFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0), 0))} kg</td><td></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(livFiltered.reduce((s, r) => s + (parseSuma(r.cant) || 0) * (parseSuma(r.pret) || 0), 0))}</td><td colSpan={4}></td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(livFiltered.filter(areSuma).reduce((s, r) => s + (parseSuma(r.suma_achitata) || 0), 0))}</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(livFiltered.filter(areSuma).reduce((s, r) => s + totLiv(r) - (parseSuma(r.suma_achitata) || 0), 0))}</td><td></td></tr></tfoot>
               </table>
             </div>
             <AddBtn onClick={addLIV} label="+ Adaugă vânzare" />
