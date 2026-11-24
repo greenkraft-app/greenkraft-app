@@ -2853,6 +2853,17 @@ export default function App() {
     }, 150);
   };
 
+  // Corectează cantitatea unui material dintr-un PV deja salvat, direct în Registru PJ.
+  // Materialele sunt o listă în același rând de PV, deci se salvează lista întreagă.
+  const updPVCant = (pvId, matIdx, valoare) => {
+    const pv = pvList.find((x) => x.id === pvId);
+    if (!pv) return;
+    const vechi = pv.materiale || [];
+    const nou = vechi.map((m, i) => (i === matIdx ? { ...m, cant: valoare } : m));
+    setPvList((p) => p.map((x) => (x.id === pvId ? { ...x, materiale: nou } : x)));
+    dbSave("procese_verbale", pvId, { materiale: nou }, { materiale: vechi });
+  };
+
   const delPV = async (id) => {
     if (!confirmDel("acest PV")) return;
     const pvSters = pvList.find(x => x.id === id) || null;
@@ -5725,7 +5736,7 @@ Reguli:
                               <td style={td({ fontWeight: isFirst ? 600 : 400, color: isFirst ? "#333" : "#aaa", background: rowBg })}>{isFirst ? r.client_denumire : ""}</td>
                               <td style={td({ fontFamily: "monospace", fontSize: 11, color: isFirst ? "#333" : "#aaa", background: rowBg })}>{isFirst ? r.client_cui : ""}</td>
                               <td style={td({ background: rowBg })}>{m.den.toUpperCase()} <span style={{ color: "#888", fontSize: 10 }}>({m.cod})</span></td>
-                              <td style={td({ textAlign: "right", background: "#e8f5e9", fontWeight: 700, color: G })}>{fmt(m.cant)}</td>
+                              <td style={td({ textAlign: "right", background: "#e8f5e9", fontWeight: 700, color: G, padding: 2 })}><FastInput style={inpNum({ textAlign: "right", fontWeight: 700, color: G })} type="text" inputMode="decimal" value={m.cant ?? ""} onChange={(e) => updPVCant(r.id, (r.materiale || []).indexOf(m), e.target.value)} title="Poți corecta cantitatea direct aici" /></td>
                               <td style={td({ textAlign: "center", padding: 3, background: rowBg })}>
                                 {isFirst && (
                                   <button onClick={() => printRegistruPV(r.id)} title={`Printează PV ${r.serie} ${r.nr_pv}`} style={{ background: "#e3f2fd", border: "1px solid #90caf9", borderRadius: 4, cursor: "pointer", color: "#1565c0", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}
