@@ -4056,40 +4056,90 @@ Reguli:
           const img = new Image();
           const url = URL.createObjectURL(file);
           img.onload = () => {
-            const maxW = 1024;
+            const maxW = 2000; // sub ~1500px literele mici (CNP, adresa) se citesc gresit
             const scale = Math.min(1, maxW / img.width);
             const canvas = document.createElement("canvas");
             canvas.width = img.width * scale;
             canvas.height = img.height * scale;
             canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
             URL.revokeObjectURL(url);
-            res(canvas.toDataURL("image/jpeg", 0.85).split(",")[1]);
+            res(canvas.toDataURL("image/jpeg", 0.9).split(",")[1]);
           };
-          img.onerror = () => rej(new Error("Eroare citire imagine"));
+          img.onerror = () => rej(new Error("Nu pot deschide poza. Folosește o poză JPG/PNG (nu HEIC) sau un PDF."));
           img.src = url;
         });
       }
 
+      // Trimite poza la citit. Modelul spune și cu câte grade trebuie rotită poza ca textul să fie drept.
+      const cereScan = async (b64) => {
       const resp = await fetch("/api/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "claude-haiku-4-5-20251001",
+          model: "claude-sonnet-5-5",
           max_tokens: 1000,
           messages: [{ role: "user", content: [
-            { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-            { type: "text", text: `Acesta este un buletin/carte de identitate românesc. Extrage datele și returnează DOAR JSON valid fără alt text:\n{"denumire":"Nume Prenume","cod_fiscal":"CNP 13 cifre","judet":"cod judet 2 litere","adresa":"adresa completa","reg_com":"seria+nr CI ex IF123456","inf_supl":"Eliberat de SPCLEP... - valabil DD.MM.YYYY"}` }
+            { type: "image", source: { type: "base64", media_type: mediaType, data: b64 } },
+            { type: "text", text: `Acesta este un buletin / carte de identitate românesc (poate fi doar fața, doar verso-ul sau ambele). Citește cu atenție, caracter cu caracter, și returnează DOAR un obiect JSON valid, fără alt text și fără markdown:
+{"rotatie":0,"denumire":"NUME PRENUME","cod_fiscal":"CNP","judet":"XX","adresa":"adresa","reg_com":"SERIE NR","inf_supl":"text"}
+Reguli:
+- rotatie: cu câte grade în sens orar (0, 90, 180 sau 270) trebuie rotită poza ca textul buletinului să fie drept, pe orizontală, citibil normal. 0 dacă poza e deja corectă; 180 dacă e cu susul în jos.
+- denumire: numele de familie, apoi prenumele (toate prenumele), exact cum sunt tipărite, cu diacriticele de pe document.
+- cod_fiscal: CNP-ul, exact 13 cifre. Dacă se vede și zona MRZ (liniile cu <<<), verifică CNP-ul cu ea. Nu ghici: dacă o cifră nu se vede clar, pune "" la cod_fiscal.
+- judet: codul de 2 litere al județului din domiciliu (ex. IF, CT, B pentru București).
+- adresa: domiciliul complet (localitate, stradă, număr, bloc, scară, etaj, apartament, județ/sector), într-un singur șir.
+- reg_com: seria și numărul buletinului fără spații, ex. IF123456.
+- inf_supl: "Eliberat de <autoritate> - valabil DD.MM.YYYY".
+- Câmpurile pe care nu le poți citi sigur rămân "" — nu inventa nimic.` }
           ]}]
         })
       });
       const respText = await resp.text();
+      if (resp.status === 413) throw new Error("Poza e prea mare. Fă o poză cu rezoluție mai mică sau decupeaz-o.");
       if (!respText || respText.trim() === "") throw new Error("Raspuns gol - verifica ANTHROPIC_API_KEY in Vercel");
       let data;
-      try { data = JSON.parse(respText); } catch { throw new Error("Raspuns invalid: " + respText.slice(0, 150)); }
-      if (data.error) throw new Error(JSON.stringify(data.error));
+      try { data = JSON.parse(respText); } catch { throw new Error("Răspuns invalid de la server (" + resp.status + "): " + respText.slice(0, 150)); }
+      if (data.error) throw new Error(typeof data.error === "string" ? data.error : (data.error.message || JSON.stringify(data.error)));
       const text = data.content?.filter(c => c.type === "text").map(c => c.text).join("") || "";
-      const clean = text.replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(clean.slice(clean.indexOf("{")));
+      const jsonTxt = text.match(/\{[\s\S]*\}/);
+      let parsed;
+      try { parsed = JSON.parse(jsonTxt ? jsonTxt[0] : ""); } catch { throw new Error("Nu am putut citi buletinul. Fă o poză mai clară, cu tot buletinul în cadru, fără reflexii, și încearcă din nou."); }
+      return parsed;
+      };
+      // Rotește poza (grade în sens orar) pe un canvas nou
+      const rotesteImagine = (b64, grade) => new Promise((res, rej) => {
+        const img = new Image();
+        img.onload = () => {
+          const lateral = grade === 90 || grade === 270;
+          const canvas = document.createElement("canvas");
+          canvas.width = lateral ? img.height : img.width;
+          canvas.height = lateral ? img.width : img.height;
+          const ctx = canvas.getContext("2d");
+          ctx.translate(canvas.width / 2, canvas.height / 2);
+          ctx.rotate((grade * Math.PI) / 180);
+          ctx.drawImage(img, -img.width / 2, -img.height / 2);
+          res(canvas.toDataURL("image/jpeg", 0.9).split(",")[1]);
+        };
+        img.onerror = () => rej(new Error("Nu am putut roti poza."));
+        img.src = "data:image/jpeg;base64," + b64;
+      });
+      let parsed = await cereScan(base64);
+      // Buletin scanat invers sau pe o parte: întorc poza cum trebuie și citesc din nou, o singură dată
+      const gradeRot = ((parseInt(parsed.rotatie) || 0) % 360 + 360) % 360;
+      if ([90, 180, 270].includes(gradeRot)) {
+        base64 = await rotesteImagine(base64, gradeRot);
+        parsed = await cereScan(base64);
+      }
+      parsed.cod_fiscal = String(parsed.cod_fiscal || "").replace(/\D/g, "");
+      parsed.reg_com = String(parsed.reg_com || "").replace(/\s+/g, "").toUpperCase();
+      parsed.judet = String(parsed.judet || "").trim().toUpperCase();
+      parsed.denumire = String(parsed.denumire || "").trim();
+      if (!parsed.denumire && !parsed.cod_fiscal) throw new Error("Nu am găsit date pe poză. Verifică să fie buletinul și să se vadă clar.");
+      // CNP-ul are cifră de control: dacă nu se potrivește, o cifră a fost citită greșit — nu salvez pe nevăzute
+      const cnpOk = (c) => { if (!/^\d{13}$/.test(c)) return false; const k = "279146358279"; let t = 0; for (let i = 0; i < 12; i++) t += (+c[i]) * (+k[i]); let r = t % 11; if (r === 10) r = 1; return r === +c[12]; };
+      if (!cnpOk(parsed.cod_fiscal) && !window.confirm(`CNP-ul citit (${parsed.cod_fiscal || "lipsă"}) nu e valid — probabil o cifră a fost citită greșit.\n\nNume: ${parsed.denumire || "—"}\nAdresă: ${parsed.adresa || "—"}\n\nSalvezi oricum? (apoi poți corecta în tabel). Pentru o citire mai bună, refă poza.`)) { setScanLoading(false); return; }
+      const dub = parsed.cod_fiscal && pfList.find(f => String(f.cod_fiscal || "").replace(/\D/g, "") === parsed.cod_fiscal);
+      if (dub && !window.confirm(`${dub.denumire} cu acest CNP (${parsed.cod_fiscal}) există deja în Persoane Fizice. Adaug încă o dată?`)) { setScanLoading(false); return; }
       const codes = pfList.map(f => parseInt(f.cod) || 0);
       const cod = String((codes.length ? Math.max(...codes) : 0) + 1).padStart(5, "0");
       const row = { cod, denumire: parsed.denumire || "", cod_fiscal: parsed.cod_fiscal || "", analitic: `401.${cod}`, tara: "RO", judet: parsed.judet || "", adresa: parsed.adresa || "", reg_com: parsed.reg_com || "", inf_supl: parsed.inf_supl || "" };
