@@ -217,6 +217,20 @@ const DOC_TIPURI = [
   { tip: "Alt document", ico: "📎", plural: "Alte documente", c: "#e65100", bg: "#fff3e0" },
 ];
 const docTip = (r) => (DOC_TIPURI.some((t) => t.tip === r.tip) ? r.tip : "Contract");
+// Sectiunea AUTO: tipurile de documente ale unui vehicul, fiecare cu data expirarii.
+const AUTO_DOC_TIPURI = [
+  { tip: "RCA", ico: "🛡️", c: "#1565c0", bg: "#e3f2fd" },
+  { tip: "Rovinietă", ico: "🛣️", c: "#2e7d32", bg: "#e8f5e9" },
+  { tip: "ITP", ico: "🔧", c: "#e65100", bg: "#fff3e0" },
+  { tip: "CASCO", ico: "🚘", c: "#6a1b9a", bg: "#f3e5f5" },
+  { tip: "Licență transport", ico: "📜", c: "#00695c", bg: "#e0f2f1" },
+  { tip: "Copie conformă", ico: "📄", c: "#455a64", bg: "#eceff1" },
+  { tip: "Tahograf", ico: "⏱️", c: "#ad1457", bg: "#fce4ec" },
+  { tip: "Asigurare CMR", ico: "🌍", c: "#4e342e", bg: "#efebe9" },
+  { tip: "Altul", ico: "📎", c: "#546e7a", bg: "#f5f5f5" },
+];
+const AUTO_VEH_TIPURI = ["Camion", "Autoutilitară", "Autoturism", "Remorcă", "Utilaj"];
+const AUTO_SQL_MSG = "Lipsesc tabelele pentru secțiunea Auto." + String.fromCharCode(10, 10) + "Deschide Supabase → SQL Editor, lipește tot conținutul fișierului supabase-auto.sql (din folderul proiectului) și apasă Run, o singură dată.";
 const PIN_CORRECT = "336699";
 const USER_PASSWORDS = { Catalin: "Kraft$8888", Alexandru: "310890", Mihai: "336699" };
 // Login-ul ramane in localStorage pe fiecare telefon/calculator, deci nu poate fi sters de la distanta.
@@ -1285,7 +1299,7 @@ export default function App() {
   const generateBackup = async () => {
     setBackupLoading(true);
     try {
-      const tables = ['registru', 'procese_verbale', 'cheltuieli', 'colectari', 'livrari', 'datorii', 'avansuri', 'contracte', 'furnizori_pf', 'furnizori_pj', 'salariati', 'stoc_manual', 'parole', 'declaratii', 'audit_log'];
+      const tables = ['registru', 'procese_verbale', 'cheltuieli', 'colectari', 'livrari', 'datorii', 'avansuri', 'contracte', 'auto_vehicule', 'auto_documente', 'furnizori_pf', 'furnizori_pj', 'salariati', 'stoc_manual', 'parole', 'declaratii', 'audit_log'];
       const backup = { version: 1, app: "greenkraft-app", timestamp: new Date().toISOString(), generated_by: currentUser || "Anonim" };
       for (const t of tables) {
         try { const { data } = await sb.from(t).select("*"); backup[t] = data || []; }
@@ -1522,6 +1536,13 @@ export default function App() {
     })();
   }, [colRows.length, chRows.length, livRows.length, avRows.length]);
   const [contracte, setContracte] = useState([]);
+  const [autoVeh, setAutoVeh] = useState([]);
+  const [autoDoc, setAutoDoc] = useState([]);
+  const [autoSub, setAutoSub] = useState("documente"); // documente | vehicule
+  const [autoTip, setAutoTip] = useState("");
+  const [autoMasina, setAutoMasina] = useState("");
+  const [autoStare, setAutoStare] = useState(""); // "" | expirat | curand | valabil | arhivat
+  const [autoSearch, setAutoSearch] = useState("");
   const [pfList, setPfList] = useState([]);
   const [pjList, setPjList] = useState([]);
   const [parole, setParole] = useState([]);
@@ -1571,6 +1592,8 @@ export default function App() {
   useSupaTable("datorii", setDatRows);
   useSupaTable("avansuri", setAvRows);
   useSupaTable("contracte", setContracte);
+  useSupaTable("auto_vehicule", setAutoVeh);
+  useSupaTable("auto_documente", setAutoDoc);
   useSupaTable("furnizori_pf", setPfList);
   useSupaTable("furnizori_pj", setPjList);
   useSupaTable("salariati", setSalRows);
@@ -1852,6 +1875,35 @@ export default function App() {
       return;
     }
     if (data) { setContracte((p) => [...p, data[0]]); logAction("add", "contracte", data[0].id, { tip }); }
+  };
+
+  // AUTO: vehicule si documente
+  const updAUV = mkUpd(autoVeh, setAutoVeh, "auto_vehicule");
+  const delAUV = mkDel(setAutoVeh, "auto_vehicule", "acest vehicul");
+  const updAD = mkUpd(autoDoc, setAutoDoc, "auto_documente");
+  const delAD = mkDel(setAutoDoc, "auto_documente", "acest document");
+  const arataEroareAuto = (error) => alert(/auto_|relation|schema cache|does not exist/i.test(error.message) ? AUTO_SQL_MSG : "Eroare: " + error.message);
+  const addAUV = async (nr = "") => {
+    const row = { nr, marca: "", tip: "Camion", vin: "", an: "", sofer: "", detalii: "", activ: true };
+    const { data, error } = await sb.from("auto_vehicule").insert(row).select();
+    if (error) { arataEroareAuto(error); return; }
+    if (data) { setAutoVeh((p) => [...p, data[0]]); logAction("add", "auto_vehicule", data[0].id, { nr }); }
+  };
+  const addAD = async (tip = "RCA") => {
+    const row = { tip, nr_masina: autoMasina || "", nr_doc: "", emitent: "", data_start: "", data_exp: "", valoare: "", achitat: "", detalii: "" };
+    const { data, error } = await sb.from("auto_documente").insert(row).select();
+    if (error) { arataEroareAuto(error); return; }
+    if (data) { setAutoDoc((p) => [...p, data[0]]); logAction("add", "auto_documente", data[0].id, { tip, masina: row.nr_masina }); }
+  };
+  // Mașinile firmei care apar în tichetele de cântar ca transportate de GREEN KRAFT și nu sunt încă în listă
+  const importaVehiculeDinTichete = async () => {
+    const exista = new Set(autoVeh.map((v) => String(v.nr || "").replace(/\s+/g, "").toUpperCase()));
+    const noi = [...new Set(ticheteList.filter((t) => /green\s*kraft/i.test(t.transportator || "") && t.nr_masina).map((t) => String(t.nr_masina).replace(/\s+/g, "").toUpperCase()))].filter((n) => !exista.has(n)).sort();
+    if (!noi.length) { alert("Nu am găsit mașini noi în tichete (transportator GREEN KRAFT)."); return; }
+    if (!window.confirm("Adaug " + noi.length + " mașini din tichetele de cântar (transportator GREEN KRAFT):" + String.fromCharCode(10, 10) + noi.join(", ") + String.fromCharCode(10, 10) + "Continui?")) return;
+    const { data, error } = await sb.from("auto_vehicule").insert(noi.map((nr) => ({ nr, marca: "", tip: "Camion", vin: "", an: "", sofer: "", detalii: "", activ: true }))).select();
+    if (error) { arataEroareAuto(error); return; }
+    if (data) { setAutoVeh((p) => [...p, ...data]); logAction("add", "auto_vehicule", "import", { mașini: noi.join(", ") }); }
   };
 
   // Furnizori PF
@@ -4343,6 +4395,35 @@ Reguli:
   })();
 
   // Contracte computed
+  // AUTO: pentru fiecare mașină și tip de document, ultimul document (cu expirarea cea mai îndepărtată) e cel valabil; restul sunt arhivă
+  const autoAzi = parseDateRO(today());
+  const autoZile = (r) => { const d = parseDateRO(r.data_exp); return d && autoAzi ? Math.round((d - autoAzi) / 86400000) : null; };
+  const autoCheie = (r) => String(r.nr_masina || "").replace(/\s+/g, "").toUpperCase() + "|" + r.tip;
+  const autoUltimul = (() => {
+    const m = new Map();
+    autoDoc.forEach((r) => { const k = autoCheie(r); const cur = m.get(k); if (!cur || (parseDateRO(r.data_exp) || 0) > (parseDateRO(cur.data_exp) || 0)) m.set(k, r); });
+    return m;
+  })();
+  const autoEActual = (r) => autoUltimul.get(autoCheie(r)) === r;
+  const autoStareDoc = (r) => {
+    if (!autoEActual(r)) return "arhivat";
+    const z = autoZile(r);
+    return z == null ? "necompletat" : z < 0 ? "expirat" : z <= 30 ? "curand" : "valabil";
+  };
+  const autoCnt = (st) => autoDoc.filter((r) => autoStareDoc(r) === st).length;
+  const nrAlerteAuto = autoCnt("expirat") + autoCnt("curand");
+  const autoMasiniOpts = [...new Set([...autoVeh.map((v) => v.nr), ...autoDoc.map((d) => d.nr_masina)].filter(Boolean))].sort();
+  const filtAD = autoDoc.filter((r) => {
+    if (autoTip && r.tip !== autoTip) return false;
+    if (autoMasina && String(r.nr_masina || "").replace(/\s+/g, "").toUpperCase() !== autoMasina.replace(/\s+/g, "").toUpperCase()) return false;
+    if (autoStare ? autoStareDoc(r) !== autoStare : false) return false;
+    if (autoSearch) { const q = autoSearch.toLowerCase(); if (![r.nr_masina, r.nr_doc, r.emitent, r.detalii, r.tip].some((v) => String(v || "").toLowerCase().includes(q))) return false; }
+    return true;
+  }).sort((a, b) => {
+    const ea = autoEActual(a), eb = autoEActual(b);
+    if (ea !== eb) return ea ? -1 : 1;
+    return (autoZile(a) ?? -1e9) - (autoZile(b) ?? -1e9);
+  });
   const filtCT = sortByDateAsc(contracte.filter((r) => (!ctTip || docTip(r) === ctTip) && (!ctSearch || r.companie?.toLowerCase().includes(ctSearch.toLowerCase()) || r.nr?.includes(ctSearch) || r.detalii?.toLowerCase().includes(ctSearch.toLowerCase()))));
 
   // Parole computed
@@ -4987,7 +5068,7 @@ Reguli:
 
       {/* Tabs */}
       <div style={{ display: "flex", background: "#fff", padding: "8px 10px", borderLeft: "1px solid #e2e8f0", borderRight: "1px solid #e2e8f0", borderBottom: "1px solid #eef2f6", overflowX: "auto" }}>
-        {[["dashboard","🏠 Dashboard"],["borderou","📄 Borderouri"],["pv","📋 PV & Anexa 3"],["cheltuieli","💸 Cheltuieli"],["colectari","🚛 Achiziții"],["livrari","📤 Vânzări"],["cantar","⚖️ Tichete Cântar"],["stoc","📦 Stocuri"],["produse","🛠️ Variabile"],["salariati","👷 Salariați"],["datorii","💳 Datorii"],["avansuri","💵 Avansuri & Dividende"],["contracte","🗂️ Registru documente"],["deee","♻️ DEEE"],["parole","🔐 Parole"],["rapoarte","📊 Rapoarte"],["trasabilitate","🔄 Trasabilitate"],["audit","🕘 Istoric"]].filter(([k]) => k !== "audit" || esteAdminIstoric).map(([k, l]) => (
+        {[["dashboard","🏠 Dashboard"],["borderou","📄 Borderouri"],["pv","📋 PV & Anexa 3"],["cheltuieli","💸 Cheltuieli"],["colectari","🚛 Achiziții"],["livrari","📤 Vânzări"],["cantar","⚖️ Tichete Cântar"],["stoc","📦 Stocuri"],["produse","🛠️ Variabile"],["salariati","👷 Salariați"],["datorii","💳 Datorii"],["avansuri","💵 Avansuri & Dividende"],["contracte","🗂️ Registru documente"],["auto","🚗 Auto" + (nrAlerteAuto ? ` ⚠️${nrAlerteAuto}` : "")],["deee","♻️ DEEE"],["parole","🔐 Parole"],["rapoarte","📊 Rapoarte"],["trasabilitate","🔄 Trasabilitate"],["audit","🕘 Istoric"]].filter(([k]) => k !== "audit" || esteAdminIstoric).map(([k, l]) => (
           <button key={k} style={tabSt(k)} onClick={() => setTab(k)}>{l}</button>
         ))}
       </div>
@@ -7540,6 +7621,158 @@ Reguli:
             </div>
           </div>
         )}
+
+        {/* ══ AUTO: vehicule si documente (RCA, rovinieta, ITP etc.) ══ */}
+        {tab === "auto" && (() => {
+          const stareInfo = { expirat: ["#c62828", "#ffebee", "Expirat"], curand: ["#e65100", "#fff3e0", "Expiră curând"], valabil: ["#2e7d32", "#e8f5e9", "Valabil"], arhivat: ["#9e9e9e", "#f5f5f5", "Arhivă"], necompletat: ["#9e9e9e", "#fafafa", "—"] };
+          const carduri = [["expirat", "⚠️ Expirate", "#c62828", "#ffebee"], ["curand", "⏳ Expiră în 30 zile", "#e65100", "#fff3e0"], ["valabil", "✅ Valabile", "#2e7d32", "#e8f5e9"], ["arhivat", "🗄️ Arhivă (înlocuite)", "#757575", "#f5f5f5"]];
+          const subSt = (k) => ({ padding: "6px 14px", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, background: autoSub === k ? G : "#eceff1", color: autoSub === k ? "#fff" : "#455a64", borderRadius: 6 });
+          return (
+          <div>
+            <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+              <button style={subSt("documente")} onClick={() => setAutoSub("documente")}>📅 Documente & expirări</button>
+              <button style={subSt("vehicule")} onClick={() => setAutoSub("vehicule")}>🚚 Vehicule <span style={{ opacity: 0.8 }}>({autoVeh.length})</span></button>
+            </div>
+
+            {autoSub === "documente" && (
+              <div>
+                <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+                  {carduri.map(([k, l, c, bg]) => (
+                    <div key={k} onClick={() => setAutoStare(autoStare === k ? "" : k)} title="Click: arată doar acestea" style={{ cursor: "pointer", opacity: autoStare && autoStare !== k ? 0.5 : 1, outline: autoStare === k ? `2px solid ${c}` : "none", borderRadius: 12, flex: 1, minWidth: 150, display: "flex" }}>
+                      <SC label={l} value={autoCnt(k) + " buc."} c={c} bg={bg} />
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
+                  <select value={autoMasina} onChange={(e) => setAutoMasina(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 6, padding: "6px 10px", fontSize: 12, minWidth: 150 }}>
+                    <option value="">🚚 Toate mașinile</option>
+                    {autoMasiniOpts.map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                  <select value={autoTip} onChange={(e) => setAutoTip(e.target.value)} style={{ border: "1px solid #ccc", borderRadius: 6, padding: "6px 10px", fontSize: 12, minWidth: 150 }}>
+                    <option value="">📑 Toate tipurile</option>
+                    {AUTO_DOC_TIPURI.map((t) => <option key={t.tip} value={t.tip}>{t.ico} {t.tip}</option>)}
+                  </select>
+                  <FastInput value={autoSearch} onChange={(e) => setAutoSearch(e.target.value)} placeholder="🔍 Caută mașină, nr. document, emitent, detalii..." style={{ flex: 1, minWidth: 220, border: "1px solid #ccc", borderRadius: 6, padding: "6px 10px", fontSize: 12 }} />
+                  {(autoMasina || autoTip || autoStare || autoSearch) && <button onClick={() => { setAutoMasina(""); setAutoTip(""); setAutoStare(""); setAutoSearch(""); }} style={{ background: "#e53935", color: "#fff", border: "none", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕ Reset</button>}
+                </div>
+                <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
+                  <span style={{ fontSize: 11, color: "#777" }}>Adaugă:</span>
+                  {AUTO_DOC_TIPURI.map((t) => <button key={t.tip} onClick={() => addAD(t.tip)} style={{ padding: "5px 11px", background: t.c, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>{t.ico} + {t.tip}</button>)}
+                </div>
+                <div style={{ fontSize: 11, color: "#78909c", marginBottom: 8 }}>Când reînnoiești un document (de ex. RCA), adaugi unul nou pentru aceeași mașină: cel cu expirarea cea mai îndepărtată devine cel valabil, iar cel vechi trece automat în arhivă. Alertele (⚠️ de pe tab) numără doar documentele valabile ale fiecărei mașini.</div>
+                <div style={TBL}>
+                  <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 1180 }}>
+                    <colgroup><col style={{ width: 28 }} /><col style={{ width: 120 }} /><col style={{ width: 140 }} /><col style={{ width: 130 }} /><col style={{ width: 150 }} /><col style={{ width: 105 }} /><col style={{ width: 105 }} /><col style={{ width: 120 }} /><col style={{ width: 90 }} /><col style={{ width: 75 }} /><col style={{ width: "auto" }} /><col style={{ width: 30 }} /></colgroup>
+                    <thead><tr>
+                      <th style={th({})}></th>
+                      <th style={th({ textAlign: "center" })}>Mașina</th>
+                      <th style={th({ textAlign: "center" })}>Tip document</th>
+                      <th style={th({ textAlign: "center" })}>Serie / Nr.</th>
+                      <th style={th({ textAlign: "center" })}>Emitent / Asigurător</th>
+                      <th style={th({ textAlign: "center" })}>Valabil de la</th>
+                      <th style={th({ textAlign: "center" })}>Expiră la</th>
+                      <th style={th({ textAlign: "center" })}>Stare</th>
+                      <th style={th({ textAlign: "center" })}>Valoare (lei)</th>
+                      <th style={th({ textAlign: "center" })}>Achitat</th>
+                      <th style={th({ textAlign: "center" })}>Detalii</th>
+                      <th style={th({})}></th>
+                    </tr></thead>
+                    <tbody>
+                      {filtAD.length === 0 && <tr><td colSpan={12} style={{ textAlign: "center", padding: 20, color: "#aaa" }}>{autoDoc.length === 0 ? "Niciun document. Adaugă primul cu butoanele de mai sus (RCA, Rovinietă, ITP...)." : "Niciun document pentru filtrele alese."}</td></tr>}
+                      {filtAD.map((r, i) => {
+                        const oi = autoDoc.indexOf(r);
+                        const t = AUTO_DOC_TIPURI.find((x) => x.tip === r.tip) || AUTO_DOC_TIPURI[AUTO_DOC_TIPURI.length - 1];
+                        const st = autoStareDoc(r);
+                        const [stC, stBg, stTxt] = stareInfo[st];
+                        const z = autoZile(r);
+                        const rowBg = st === "arhivat" ? "#fafafa" : i % 2 === 0 ? "#fff" : "#f7faf8";
+                        const stil = st === "arhivat" ? { opacity: 0.6 } : {};
+                        return (
+                          <tr key={r.id || i} style={{ background: rowBg, ...stil }}>
+                            <td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td>
+                            <td style={td({ background: "#fffde7" })}><ACStrict value={r.nr_masina || ""} options={autoMasiniOpts} onChange={(v) => updAD(oi, "nr_masina", v)} placeholder="—" /></td>
+                            <td style={td({ background: t.bg, padding: 2 })}>
+                              <select value={r.tip || "RCA"} onChange={(e) => updAD(oi, "tip", e.target.value)} style={{ width: "100%", border: "none", background: "transparent", fontSize: 12, fontWeight: 700, color: t.c, cursor: "pointer" }}>
+                                {AUTO_DOC_TIPURI.map((x) => <option key={x.tip} value={x.tip}>{x.ico} {x.tip}</option>)}
+                              </select>
+                            </td>
+                            <td style={td({ background: rowBg })}><FastInput style={inp({ textAlign: "center" })} value={r.nr_doc || ""} onChange={(e) => updAD(oi, "nr_doc", e.target.value)} placeholder="—" /></td>
+                            <td style={td({ background: rowBg })}><FastInput title={r.emitent || undefined} style={inp({ textAlign: "center" })} value={r.emitent || ""} onChange={(e) => updAD(oi, "emitent", e.target.value)} placeholder="—" /></td>
+                            <td style={td({ background: rowBg, textAlign: "center" })}><DateInput value={r.data_start || ""} onChange={(v) => updAD(oi, "data_start", v)} /></td>
+                            <td style={td({ background: stBg, textAlign: "center" })}><DateInput value={r.data_exp || ""} onChange={(v) => updAD(oi, "data_exp", v)} /></td>
+                            <td style={td({ background: stBg, textAlign: "center", fontWeight: 700, color: stC, fontSize: 11 })} title={z != null ? (z < 0 ? `A expirat acum ${-z} zile` : z === 0 ? "Expiră azi" : `Mai are ${z} zile`) : ""}>
+                              {st === "expirat" ? `⚠️ expirat (${-z} z)` : st === "curand" ? `⏳ ${z === 0 ? "azi" : z + " zile"}` : st === "valabil" ? `✅ ${z} zile` : stTxt}
+                            </td>
+                            <td style={td({ background: rowBg })}><FastInput style={inpNum({ textAlign: "right" })} type="text" inputMode="decimal" value={r.valoare || ""} onChange={(e) => updAD(oi, "valoare", e.target.value)} placeholder="—" /></td>
+                            <td style={td({ background: r.achitat === "Da" ? "#e8f5e9" : r.achitat === "Nu" ? "#ffebee" : "#fff", textAlign: "center", padding: 2 })}>
+                              <select value={r.achitat || ""} onChange={(e) => updAD(oi, "achitat", e.target.value)} style={sel({ color: r.achitat === "Da" ? G : r.achitat === "Nu" ? "#c62828" : "#555", fontWeight: 700, textAlign: "center" })}><option value=""></option><option>Da</option><option>Nu</option></select>
+                            </td>
+                            <td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><FastInput title={r.detalii || undefined} style={inp()} value={r.detalii || ""} onChange={(e) => updAD(oi, "detalii", e.target.value)} placeholder="..." /></td>
+                            <td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delAD(r.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot><tr style={{ background: G, color: "#fff" }}><td colSpan={8} style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}>TOTAL ({filtAD.length} din {autoDoc.length} documente)</td><td style={{ padding: "6px", textAlign: "right", fontWeight: 700 }}>{fmt(filtAD.reduce((sum, r) => sum + (parseSuma(r.valoare) || 0), 0))}</td><td colSpan={3}></td></tr></tfoot>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {autoSub === "vehicule" && (
+              <div>
+                <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
+                  <button onClick={() => addAUV()} style={{ padding: "6px 14px", background: G, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Vehicul nou</button>
+                  <button onClick={importaVehiculeDinTichete} title="Adaugă mașinile pe care le-ai folosit în tichetele de cântar ca transportator GREEN KRAFT" style={{ padding: "6px 14px", background: "#fff", color: "#1565c0", border: "1px solid #1565c0", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>📥 Adaugă mașinile din tichete</button>
+                </div>
+                <div style={TBL}>
+                  <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: 1100 }}>
+                    <colgroup><col style={{ width: 28 }} /><col style={{ width: 120 }} /><col style={{ width: 170 }} /><col style={{ width: 120 }} /><col style={{ width: 170 }} /><col style={{ width: 70 }} /><col style={{ width: 150 }} /><col style={{ width: 55 }} /><col style={{ width: 120 }} /><col style={{ width: "auto" }} /><col style={{ width: 30 }} /></colgroup>
+                    <thead><tr>
+                      <th style={th({})}></th>
+                      <th style={th({ textAlign: "center" })}>Nr. înmatriculare</th>
+                      <th style={th({ textAlign: "center" })}>Marcă / Model</th>
+                      <th style={th({ textAlign: "center" })}>Tip</th>
+                      <th style={th({ textAlign: "center" })}>Serie șasiu (VIN)</th>
+                      <th style={th({ textAlign: "center" })}>An</th>
+                      <th style={th({ textAlign: "center" })}>Șofer</th>
+                      <th style={th({ textAlign: "center" })}>Activ</th>
+                      <th style={th({ textAlign: "center" })}>Următoarea expirare</th>
+                      <th style={th({ textAlign: "center" })}>Detalii</th>
+                      <th style={th({})}></th>
+                    </tr></thead>
+                    <tbody>
+                      {autoVeh.length === 0 && <tr><td colSpan={11} style={{ textAlign: "center", padding: 20, color: "#aaa" }}>Niciun vehicul. Adaugă unul sau folosește „Adaugă mașinile din tichete".</td></tr>}
+                      {autoVeh.map((v, i) => {
+                        const cheie = String(v.nr || "").replace(/\s+/g, "").toUpperCase();
+                        const docs = autoDoc.filter((d) => cheie && autoEActual(d) && autoZile(d) != null && String(d.nr_masina || "").replace(/\s+/g, "").toUpperCase() === cheie).sort((a, b) => autoZile(a) - autoZile(b));
+                        const urm = docs[0];
+                        const z = urm ? autoZile(urm) : null;
+                        const rowBg = i % 2 === 0 ? "#fff" : "#f7faf8";
+                        return (
+                          <tr key={v.id || i} style={{ background: rowBg, opacity: v.activ === false ? 0.55 : 1 }}>
+                            <td style={td({ textAlign: "center", color: "#aaa", fontSize: 10, background: "#f5f5f5" })}>{i + 1}</td>
+                            <td style={td({ background: "#fffde7" })}><FastInput style={inp({ textAlign: "center", fontWeight: 700 })} value={v.nr || ""} onChange={(e) => updAUV(i, "nr", e.target.value.toUpperCase())} placeholder="IF88KFT" /></td>
+                            <td style={td({ background: rowBg })}><FastInput style={inp({ textAlign: "center" })} value={v.marca || ""} onChange={(e) => updAUV(i, "marca", e.target.value)} placeholder="—" /></td>
+                            <td style={td({ background: rowBg, padding: 2 })}><select value={v.tip || ""} onChange={(e) => updAUV(i, "tip", e.target.value)} style={sel({ textAlign: "center" })}><option value=""></option>{AUTO_VEH_TIPURI.map((x) => <option key={x}>{x}</option>)}</select></td>
+                            <td style={td({ background: rowBg })}><FastInput style={inp({ textAlign: "center", fontFamily: "monospace", fontSize: 11 })} value={v.vin || ""} onChange={(e) => updAUV(i, "vin", e.target.value.toUpperCase())} placeholder="—" /></td>
+                            <td style={td({ background: rowBg })}><FastInput style={inp({ textAlign: "center" })} value={v.an || ""} onChange={(e) => updAUV(i, "an", e.target.value)} placeholder="—" /></td>
+                            <td style={td({ background: rowBg })}><ACStrict value={v.sofer || ""} options={[...new Set([...salRows.map((x) => x.nume), ...autoVeh.map((x) => x.sofer)].filter(Boolean))]} onChange={(val) => updAUV(i, "sofer", val)} placeholder="—" /></td>
+                            <td style={td({ textAlign: "center", background: rowBg })}><input type="checkbox" checked={v.activ !== false} onChange={(e) => updAUV(i, "activ", e.target.checked)} style={{ cursor: "pointer", width: 16, height: 16 }} /></td>
+                            <td style={td({ textAlign: "center", fontSize: 11, fontWeight: 700, background: z == null ? rowBg : z < 0 ? "#ffebee" : z <= 30 ? "#fff3e0" : "#e8f5e9", color: z == null ? "#999" : z < 0 ? "#c62828" : z <= 30 ? "#e65100" : "#2e7d32" })} title={urm ? `${urm.tip} · ${urm.data_exp}` : ""}>{urm ? `${urm.tip}: ${z < 0 ? "expirat" : z + " zile"}` : "—"}</td>
+                            <td style={{ ...td({ background: rowBg }), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><FastInput title={v.detalii || undefined} style={inp()} value={v.detalii || ""} onChange={(e) => updAUV(i, "detalii", e.target.value)} placeholder="..." /></td>
+                            <td style={td({ textAlign: "center", padding: 3 })}><button onClick={() => delAUV(v.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#e53935", fontSize: 13 }}>✕</button></td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+          );
+        })()}
 
         {/* ══ PAROLE ══ */}
         {tab === "parole" && (
