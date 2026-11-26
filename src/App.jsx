@@ -571,7 +571,7 @@ function anexa3Html(a3, liniiDoc, trInfo, expInfo, destInfo) {
   // la mai multe deseuri, fiecare rand are aceeasi inaltime in ambele coloane, ca greutatea sa stea in dreptul deseului
   const rand = "margin-top:4px;" + (liniiDoc.length > 1 ? "min-height:32px;" : "");
   const catTxt = liniiDoc.map((l) => "<div style=\"" + rand + "\">" + (l.categorie || "") + "</div>").join("");
-  const kgTxt = liniiDoc.map((l) => "<div style=\"" + rand + "font-weight:bold;\">" + (l.laDescarcare ? "* se cantareste la descarcare" : l.kilograme != null ? fmt(l.kilograme) + " Kg" : "* se cantareste la destinatie") + "</div>").join("");
+  const kgTxt = liniiDoc.map((l) => "<div style=\"" + rand + "font-weight:bold;\">" + (!l.laDescarcare && l.kilograme != null ? fmt(l.kilograme) + " Kg" : "* se cantareste la descarcare") + "</div>").join("");
   const destRows = DESTINATII.map((d) =>
     "<div style=\"font-size:10px;\">" + d + " " + (a3.descriere_destinatie === d ? "\u25cf" : "\u25cb") + "</div>"
   ).join("");
@@ -6022,7 +6022,7 @@ Reguli:
                           <div style={{ fontWeight: 700, color: "#6a1b9a", fontSize: 12, marginBottom: 12, textTransform: "uppercase", letterSpacing: 0.5 }}>Greutate</div>
                           <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
                             <button onClick={() => setA3Nou((p) => ({ ...p, kg_cunoscut: true }))} style={{ flex: 1, padding: "8px", border: a3Nou.kg_cunoscut ? "2px solid #6a1b9a" : "2px solid #ddd", borderRadius: 7, background: a3Nou.kg_cunoscut ? "#f3e5f5" : "#fff", cursor: "pointer", fontWeight: 700, color: a3Nou.kg_cunoscut ? "#6a1b9a" : "#999", fontSize: 11 }}>⚖️ O știu acum</button>
-                            <button onClick={() => setA3Nou((p) => ({ ...p, kg_cunoscut: false }))} style={{ flex: 1, padding: "8px", border: !a3Nou.kg_cunoscut ? "2px solid #6a1b9a" : "2px solid #ddd", borderRadius: 7, background: !a3Nou.kg_cunoscut ? "#f3e5f5" : "#fff", cursor: "pointer", fontWeight: 700, color: !a3Nou.kg_cunoscut ? "#6a1b9a" : "#999", fontSize: 11 }}>⏳ La destinație</button>
+                            <button onClick={() => setA3Nou((p) => ({ ...p, kg_cunoscut: false }))} style={{ flex: 1, padding: "8px", border: !a3Nou.kg_cunoscut ? "2px solid #6a1b9a" : "2px solid #ddd", borderRadius: 7, background: !a3Nou.kg_cunoscut ? "#f3e5f5" : "#fff", cursor: "pointer", fontWeight: 700, color: !a3Nou.kg_cunoscut ? "#6a1b9a" : "#999", fontSize: 11 }}>⏳ Se cântărește la descărcare</button>
                           </div>
                           {a3Nou.kg_cunoscut ? (
                             <div style={{ marginBottom: 8 }}>
