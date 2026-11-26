@@ -565,32 +565,131 @@ function BordPrint({ b }) {
   );
 }
 
-// Grupurile curg de sus in jos cu un spatiu constant, moderat (ca in formularul original pe hartie: campurile
-// stau grupate, iar acolo unde textul se termina ramane pur si simplu spatiu alb in celula). Umplerea paginii
-// pana jos vine din chenarul celulei (table/tr/td), NU din intinderea artificiala a textului - height:100% nu se
-// rezolva fiabil pe un div din interiorul unui <td> (inaltimea celulei e un rezultat calculat al layout-ului de
-// tabel, nu o valoare CSS "specificata"), asa ca folosim position:absolute;inset (celula parinte are position:relative),
-// doar pentru chenar/latime, nu pentru a forta textul sa atinga marginea de jos.
-function Fill({ groups, inset = 8, gap = 26 }) {
-  return (
-    <div style={{ position: "absolute", inset, display: "flex", flexDirection: "column", gap }}>
-      {groups.map((g, i) => <div key={i}>{g}</div>)}
-    </div>
-  );
+// ── Formularul Anexa 3 (HTML) ─────────────────────────────────
+// Un singur aranjament in pagina pentru Anexa 3, folosit si din sectiunea Anexa 3, si la printul din PV.
+function anexa3Html(a3, liniiDoc, trInfo, expInfo, destInfo) {
+  // la mai multe deseuri, fiecare rand are aceeasi inaltime in ambele coloane, ca greutatea sa stea in dreptul deseului
+  const rand = "margin-top:4px;" + (liniiDoc.length > 1 ? "min-height:32px;" : "");
+  const catTxt = liniiDoc.map((l) => "<div style=\"" + rand + "\">" + (l.categorie || "") + "</div>").join("");
+  const kgTxt = liniiDoc.map((l) => "<div style=\"" + rand + "font-weight:bold;\">" + (l.laDescarcare ? "* se cantareste la descarcare" : l.kilograme != null ? fmt(l.kilograme) + " Kg" : "* se cantareste la destinatie") + "</div>").join("");
+  const destRows = DESTINATII.map((d) =>
+    "<div style=\"font-size:10px;\">" + d + " " + (a3.descriere_destinatie === d ? "\u25cf" : "\u25cb") + "</div>"
+  ).join("");
+  const trCuiRegCom = [a3.transportator_cui || trInfo.cui, trInfo.reg_com].filter(Boolean).join(", ");
+  const expCuiRegCom = [a3.expeditor_cui || expInfo.cui, expInfo.reg_com].filter(Boolean).join(", ");
+  const destCuiRegCom = [a3.destinatar_cui || destInfo.cui, destInfo.reg_com].filter(Boolean).join(", ");
+  const trAdresa = a3.transportator_adresa || trInfo.adresa || "";
+  const expAdresa = a3.expeditor_adresa || expInfo.adresa || "";
+  const destAdresa = a3.destinatar_adresa || destInfo.adresa || "";
+  const expAutMediu = a3.expeditor_aut_mediu || expInfo.aut_mediu || "";
+  const expAutRevizuita = a3.expeditor_aut_revizuita || expInfo.aut_mediu_revizuita || "";
+  const destAutMediu = a3.destinatar_aut_mediu || destInfo.aut_mediu || "";
+  const destAutRevizuita = a3.destinatar_aut_revizuita || destInfo.aut_mediu_revizuita || "";
+  // Randul Incarcare/Descarcare e acum despartit in 2 randuri reale de tabel (cu chenar intre ele, ca in
+  // formularul fizic), asa ca fiecare celula isi ia inaltimea din propriul continut — pozitionarea absoluta
+  // (folosita cand totul statea intr-un singur rand, inalt cat toata pagina) ar face continutul sa se
+  // reverse peste randul urmator, pentru ca un element position:absolute nu-si mai calculeaza inaltimea
+  // parintelui. Asezare normala, de sus in jos, cu spatiu moderat intre campuri.
+  const cellFill = (groups) => "<div style=\"padding:6px;display:flex;flex-direction:column;gap:18px;\">" + groups.map((g) => "<div>" + g + "</div>").join("") + "</div>";
+
+  const col1 = cellFill([
+    "<div>Date de identificare:</div><div><strong>" + (a3.transportator || "") + "</strong></div>" + (trCuiRegCom ? "<div>" + trCuiRegCom + "</div>" : "") + (trAdresa ? "<div>" + trAdresa + "</div>" : ""),
+    "<div>Date de identificare delegat</div><div>si nr. inmatriculare mijloc de transport</div>" + (a3.delegat_nume ? "<div><strong>" + a3.delegat_nume + "</strong></div>" : "") + (a3.delegat_ci ? "<div>CI " + a3.delegat_ci + "</div>" : "") + (a3.delegat_auto ? "<div><strong>" + a3.delegat_auto + "</strong></div>" : ""),
+    "<div>Licenta de transport marfuri nepericuloase nr.</div><div>" + (a3.licenta || "nu e cazul") + "</div>",
+    "<div>Data la care expira licenta de transport marfuri nepericuloase</div><div>" + (a3.licenta_expira || "") + "</div>",
+    "<div>Semnatura</div>",
+  ]);
+  const col5a = cellFill([
+    "<div style=\"text-align:center;font-weight:bold;\">INCARCAREA</div>" +
+      "<div>Date de identificare expeditor</div>" +
+      "<div style=\"font-weight:bold;font-style:italic;\">" + (a3.expeditor || "").toUpperCase() + "</div>" +
+      (expCuiRegCom ? "<div>" + expCuiRegCom + "</div>" : "") +
+      "<div>" + expAdresa + "</div>",
+    "<div>Autorizatie de mediu nr. " + expAutMediu + "</div>" +
+      "<div>Revizuita " + (expAutRevizuita || "") + "</div>",
+    "<div>Data la care expira autorizatia de mediu</div>" +
+      "<div>Viza anuala</div>",
+    "<div style=\"text-align:center;\">Semnatura si stampila</div>",
+  ]);
+  const col5b = cellFill([
+    "<div style=\"text-align:center;font-weight:bold;\">DESCARCAREA</div>" +
+      "<div>Date identificare destinatar</div>" +
+      "<div style=\"font-weight:bold;font-style:italic;\">" + (a3.destinatar || "").toUpperCase() + "</div>" +
+      (destCuiRegCom ? "<div>" + destCuiRegCom + "</div>" : "") +
+      "<div>" + destAdresa + "</div>",
+    "<div>Autorizatie de mediu nr. " + destAutMediu + "</div>" +
+      "<div>Revizuita " + (destAutRevizuita || "") + "</div>",
+    "<div>Data la care expira autorizatia de mediu</div>" +
+      "<div>Viza anuala</div>",
+    "<div style=\"text-align:center;\">Semnatura si stampila</div>",
+  ]);
+  const html =
+    "<div style=\"font-family:'Times New Roman',serif;font-size:12px;color:#000;background:#fff;\">" +
+      "<div style=\"padding:10px 16px;width:100%;min-height:100vh;box-sizing:border-box;display:flex;flex-direction:column;\">" +
+        "<div style=\"text-align:center;font-size:14px;font-weight:bold;text-decoration:underline;\">ANEXA Nr. 3</div>" +
+        "<div style=\"text-align:center;font-weight:bold;text-decoration:underline;\">Formular de incarcare " + "\u2013" + " descarcare</div>" +
+        "<div style=\"text-align:center;margin-bottom:14px;font-weight:bold;text-decoration:underline;\">deseuri nepericuloase</div>" +
+        "<table style=\"width:100%;flex:1;border-collapse:collapse;border:1px solid #000;font-size:11px;table-layout:fixed;\">" +
+          "<thead><tr><th colspan=\"5\" style=\"border:1px solid #000;padding:4px 6px;text-align:left;font-weight:normal;\">Serie si numar &nbsp;&nbsp;&nbsp; " + (a3.serie || "") + " &nbsp;&nbsp;&nbsp; " + a3.numar + "</th></tr>" +
+          "<tr style=\"background:#fff;\">" +
+            "<th style=\"border:1px solid #000;padding:6px;width:29%;\">Date de identificare transportator</th>" +
+            "<th style=\"border:1px solid #000;padding:6px;width:11%;\">Data</th>" +
+            "<th style=\"border:1px solid #000;padding:6px;width:15%;\">Caracteristici deseuri</th>" +
+            "<th style=\"border:1px solid #000;padding:6px;width:9%;\">Cantitate</th>" +
+            "<th style=\"border:1px solid #000;padding:6px;width:36%;\">Date privind punctul de lucru*) unde se efectueaza:</th>" +
+          "</tr></thead>" +
+          "<tbody>" +
+            "<tr>" +
+              "<td rowspan=\"2\" style=\"border:1px solid #000;vertical-align:top;line-height:1.6;\">" + col1 + "</td>" +
+              "<td style=\"border:1px solid #000;padding:6px;vertical-align:top;\"><div>Incarcare</div><div style=\"margin-top:4px;\"><strong>" + (a3.data_incarcare || "") + "</strong></div></td>" +
+              "<td style=\"border:1px solid #000;padding:6px;vertical-align:top;line-height:1.4;\"><div style=\"font-size:10px;\">Categorii deseuri</div>" + catTxt + "</td>" +
+              "<td style=\"border:1px solid #000;padding:6px;vertical-align:top;text-align:center;line-height:1.4;\"><div style=\"font-size:10px;\">Kilograme</div>" + kgTxt + "</td>" +
+              "<td style=\"border:1px solid #000;vertical-align:top;line-height:1.6;\">" + col5a + "</td>" +
+            "</tr>" +
+            "<tr>" +
+              "<td style=\"border:1px solid #000;padding:6px;vertical-align:top;\"><div>Descarcare</div><div style=\"margin-top:4px;\"><strong>" + (a3.data_descarcare || "") + "</strong></div></td>" +
+              "<td style=\"border:1px solid #000;padding:6px;vertical-align:top;line-height:1.4;\"><div style=\"font-size:10px;\">Categorii deseuri</div>" + catTxt + "<div style=\"margin-top:14px;font-weight:bold;\">Descriere destinatie:</div>" + destRows + "</td>" +
+              "<td style=\"border:1px solid #000;\"></td>" +
+              "<td style=\"border:1px solid #000;vertical-align:top;line-height:1.6;\">" + col5b + "</td>" +
+            "</tr>" +
+          "</tbody>" +
+        "</table>" +
+      "</div>" +
+    "</div>";
+  return html;
+}
+
+// Bifa „se cântărește la descărcare”: în editor e pv._laDesc, iar la salvare se păstrează pe materiale
+// (coloana existentă), deci nu e nevoie de o coloană nouă în baza de date.
+const cantarireLaDescarcare = (pv) => !!(pv._laDesc || (pv.materiale || []).some((m) => m.la_descarcare));
+
+// Pagina a doua a unui PV: aceleasi date, asezate exact ca in sectiunea Anexa 3.
+function anexa3DinPV(pv) {
+  // textele ajung direct in HTML, deci caracterele speciale trebuie neutralizate
+  const t = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const gk = "GREEN KRAFT S.R.L.";
+  const a3 = {
+    serie: t(pv.serie), numar: t(pv.nr_anexa),
+    transportator: gk, delegat_nume: t(pv.delegat), delegat_auto: t(pv.nr_masina),
+    licenta: t(pv.licenta), licenta_expira: t(pv.licenta_exp),
+    data_incarcare: t(pv.data), data_descarcare: t(pv.data), descriere_destinatie: pv.destinatie,
+    expeditor: t(pv.client_denumire), expeditor_cui: t(pv.client_cui),
+    expeditor_adresa: t(pv.adresa_incarcare || pv.client_adresa), expeditor_aut_mediu: t(pv.client_autorizatie),
+    destinatar: gk,
+  };
+  const laDescarcare = cantarireLaDescarcare(pv);
+  const linii = (pv.materiale || []).filter((m) => m.den).map((m) => ({ categorie: t(m.den), kilograme: m.cant ? parseSuma(m.cant) : null, laDescarcare }));
+  return anexa3Html(a3, linii, GREEN_KRAFT_IDENTITATE, { reg_com: t(pv.client_reg_com) }, GREEN_KRAFT_IDENTITATE);
 }
 
 // ── PV Print (2 pages) ────────────────────────────────────────
-// Inaltime minima per rand de deseu, egala in coloana "Caracteristici deseuri" si "Cantitate", ca greutatea sa
-// cada mereu pe acelasi rand cu deseul chiar si cand denumirea se infasoara pe 2-3 linii (coloanele sunt <td>-uri
-// separate, randate independent, deci nu se aliniaza automat ca intr-un singur tabel cu randuri comune).
-const MATERIAL_ROW_H = 48;
 function PVPrint({ pv }) {
   const tS = { width: "100%", borderCollapse: "collapse", fontSize: 11 };
   const pageBreak = { pageBreakAfter: "always", breakAfter: "page" };
   return (
     <div style={{ fontFamily: "Times New Roman,serif", fontSize: 11, color: "#000", background: "#fff" }}>
       {/* PAGE 1 — Proces Verbal */}
-      <div style={{ padding: "30px 40px", maxWidth: 800, margin: "0 auto", ...pageBreak }}>
+      <div style={{ padding: "49px 59px", maxWidth: 800, margin: "0 auto", ...pageBreak }}>
         <div style={{ textAlign: "center", marginBottom: 20 }}>
           <div style={{ fontSize: 16, fontWeight: "bold" }}>PROCES VERBAL DE PREDARE –PRIMIRE</div>
           <div style={{ fontSize: 13, fontWeight: "bold", marginTop: 5 }}>Serie {pv.serie} nr. {pv.nr_pv} din data: {pv.data}</div>
@@ -610,7 +709,7 @@ function PVPrint({ pv }) {
             {pv.materiale?.filter(m => m.den).map((m, i) => (
               <tr key={i}>
                 <td style={{ padding: "3px 8px", borderBottom: "1px dotted #999" }}>{m.den}</td>
-                <td style={{ padding: "3px 8px", borderBottom: "1px dotted #999", textAlign: "right", whiteSpace: "nowrap" }}>{m.cant || 0} kg</td>
+                <td style={{ padding: "3px 8px", borderBottom: "1px dotted #999", textAlign: "right", whiteSpace: "nowrap" }}>{!m.cant && cantarireLaDescarcare(pv) ? "se cantareste la descarcare" : `${m.cant || 0} kg`}</td>
               </tr>
             ))}
           </tbody>
@@ -630,95 +729,8 @@ function PVPrint({ pv }) {
         </div>
       </div>
 
-      {/* PAGE 2 — Anexa 3 (portret, umple pagina pe toata inaltimea) */}
-      <div style={{ padding: "10px 16px", width: "100%", minHeight: "100vh", boxSizing: "border-box", display: "flex", flexDirection: "column", pageBreakAfter: "always", breakAfter: "page" }}>
-        <div style={{ textAlign: "center", marginBottom: 6, fontSize: 14, fontWeight: "bold" }}>ANEXA Nr. 3</div>
-        <div style={{ textAlign: "center", marginBottom: 14, fontWeight: "bold" }}>Formular de încărcare – descărcare deşeuri nepericuloase</div>
-        <table style={{ width: "100%", flex: 1, borderCollapse: "collapse", border: "1px solid #000", fontSize: 11, tableLayout: "fixed" }}>
-          <thead>
-            <tr><th colSpan={5} style={{ border: "1px solid #000", padding: "4px 6px", textAlign: "left", fontWeight: "normal" }}>Serie şi număr: {pv.serie} {pv.nr_anexa}</th></tr>
-            <tr style={{ background: "#fff" }}>
-              <th style={{ border: "1px solid #000", padding: 6, width: "29%" }}>Date de identificare transportator</th>
-              <th style={{ border: "1px solid #000", padding: 6, width: "11%" }}>Data</th>
-              <th style={{ border: "1px solid #000", padding: 6, width: "15%" }}>Caracteristici deşeuri</th>
-              <th style={{ border: "1px solid #000", padding: 6, width: "9%" }}>Cantitate</th>
-              <th style={{ border: "1px solid #000", padding: 6, width: "36%" }}>Date privind punctul de lucru*) unde se efectuează:</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr style={{ height: "100%" }}>
-              <td style={{ border: "1px solid #000", position: "relative", lineHeight: 1.6 }}>
-                <Fill gap={32} groups={[
-                  <>
-                    <div>Date identificare:</div>
-                    <div><strong>GREEN KRAFT S.R.L.</strong></div>
-                    <div>{GREEN_KRAFT_IDENTITATE.cui}, {GREEN_KRAFT_IDENTITATE.reg_com}</div>
-                    <div>{GREEN_KRAFT_IDENTITATE.adresa}</div>
-                  </>,
-                  <>
-                    <div>Date de identificare delegat</div>
-                    <div>si nr. inmatriculare mijloc de transport</div>
-                    <div><strong>{pv.delegat}</strong></div>
-                    {pv.nr_masina && <div><strong>{pv.nr_masina}</strong></div>}
-                  </>,
-                  <><div>Licenţa de transport mărfuri nepericuloase nr.</div><div>{pv.licenta || "nu e cazul"}</div></>,
-                  <><div>Data la care expiră licenţa de transport mărfuri nepericuloase</div><div>{pv.licenta_exp || ""}</div></>,
-                  <div>Semnătura</div>,
-                  <div style={{ fontSize: 10 }}>Se cantareste la destinatie</div>,
-                ]} />
-              </td>
-              <td style={{ border: "1px solid #000", position: "relative" }}>
-                <Fill groups={[
-                  <><div>Încărcare</div><div><strong>{pv.data}</strong></div></>,
-                  <><div>Descărcare</div><div><strong>{pv.data}</strong></div></>,
-                ]} />
-              </td>
-              <td style={{ border: "1px solid #000", position: "relative", lineHeight: 1.4 }}>
-                <Fill groups={[
-                  <>
-                    <div>Categorii deşeuri</div>
-                    {pv.materiale?.filter(m => m.den && m.cant).map((m, i) => <div key={i} style={{ minHeight: MATERIAL_ROW_H }}>{m.den}</div>)}
-                  </>,
-                  <>
-                    <div style={{ textAlign: "center", fontWeight: "bold" }}>Descriere destinație:</div>
-                    {DESTINATII.map(d => <div key={d} style={{ fontSize: 10 }}>{d} {pv.destinatie === d ? "●" : "○"}</div>)}
-                  </>,
-                ]} />
-              </td>
-              <td style={{ border: "1px solid #000", position: "relative", lineHeight: 1.4, fontWeight: "bold" }}>
-                {/* Fara Fill: aliniat la varf, exact ca lista de deseuri din coloana anterioara, ca greutatea sa cada pe acelasi rand cu deseul (nu centrat separat pe toata inaltimea celulei). Spacer-ul invizibil reproduce inaltimea etichetei "Categorii deseuri" din coloana anterioara, ca listele sa porneasca din acelasi loc. */}
-                <div style={{ position: "absolute", inset: 8, textAlign: "center" }}>
-                  <div style={{ visibility: "hidden" }}>Categorii deşeuri</div>
-                  {pv.materiale?.filter(m => m.den && m.cant).map((m, i) => <div key={i} style={{ minHeight: MATERIAL_ROW_H }}>{m.cant} Kg</div>)}
-                </div>
-              </td>
-              <td style={{ border: "1px solid #000", position: "relative", lineHeight: 1.6 }}>
-                <Fill groups={[
-                  <>
-                    <div style={{ textAlign: "center", fontWeight: "bold" }}>ÎNCĂRCAREA</div>
-                    <div>Date de identificare expeditor</div>
-                    <div style={{ fontWeight: "bold", fontStyle: "italic" }}>{pv.client_denumire?.toUpperCase()}</div>
-                    <div>{[pv.client_cui, pv.client_reg_com].filter(Boolean).join(", ")}</div>
-                    <div>{pv.adresa_incarcare || pv.client_adresa}</div>
-                    <div>Autorizație de mediu nr. {pv.client_autorizatie || ""}</div>
-                    <div style={{ textAlign: "center" }}>Semnatura și stampila</div>
-                  </>,
-                  <>
-                    <div style={{ textAlign: "center", fontWeight: "bold" }}>DESCĂRCAREA</div>
-                    <div>Date identificare destinatar</div>
-                    <div style={{ fontWeight: "bold", fontStyle: "italic" }}>GREEN KRAFT S.R.L.</div>
-                    <div>{GREEN_KRAFT_IDENTITATE.cui}, {GREEN_KRAFT_IDENTITATE.reg_com}</div>
-                    <div>{GREEN_KRAFT_IDENTITATE.adresa}</div>
-                    <div>Autorizație de mediu nr. {GREEN_KRAFT_IDENTITATE.aut_mediu}</div>
-                    <div>Revizuita {GREEN_KRAFT_IDENTITATE.aut_mediu_revizuita}</div>
-                    <div style={{ textAlign: "center" }}>Semnatura și stampila</div>
-                  </>,
-                ]} />
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      {/* PAGE 2 — Anexa 3, cu acelasi aranjament ca in sectiunea Anexa 3 */}
+      <div dangerouslySetInnerHTML={{ __html: anexa3DinPV(pv) }} />
     </div>
   );
 }
@@ -2618,8 +2630,10 @@ export default function App() {
   };
 
   const salveazaPV = async () => {
-    const mats = pv.materiale.filter((m) => m.den && m.cant);
-    if (!mats.length) { alert("Completați cel puțin un material cu cantitate!"); return; }
+    const mats = pv._laDesc
+      ? pv.materiale.filter((m) => m.den).map((m) => ({ ...m, la_descarcare: true }))
+      : pv.materiale.filter((m) => m.den && m.cant);
+    if (!mats.length) { alert(pv._laDesc ? "Alegeți cel puțin un material!" : "Completați cel puțin un material cu cantitate!"); return; }
     if (!pv.client_denumire) { alert("Selectați o firmă (Pers. Juridică)!"); return; }
     if (pvList.some(x => x.serie === pv.serie && String(x.nr_pv) === String(pv.nr_pv))) {
       alert(`⚠️ PV ${pv.serie} ${pv.nr_pv} există deja!`); return;
@@ -2733,97 +2747,7 @@ export default function App() {
   const buildA3Html = (a3) => {
     // toate liniile formularului (aceeasi serie + numar), fiecare cu categoria si cantitatea ei
     const linii = anexa3List.filter((x) => x.serie === a3.serie && String(x.numar) === String(a3.numar));
-    const liniiDoc = linii.length ? linii : [a3];
-    const catTxt = liniiDoc.map((l) => "<div style=\"margin-top:4px;\">" + (l.categorie || "") + "</div>").join("");
-    const kgTxt = liniiDoc.map((l) => "<div style=\"margin-top:4px;font-weight:bold;\">" + (l.kilograme != null ? fmt(l.kilograme) + " Kg" : "* se cantareste la destinatie") + "</div>").join("");
-    const destRows = DESTINATII.map((d) =>
-      "<div style=\"font-size:10px;\">" + d + " " + (a3.descriere_destinatie === d ? "\u25cf" : "\u25cb") + "</div>"
-    ).join("");
-    const trInfo = a3FirmaInfo(a3.transportator) || {};
-    const expInfo = a3FirmaInfo(a3.expeditor) || {};
-    const destInfo = a3FirmaInfo(a3.destinatar) || {};
-    const trCuiRegCom = [a3.transportator_cui || trInfo.cui, trInfo.reg_com].filter(Boolean).join(", ");
-    const expCuiRegCom = [a3.expeditor_cui || expInfo.cui, expInfo.reg_com].filter(Boolean).join(", ");
-    const destCuiRegCom = [a3.destinatar_cui || destInfo.cui, destInfo.reg_com].filter(Boolean).join(", ");
-    const trAdresa = a3.transportator_adresa || trInfo.adresa || "";
-    const expAdresa = a3.expeditor_adresa || expInfo.adresa || "";
-    const destAdresa = a3.destinatar_adresa || destInfo.adresa || "";
-    const expAutMediu = a3.expeditor_aut_mediu || expInfo.aut_mediu || "";
-    const expAutRevizuita = a3.expeditor_aut_revizuita || expInfo.aut_mediu_revizuita || "";
-    const destAutMediu = a3.destinatar_aut_mediu || destInfo.aut_mediu || "";
-    const destAutRevizuita = a3.destinatar_aut_revizuita || destInfo.aut_mediu_revizuita || "";
-    // Randul Incarcare/Descarcare e acum despartit in 2 randuri reale de tabel (cu chenar intre ele, ca in
-    // formularul fizic), asa ca fiecare celula isi ia inaltimea din propriul continut — pozitionarea absoluta
-    // (folosita cand totul statea intr-un singur rand, inalt cat toata pagina) ar face continutul sa se
-    // reverse peste randul urmator, pentru ca un element position:absolute nu-si mai calculeaza inaltimea
-    // parintelui. Asezare normala, de sus in jos, cu spatiu moderat intre campuri.
-    const cellFill = (groups) => "<div style=\"padding:6px;display:flex;flex-direction:column;gap:18px;\">" + groups.map((g) => "<div>" + g + "</div>").join("") + "</div>";
-
-    const col1 = cellFill([
-      "<div>Date de identificare:</div><div><strong>" + (a3.transportator || "") + "</strong></div>" + (trCuiRegCom ? "<div>" + trCuiRegCom + "</div>" : "") + (trAdresa ? "<div>" + trAdresa + "</div>" : ""),
-      "<div>Date de identificare delegat</div><div>si nr. inmatriculare mijloc de transport</div>" + (a3.delegat_nume ? "<div><strong>" + a3.delegat_nume + "</strong></div>" : "") + (a3.delegat_ci ? "<div>CI " + a3.delegat_ci + "</div>" : "") + (a3.delegat_auto ? "<div><strong>" + a3.delegat_auto + "</strong></div>" : ""),
-      "<div>Licenta de transport marfuri nepericuloase nr.</div><div>" + (a3.licenta || "nu e cazul") + "</div>",
-      "<div>Data la care expira licenta de transport marfuri nepericuloase</div><div>" + (a3.licenta_expira || "") + "</div>",
-      "<div>Semnatura</div>",
-    ]);
-    const col5a = cellFill([
-      "<div style=\"text-align:center;font-weight:bold;\">INCARCAREA</div>" +
-        "<div>Date de identificare expeditor</div>" +
-        "<div style=\"font-weight:bold;font-style:italic;\">" + (a3.expeditor || "").toUpperCase() + "</div>" +
-        (expCuiRegCom ? "<div>" + expCuiRegCom + "</div>" : "") +
-        "<div>" + expAdresa + "</div>",
-      "<div>Autorizatie de mediu nr. " + expAutMediu + "</div>" +
-        "<div>Revizuita " + (expAutRevizuita || "") + "</div>",
-      "<div>Data la care expira autorizatia de mediu</div>" +
-        "<div>Viza anuala</div>",
-      "<div style=\"text-align:center;\">Semnatura si stampila</div>",
-    ]);
-    const col5b = cellFill([
-      "<div style=\"text-align:center;font-weight:bold;\">DESCARCAREA</div>" +
-        "<div>Date identificare destinatar</div>" +
-        "<div style=\"font-weight:bold;font-style:italic;\">" + (a3.destinatar || "").toUpperCase() + "</div>" +
-        (destCuiRegCom ? "<div>" + destCuiRegCom + "</div>" : "") +
-        "<div>" + destAdresa + "</div>",
-      "<div>Autorizatie de mediu nr. " + destAutMediu + "</div>" +
-        "<div>Revizuita " + (destAutRevizuita || "") + "</div>",
-      "<div>Data la care expira autorizatia de mediu</div>" +
-        "<div>Viza anuala</div>",
-      "<div style=\"text-align:center;\">Semnatura si stampila</div>",
-    ]);
-    const html =
-      "<div style=\"font-family:'Times New Roman',serif;font-size:12px;color:#000;background:#fff;\">" +
-        "<div style=\"padding:10px 16px;width:100%;min-height:100vh;box-sizing:border-box;display:flex;flex-direction:column;\">" +
-          "<div style=\"text-align:center;font-size:14px;font-weight:bold;text-decoration:underline;\">ANEXA Nr. 3</div>" +
-          "<div style=\"text-align:center;font-weight:bold;text-decoration:underline;\">Formular de incarcare " + "\u2013" + " descarcare</div>" +
-          "<div style=\"text-align:center;margin-bottom:14px;font-weight:bold;text-decoration:underline;\">deseuri nepericuloase</div>" +
-          "<table style=\"width:100%;flex:1;border-collapse:collapse;border:1px solid #000;font-size:11px;table-layout:fixed;\">" +
-            "<thead><tr><th colspan=\"5\" style=\"border:1px solid #000;padding:4px 6px;text-align:left;font-weight:normal;\">Serie si numar &nbsp;&nbsp;&nbsp; " + (a3.serie || "") + " &nbsp;&nbsp;&nbsp; " + a3.numar + "</th></tr>" +
-            "<tr style=\"background:#fff;\">" +
-              "<th style=\"border:1px solid #000;padding:6px;width:29%;\">Date de identificare transportator</th>" +
-              "<th style=\"border:1px solid #000;padding:6px;width:11%;\">Data</th>" +
-              "<th style=\"border:1px solid #000;padding:6px;width:15%;\">Caracteristici deseuri</th>" +
-              "<th style=\"border:1px solid #000;padding:6px;width:9%;\">Cantitate</th>" +
-              "<th style=\"border:1px solid #000;padding:6px;width:36%;\">Date privind punctul de lucru*) unde se efectueaza:</th>" +
-            "</tr></thead>" +
-            "<tbody>" +
-              "<tr>" +
-                "<td rowspan=\"2\" style=\"border:1px solid #000;vertical-align:top;line-height:1.6;\">" + col1 + "</td>" +
-                "<td style=\"border:1px solid #000;padding:6px;vertical-align:top;\"><div>Incarcare</div><div style=\"margin-top:4px;\"><strong>" + (a3.data_incarcare || "") + "</strong></div></td>" +
-                "<td style=\"border:1px solid #000;padding:6px;vertical-align:top;line-height:1.4;\"><div style=\"font-size:10px;\">Categorii deseuri</div>" + catTxt + "</td>" +
-                "<td style=\"border:1px solid #000;padding:6px;vertical-align:top;text-align:center;\"><div style=\"font-size:10px;\">Kilograme</div>" + kgTxt + "</td>" +
-                "<td style=\"border:1px solid #000;vertical-align:top;line-height:1.6;\">" + col5a + "</td>" +
-              "</tr>" +
-              "<tr>" +
-                "<td style=\"border:1px solid #000;padding:6px;vertical-align:top;\"><div>Descarcare</div><div style=\"margin-top:4px;\"><strong>" + (a3.data_descarcare || "") + "</strong></div></td>" +
-                "<td style=\"border:1px solid #000;padding:6px;vertical-align:top;line-height:1.4;\"><div style=\"font-size:10px;\">Categorii deseuri</div>" + catTxt + "<div style=\"margin-top:14px;font-weight:bold;\">Descriere destinatie:</div>" + destRows + "</td>" +
-                "<td style=\"border:1px solid #000;\"></td>" +
-                "<td style=\"border:1px solid #000;vertical-align:top;line-height:1.6;\">" + col5b + "</td>" +
-              "</tr>" +
-            "</tbody>" +
-          "</table>" +
-        "</div>" +
-      "</div>";
-    return html;
+    return anexa3Html(a3, linii.length ? linii : [a3], a3FirmaInfo(a3.transportator) || {}, a3FirmaInfo(a3.expeditor) || {}, a3FirmaInfo(a3.destinatar) || {});
   };
 
   const printA3 = (a3) => {
@@ -2885,7 +2809,7 @@ export default function App() {
       if (pvPrintRef.current) {
         const c = pvPrintRef.current.innerHTML;
         const w = window.open("", "_blank");
-        w.document.write(`<html><head><title>PV ${pv.serie} ${pv.nr_pv}</title><style>html,body{margin:0;height:100%;font-family:'Times New Roman',serif;} @page{size:A4 portrait;margin:15mm;}</style></head><body>${c}</body></html>`);
+        w.document.write(`<html><head><title>PV ${pv.serie} ${pv.nr_pv}</title><style>html,body{margin:0;height:100%;font-family:'Times New Roman',serif;} @page{size:A4 portrait;margin:10mm;}</style></head><body>${c}</body></html>`);
         w.document.close(); w.focus(); w.print();
       }
     }, 150);
@@ -2899,7 +2823,7 @@ export default function App() {
       if (pvPrintRef.current) {
         const c = pvPrintRef.current.innerHTML;
         const w = window.open("", "_blank");
-        w.document.write(`<html><head><title>PV ${found.serie} ${found.nr_pv}</title><style>html,body{margin:0;height:100%;font-family:'Times New Roman',serif;} @page{size:A4 portrait;margin:15mm;}</style></head><body>${c}</body></html>`);
+        w.document.write(`<html><head><title>PV ${found.serie} ${found.nr_pv}</title><style>html,body{margin:0;height:100%;font-family:'Times New Roman',serif;} @page{size:A4 portrait;margin:10mm;}</style></head><body>${c}</body></html>`);
         w.document.close(); w.focus(); w.print();
       }
     }, 150);
@@ -5794,6 +5718,12 @@ Reguli:
                         </table>
                         </div>
                         <button onClick={() => setPV((p) => ({ ...p, materiale: [...p.materiale, { den: "", cod: "", cod_art: "", cant: "" }] }))} style={{ marginTop: 6, background: "#e65100", color: "#fff", border: "none", borderRadius: 4, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Adaugă material</button>
+                        <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 10, padding: "8px 10px", background: pv._laDesc ? "#ffe0b2" : "#fff", border: "1px solid #ffa726", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#e65100" }}>
+                          <input type="checkbox" checked={!!pv._laDesc} onChange={(e) => updPV("_laDesc", e.target.checked)} style={{ cursor: "pointer", marginTop: 2 }} />
+                          <span>⚖️ Se cântărește la descărcare
+                            <span style={{ display: "block", fontWeight: 400, fontSize: 11, color: "#777" }}>Pe Anexa 3, în locul greutății de la Încărcare apare „* se cantareste la descarcare”. Cantitatea poate rămâne goală și se completează apoi în Registru PJ.</span>
+                          </span>
+                        </label>
                       </div>
                     </div>
                   </div>
